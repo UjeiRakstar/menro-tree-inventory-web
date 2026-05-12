@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import CommandCenter from './pages/CommandCenter.jsx';
-import InventoryView from './pages/InventoryView.jsx';
+import BiodiversityHub from './pages/BiodiversityHub.jsx';
 import ActionBoard from './pages/ActionBoard.jsx';
 import ManageArborists from './pages/ManageArborists.jsx';
-import AnalyticsView from './pages/AnalyticsView.jsx';
 import PermitsLog from './pages/PermitsLog.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Login from './pages/Login.jsx';
@@ -73,10 +72,9 @@ export default function App() {
       <Route element={<ProtectedRoute session={session} />}>
         <Route index element={<Navigate to="/map" replace />} />
         <Route path="map" element={<CommandCenter />} />
-        <Route path="inventory" element={<InventoryView />} />
+        <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />
-        <Route path="analytics" element={<AnalyticsView />} />
         <Route path="permits" element={<PermitsLog />} />
         <Route path="*" element={<NotFound />} />
       </Route>

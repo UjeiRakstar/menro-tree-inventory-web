@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient.js';
-import { X, Image, Printer, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import CertificatePrint from '../components/CertificatePrint.jsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 const PAGE_SIZE = 50;
 
@@ -82,11 +84,70 @@ export default function PermitsLog() {
     setTimeout(() => { window.print(); setPrintPermit(null); }, 300);
   }
 
+  async function exportPermitsToExcel(data) {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Permit Logs');
+
+    // Header
+    sheet.mergeCells('A1:H1');
+    sheet.getCell('A1').value = 'CUTTING PERMIT LOGBOOK';
+    sheet.getCell('A1').font = { bold: true, size: 14 };
+    sheet.getCell('A1').alignment = { horizontal: 'center' };
+
+    sheet.mergeCells('A2:H2');
+    sheet.getCell('A2').value = `Municipality of Santa Cruz, Laguna • Generated: ${new Date().toLocaleDateString()}`;
+    sheet.getCell('A2').font = { size: 10, italic: true };
+    sheet.getCell('A2').alignment = { horizontal: 'center' };
+
+    // Column headers
+    const headers = ['Client Name', 'Contact', 'Address', 'Species', 'Quantity', 'Reason', 'Status', 'Date Issued'];
+    const headerRow = sheet.getRow(4);
+    headers.forEach((h, i) => {
+      const cell = headerRow.getCell(i + 1);
+      cell.value = h;
+      cell.font = { bold: true, size: 10 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
+      cell.border = { bottom: { style: 'thin' } };
+    });
+
+    // Data
+    data.forEach((p, idx) => {
+      const row = sheet.getRow(5 + idx);
+      row.getCell(1).value = p.client_name || '';
+      row.getCell(2).value = p.contact_info || '';
+      row.getCell(3).value = p.address || '';
+      row.getCell(4).value = p.species || '';
+      row.getCell(5).value = p.number_of_trees || 1;
+      row.getCell(6).value = p.reason || '';
+      row.getCell(7).value = p.status || 'Pending';
+      row.getCell(8).value = p.created_at ? new Date(p.created_at).toLocaleDateString() : '';
+    });
+
+    sheet.columns = [
+      { width: 20 }, { width: 18 }, { width: 25 }, { width: 15 },
+      { width: 8 }, { width: 30 }, { width: 10 }, { width: 14 },
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Permit_Logs_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   return (
     <section className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Permit Logs</h1>
-        <p className="mt-1 text-slate-600 text-sm">All walk-in and system-generated cutting permits.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Permit Logs</h1>
+          <p className="mt-1 text-slate-600 text-sm">All walk-in and system-generated cutting permits.</p>
+        </div>
+        <button
+          onClick={() => exportPermitsToExcel(permits)}
+          disabled={permits.length === 0}
+          className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 transition disabled:opacity-50"
+        >
+          <Download size={14} />
+          Export to Excel
+        </button>
       </div>
 
       {/* Search & Filter Bar */}

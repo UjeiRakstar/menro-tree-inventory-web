@@ -8,6 +8,7 @@ import { classifyHazard, HAZARD_STATUS } from '../lib/hazardStatus.js';
 import { iconForPinColor, buildBiodiversityIcon } from '../lib/markerIcons.js';
 import TreePinPopup from '../components/TreePinPopup.jsx';
 import DispatchModal from '../components/DispatchModal.jsx';
+import IssuePermitModal from '../components/IssuePermitModal.jsx';
 import MapMask from '../components/MapMask.jsx';
 import { Navigation } from 'lucide-react';
 
@@ -75,6 +76,8 @@ export default function CommandCenter() {
   const [errorMessage, setErrorMessage] = useState(null);
   const [uhiActive, setUhiActive] = useState(false);
   const [dispatchTree, setDispatchTree] = useState(null);
+  const [permitModalOpen, setPermitModalOpen] = useState(false);
+  const [permitTree, setPermitTree] = useState(null);
   const [flyTrigger, setFlyTrigger] = useState(0);
   const [tileLayer, setTileLayer] = useState('street');
   const [cinematicFlyby, setCinematicFlyby] = useState(true);
@@ -96,7 +99,8 @@ export default function CommandCenter() {
   }
 
   function handleIssuePermit(tree) {
-    supabase.from('trees').update({ has_cutting_permit: true }).eq('id', tree.id);
+    setPermitTree(tree);
+    setPermitModalOpen(true);
   }
 
   function handleFlyToCenter() {
@@ -400,6 +404,16 @@ export default function CommandCenter() {
           }}
         />
       )}
+
+      {/* Issue Permit Modal */}
+      <IssuePermitModal
+        isOpen={permitModalOpen}
+        tree={permitTree}
+        onClose={() => { setPermitModalOpen(false); setPermitTree(null); }}
+        onIssue={(tree) => {
+          setTrees(prev => prev.map(t => t.id === tree.id ? { ...t, has_cutting_permit: true } : t));
+        }}
+      />
     </div>
   );
 }

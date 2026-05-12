@@ -73,7 +73,14 @@ export default function WalkInPermitForm() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!species || !clientName) return;
+    if (!species || !clientName.trim() || !contactInfo.trim() || !reason.trim() || !address.trim()) {
+      alert('Please fill in all required fields: Species, Client Name, Contact Info, Reason, and Address.');
+      return;
+    }
+    if (!latitude || !longitude) {
+      alert('Please pin a location on the map by clicking it.');
+      return;
+    }
     setSubmitting(true);
 
     try {

@@ -5,9 +5,8 @@ import { supabase } from '../supabaseClient.js';
 const NAV_TABS = [
   { to: '/map', label: 'Main Dashboard' },
   { to: '/action-board', label: 'Action Board' },
-  { to: '/inventory', label: 'Inventory' },
+  { to: '/inventory', label: 'Biodiversity' },
   { to: '/arborists', label: 'Arborists' },
-  { to: '/analytics', label: 'Analytics' },
 ];
 
 export default function Header() {

@@ -54,6 +54,12 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
   }
 
   async function handleSubmit() {
+    // Validate all required fields
+    if (!clientName.trim() || !contactInfo.trim() || !reason.trim()) {
+      alert('Please fill in all required fields: Client Name, Contact Info, and Reason for Cutting.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {

@@ -129,6 +129,19 @@ export default function ManageArborists() {
   }
 
   async function handleDeleteArborist(arboristId) {
+    // Find the arborist's email to cascade unassign their trees
+    const arborist = arborists.find(a => a.id === arboristId);
+    const arboristEmail = arborist?.email;
+
+    // Cascade: unassign all trees assigned to this arborist
+    if (arboristEmail) {
+      await supabase
+        .from('trees')
+        .update({ assigned_to: null, task_status: 'Pending' })
+        .eq('assigned_to', arboristEmail);
+    }
+
+    // Delete the arborist record
     const { error } = await supabase
       .from('arborists')
       .delete()
