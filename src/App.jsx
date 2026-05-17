@@ -6,6 +6,7 @@ import BiodiversityHub from './pages/BiodiversityHub.jsx';
 import ActionBoard from './pages/ActionBoard.jsx';
 import ManageArborists from './pages/ManageArborists.jsx';
 import PermitsLog from './pages/PermitsLog.jsx';
+import BiodiversityDashboard from './pages/BiodiversityDashboard.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -65,17 +66,18 @@ export default function App() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/login" element={session ? <Navigate to="/map" replace /> : <Login />} />
-      <Route path="/signup" element={session ? <Navigate to="/map" replace /> : <Signup />} />
+      <Route path="/login" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Login />} />
+      <Route path="/signup" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Signup />} />
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute session={session} />}>
-        <Route index element={<Navigate to="/map" replace />} />
+        <Route index element={<Navigate to="/biodiversity-dashboard" replace />} />
         <Route path="map" element={<CommandCenter />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />
         <Route path="permits" element={<PermitsLog />} />
+        <Route path="biodiversity-dashboard" element={<BiodiversityDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

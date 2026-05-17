@@ -161,17 +161,18 @@ function HazardCard({ tree, onDispatch, onIssuePermit, onViewOnMap }) {
     <article className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex">
       {/* Left content */}
       <div className="flex-1 p-4 flex flex-col justify-between">
-        {/* Tree ID */}
-        <div className="text-sm font-bold text-slate-900 mb-1">{tree.tree_id ?? '—'}</div>
-
-        {/* Species + Hazard label */}
-        <div className="mb-2">
-          <span className="text-xs text-slate-500">Species</span>
-          <span className="ml-2 text-sm font-medium text-slate-800">{tree.species}</span>
+        {/* Species — primary identifier */}
+        <div className="mb-1">
+          <div className="text-base font-bold text-slate-900 leading-tight">
+            {tree.species || 'Unknown species'}
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {tree.barangay || '—'}
+          </div>
         </div>
 
         {/* Hazard indicators */}
-        <div className="flex flex-wrap gap-1 mb-2">
+        <div className="flex flex-wrap items-center gap-1 mb-2 mt-2">
           <span className="text-xs font-medium text-red-700">Hazard</span>
           {hazards.map(h => (
             <span key={h} className="inline-flex items-center rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">{h}</span>

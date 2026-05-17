@@ -4,6 +4,9 @@
  *   1. Existing tree: receives `tree` + `clientName` props
  *   2. Walk-in request: receives `walkInData` prop with all fields
  */
+import santaCruzLogo from '../assets/Santa Cruz Logo.png';
+import menroLogo from '../assets/MENRO Santa Cruz logo.png';
+
 export default function CertificatePrint({ tree, clientName, contactInfo, reason, walkInData }) {
   // Determine data source
   let species, scientificName, merchantableHeight, location, lat, lng, client, numTrees;
@@ -41,22 +44,26 @@ export default function CertificatePrint({ tree, clientName, contactInfo, reason
     : 'a single standing';
 
   return (
-    <div className="hidden print:block print:fixed print:inset-0 print:z-[99999] print:bg-white">
+    <div data-testid="certificate-print" className="hidden print:block print:fixed print:inset-0 print:z-[99999] print:bg-white">
       <div className="w-full max-w-[210mm] mx-auto px-12 py-8 text-black text-sm leading-relaxed font-serif">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <div className="w-20 h-20 border border-gray-300 flex items-center justify-center text-[8px] text-gray-400">
-            LGU Logo
-          </div>
+          <img
+            src={santaCruzLogo}
+            alt="Municipality of Santa Cruz seal"
+            className="w-20 h-20 object-contain"
+          />
           <div className="text-center flex-1 px-4">
             <p className="text-xs">Republic of the Philippines</p>
             <p className="text-xs">Province of Laguna</p>
             <p className="text-xs font-semibold">Municipality of Santa Cruz</p>
             <p className="text-xs font-semibold uppercase tracking-wide mt-1">Office of the Municipal Mayor</p>
           </div>
-          <div className="w-20 h-20 border border-gray-300 flex items-center justify-center text-[8px] text-gray-400">
-            LGU Logo
-          </div>
+          <img
+            src={menroLogo}
+            alt="MENRO Santa Cruz seal"
+            className="w-20 h-20 object-contain"
+          />
         </div>
 
         <hr className="border-black my-4" />

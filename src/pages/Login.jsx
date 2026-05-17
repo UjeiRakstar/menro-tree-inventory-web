@@ -28,7 +28,7 @@ export default function Login() {
       return;
     }
 
-    navigate('/map');
+    navigate('/biodiversity-dashboard');
   }
 
   async function handleForgotPassword() {

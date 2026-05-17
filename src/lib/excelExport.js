@@ -1,5 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import santaCruzLogoUrl from '../assets/Santa Cruz Logo.png';
+import menroLogoUrl from '../assets/MENRO Santa Cruz logo.png';
 
 const BARANGAYS = [
   'Alipit', 'Bagumbayan', 'Barangay I', 'Barangay II', 'Barangay III',
@@ -8,6 +10,48 @@ const BARANGAYS = [
   'Patimbao', 'San Jose', 'San Juan', 'San Pablo Norte', 'San Pablo Sur',
   'Santisima Cruz', 'Santo Angel Central', 'Santo Angel Norte', 'Santo Angel Sur',
 ];
+
+/**
+ * Fetch a static asset bundled by Vite and return it as a base64 string
+ * so ExcelJS can embed it via `workbook.addImage`.
+ */
+async function fetchImageBase64(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    // Convert ArrayBuffer to base64 string
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Embed Santa Cruz + MENRO seals at the top-left and top-right of the given
+ * worksheet. Returns silently if either image fails to load so the export
+ * never breaks because of an asset hiccup.
+ */
+async function addLetterheadLogos(workbook, sheet, { leftRange, rightRange }) {
+  const [scBase64, menroBase64] = await Promise.all([
+    fetchImageBase64(santaCruzLogoUrl),
+    fetchImageBase64(menroLogoUrl),
+  ]);
+
+  if (scBase64) {
+    const scId = workbook.addImage({ base64: scBase64, extension: 'png' });
+    sheet.addImage(scId, leftRange);
+  }
+  if (menroBase64) {
+    const menroId = workbook.addImage({ base64: menroBase64, extension: 'png' });
+    sheet.addImage(menroId, rightRange);
+  }
+}
 
 /**
  * Generate the MENRO dual-sheet Excel workbook matching the official template.
@@ -23,6 +67,13 @@ export async function generateMenroExcel(treesData, officerName = 'MENRO Officer
 
   // ===== Sheet 1: Tree Inventory Sheet =====
   const sheet1 = workbook.addWorksheet('Tree Inventory Sheet');
+
+  // Reserve space for letterhead logos by giving the first three rows
+  // extra height so the images sit beside the title block instead of on
+  // top of the data table.
+  sheet1.getRow(1).height = 28;
+  sheet1.getRow(2).height = 22;
+  sheet1.getRow(3).height = 22;
 
   // Header block
   sheet1.mergeCells('A1:L1');
@@ -163,6 +214,10 @@ export async function generateMenroExcel(treesData, officerName = 'MENRO Officer
   // ===== Sheet 2: Biodiversity and Sink =====
   const sheet2 = workbook.addWorksheet('Biodiversity and Sink');
 
+  sheet2.getRow(1).height = 28;
+  sheet2.getRow(2).height = 22;
+  sheet2.getRow(3).height = 22;
+
   // Header
   sheet2.mergeCells('A1:F1');
   sheet2.getCell('A1').value = 'Municipal Environment and Natural Resource Office';
@@ -253,6 +308,18 @@ export async function generateMenroExcel(treesData, officerName = 'MENRO Officer
   sheet2.getColumn(4).width = 12;
   sheet2.getColumn(5).width = 12;
   sheet2.getColumn(6).width = 14;
+
+  // Letterhead logos — Santa Cruz seal at top-left, MENRO seal at top-right
+  // of each sheet. Uses cell-range anchoring (e.g. 'A1:B3') which ExcelJS
+  // handles reliably across all Excel versions.
+  await addLetterheadLogos(workbook, sheet1, {
+    leftRange: 'A1:A3',
+    rightRange: 'J1:J3',
+  });
+  await addLetterheadLogos(workbook, sheet2, {
+    leftRange: 'A1:A3',
+    rightRange: 'F1:F3',
+  });
 
   // Generate and download
   const buffer = await workbook.xlsx.writeBuffer();

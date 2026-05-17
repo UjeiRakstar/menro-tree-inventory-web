@@ -1,3 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---------- Print rules for QR sticker sheet & Certificate ---------- */
+@media print {
+  /* 1. Hide everything by default. */
+  body * {
+    visibility: hidden;
+  }
+
+  /* 2. Reveal only the print sheets (QR stickers and the cutting certificate). */
+  [data-testid="qr-sticker-sheet"],
+  [data-testid="qr-sticker-sheet"] *,
+  [data-testid="certificate-print"],
+  [data-testid="certificate-print"] * {
+    visibility: visible;
+  }
+
+  /* 3. Pin the active print sheet to the top-left of the print page so it isn't
+     pushed down by hidden ancestors that still occupy layout space. */
+  [data-testid="qr-sticker-sheet"],
+  [data-testid="certificate-print"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  /* 4. Each sticker should never be split across pages. */
+  [data-testid="qr-sticker"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 5. Trim browser print margins so 85mm × 54mm cards line up. */
+  @page {
+    margin: 8mm;
+  }
+
+  /* 6. Force browsers to keep the certificate's images and background colors
+     in print output (Chromium strips them by default to save ink). */
+  [data-testid="certificate-print"],
+  [data-testid="certificate-print"] * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

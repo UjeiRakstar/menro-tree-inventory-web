@@ -1,60 +1,99 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
+import santaCruzLogo from '../assets/Santa Cruz Logo.png';
+import menroLogo from '../assets/MENRO Santa Cruz logo.png';
 
-const NAV_TABS = [
-  { to: '/map', label: 'Main Dashboard' },
-  { to: '/action-board', label: 'Action Board' },
-  { to: '/inventory', label: 'Biodiversity' },
-  { to: '/arborists', label: 'Arborists' },
+const NAV_ITEMS = [
+  { to: '/biodiversity-dashboard', label: 'Biodiversity Dashboard' },
+  { to: '/map',                    label: 'Map' },
+  { to: '/action-board',           label: 'Action Board' },
+  { to: '/arborists',              label: 'Arborist' },
 ];
+
+const LOGOUT_TIMEOUT_MS = 5000;
 
 export default function Header() {
   const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    navigate('/login');
+    setLogoutError(false);
+    setBusy(true);
+    try {
+      const signOut = supabase.auth.signOut();
+      const timeout = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('logout-timeout')),
+          LOGOUT_TIMEOUT_MS
+        )
+      );
+      const result = await Promise.race([signOut, timeout]);
+      if (result && result.error) {
+        throw result.error;
+      }
+      navigate('/login');
+    } catch {
+      setLogoutError(true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <header className="bg-green-700 text-white w-full px-6 py-3">
-      <div className="flex items-center justify-between">
-        {/* Left: Title area */}
-        <div className="flex flex-col">
-          <span className="text-lg font-semibold">Tree Inventory &amp; Carbon Dashboard</span>
-          <span className="text-xs text-green-200"><span>Mission Control</span> • Decision Support System v1.2</span>
+    <header className="bg-green-700 text-white w-full px-6 py-3 shadow-sm">
+      <div className="flex items-center justify-between gap-6">
+        {/* Left: Logos + Title */}
+        <div className="flex items-center gap-3">
+          <img
+            src={santaCruzLogo}
+            alt="Santa Cruz logo"
+            className="h-10 w-auto"
+          />
+          <img
+            src={menroLogo}
+            alt="MENRO Santa Cruz logo"
+            className="h-10 w-auto"
+          />
+          <span className="font-bold text-lg whitespace-nowrap text-white">
+            Tree Inventory System of MENRO Santa Cruz
+          </span>
         </div>
 
-        {/* Right: Navigation tabs + Logout */}
-        <div className="flex items-center gap-3">
-          <nav className="flex items-center gap-1">
-            {NAV_TABS.map(({ to, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  isActive
-                    ? 'px-3 py-1.5 rounded-full text-sm font-medium bg-white text-green-700'
-                    : 'px-3 py-1.5 rounded-full text-sm font-medium text-white hover:bg-green-600'
-                }
-              >
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-
+        {/* Right: Navigation + Logout */}
+        <nav className="flex items-center gap-1">
+          {NAV_ITEMS.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={false}
+              className={({ isActive }) =>
+                isActive
+                  ? 'px-4 py-1.5 rounded-full text-sm font-semibold bg-white text-green-700 shadow-sm'
+                  : 'px-4 py-1.5 rounded-full text-sm font-medium text-white/90 hover:bg-white/10 transition'
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
           <button
             type="button"
             onClick={handleLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-green-200 hover:text-white hover:bg-green-600 transition"
-            title="Sign out"
+            disabled={busy}
+            aria-label="Logout"
+            className="ml-1 px-4 py-1.5 rounded-full text-sm font-medium text-white/90 hover:bg-white/10 transition disabled:opacity-50"
           >
-            <LogOut size={14} />
-            <span>Logout</span>
+            Logout
           </button>
-        </div>
+        </nav>
       </div>
+
+      {logoutError && (
+        <div role="alert" className="mt-2 text-sm text-red-100 bg-red-700/30 rounded px-2 py-1">
+          Logout failed. Please try again.
+        </div>
+      )}
     </header>
   );
 }

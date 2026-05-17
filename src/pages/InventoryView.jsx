@@ -2,9 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../supabaseClient.js';
-import { classifyPinColor } from '../lib/pinColor.js';
-import { buildTreeInventoryCsv } from '../lib/treeCsv.js';
-import { X, Image, ArrowUpDown, MapPin } from 'lucide-react';
+import { generateMenroExcel } from '../lib/excelExport.js';
+import { X, Image, ArrowUpDown, MapPin, Download, Printer } from 'lucide-react';
 
 const NULL_CELL_PLACEHOLDER = '—';
 
@@ -17,6 +16,11 @@ export default function InventoryView() {
   const [filterSpeciesType, setFilterSpeciesType] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterBarangay, setFilterBarangay] = useState('All');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
 
   // Sort state
   const [sortField, setSortField] = useState('dateCaptured');
@@ -83,6 +87,27 @@ export default function InventoryView() {
       result = result.filter(t => t.barangay === filterBarangay);
     }
 
+    // Date range filter — inclusive on both ends, parses ISO/date strings
+    if (dateFrom) {
+      const fromMs = new Date(dateFrom).getTime();
+      if (Number.isFinite(fromMs)) {
+        result = result.filter(t => {
+          const ts = t.dateCaptured ? new Date(t.dateCaptured).getTime() : NaN;
+          return Number.isFinite(ts) && ts >= fromMs;
+        });
+      }
+    }
+    if (dateTo) {
+      // End of selected day so a trip captured at 17:00 on dateTo is included
+      const toMs = new Date(dateTo).getTime() + 24 * 60 * 60 * 1000 - 1;
+      if (Number.isFinite(toMs)) {
+        result = result.filter(t => {
+          const ts = t.dateCaptured ? new Date(t.dateCaptured).getTime() : NaN;
+          return Number.isFinite(ts) && ts <= toMs;
+        });
+      }
+    }
+
     // Sort
     result.sort((a, b) => {
       let aVal = a[sortField] ?? '';
@@ -102,7 +127,7 @@ export default function InventoryView() {
     });
 
     return result;
-  }, [trees, filterSpeciesType, filterCategory, filterBarangay, sortField, sortDir]);
+  }, [trees, filterSpeciesType, filterCategory, filterBarangay, dateFrom, dateTo, sortField, sortDir]);
 
   function handleSort(field) {
     if (sortField === field) {
@@ -113,25 +138,29 @@ export default function InventoryView() {
     }
   }
 
-  function handleExportCsv() {
-    if (trees.length === 0) return;
-    const csv = buildTreeInventoryCsv(trees);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'tree-inventory.csv';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+  async function handleExportExcel() {
+    if (isExporting || filteredTrees.length === 0) return;
+    setIsExporting(true);
+    try {
+      await generateMenroExcel(filteredTrees);
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   function handlePrintQr() {
     window.print();
   }
 
-  const isInventoryEmpty = trees.length === 0;
+  /** Bucket numeric height (in meters) into Small / Medium / Tall. */
+  function classifyHeight(tree) {
+    const raw = tree.total_height ?? tree.heightClass;
+    const meters = parseFloat(raw);
+    if (!Number.isFinite(meters) || meters <= 0) return null;
+    if (meters < 5) return 'Small';
+    if (meters < 15) return 'Medium';
+    return 'Tall';
+  }
 
   function SortableHeader({ field, children }) {
     const isActive = sortField === field;
@@ -160,13 +189,15 @@ export default function InventoryView() {
 
       {/* Toolbar */}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={handleExportCsv} disabled={isInventoryEmpty}
-          className="inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-          Download CSV
+        <button type="button" onClick={handlePrintQr} disabled={filteredTrees.length === 0}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+          <Printer size={14} />
+          Print QR Codes
         </button>
-        <button type="button" onClick={handlePrintQr}
-          className="inline-flex items-center rounded-md border border-transparent bg-green-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-800">
-          Print QR Stickers (A4)
+        <button type="button" onClick={handleExportExcel} disabled={isExporting || filteredTrees.length === 0}
+          className="inline-flex items-center gap-2 rounded-md border border-transparent bg-green-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <Download size={14} />
+          {isExporting ? 'Exporting…' : 'Export to Excel'}
         </button>
       </div>
 
@@ -216,6 +247,35 @@ export default function InventoryView() {
                   </select>
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600 uppercase">From:</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  max={dateTo || undefined}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600 uppercase">To:</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  min={dateFrom || undefined}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                />
+              </div>
+              {(dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  className="text-xs text-slate-500 hover:text-slate-700 underline"
+                >
+                  Clear dates
+                </button>
+              )}
               <span className="ml-auto text-xs text-slate-500">
                 Showing {filteredTrees.length} of {trees.length} records
               </span>
@@ -230,27 +290,26 @@ export default function InventoryView() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Photo</th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Tree ID</th>
                     <SortableHeader field="species">Species</SortableHeader>
+                    <SortableHeader field="barangay">Barangay</SortableHeader>
                     <SortableHeader field="dbh">DBH</SortableHeader>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Height</th>
                     <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Hazard</th>
-                    <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Status</th>
                     <SortableHeader field="dateCaptured">Date Captured</SortableHeader>
                     <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Assigned To</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
                   {filteredTrees.map((tree) => {
-                    const pinColor = classifyPinColor(tree);
                     const hazardItems = [];
                     if (tree.isLeaning || tree.is_leaning) hazardItems.push({ label: 'Leaning', photos: tree.leaning_photos });
                     if (tree.hasPowerlineConflict || tree.has_powerline_conflict) hazardItems.push({ label: 'Powerline', photos: tree.powerline_photos });
                     if (tree.isDecayed || tree.is_decayed) hazardItems.push({ label: 'Decayed', photos: tree.decayed_photos });
                     if (tree.isRootProblem || tree.is_root_problem) hazardItems.push({ label: 'Root Problem', photos: tree.root_photos });
 
-                    const STATUS_COLORS = { Red: 'bg-red-50 text-red-700', Orange: 'bg-orange-50 text-orange-700', Yellow: 'bg-amber-50 text-amber-700', Green: 'bg-emerald-50 text-emerald-700' };
-                    const STATUS_LABELS = { Red: 'Hazard', Orange: 'Dispatched', Yellow: 'Permit', Green: 'Safe' };
                     const photoUrl = tree.photo_url || tree.imageUrl;
+                    const heightBucket = classifyHeight(tree);
+                    const dbhValue = parseFloat(tree.dbh);
 
                     return (
                       <tr key={tree.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTree(tree)}>
@@ -269,9 +328,20 @@ export default function InventoryView() {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-sm font-medium text-slate-900">{tree.tree_id ?? NULL_CELL_PLACEHOLDER}</td>
-                        <td className="px-4 py-2 text-sm text-slate-700">{tree.species}</td>
-                        <td className="px-4 py-2 text-sm text-slate-700">{tree.dbh}</td>
+                        <td className="px-4 py-2 text-sm font-semibold text-slate-900">{tree.species ?? NULL_CELL_PLACEHOLDER}</td>
+                        <td className="px-4 py-2 text-sm text-slate-700">{tree.barangay ?? NULL_CELL_PLACEHOLDER}</td>
+                        <td className="px-4 py-2 text-sm text-slate-700">
+                          {Number.isFinite(dbhValue) ? `${dbhValue} cm` : NULL_CELL_PLACEHOLDER}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          {heightBucket ? (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                              {heightBucket}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">{NULL_CELL_PLACEHOLDER}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-sm" onClick={(e) => e.stopPropagation()}>
                           {hazardItems.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -298,13 +368,10 @@ export default function InventoryView() {
                               })}
                             </div>
                           ) : (
-                            <span className="text-slate-400 text-xs">None</span>
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                              Safe
+                            </span>
                           )}
-                        </td>
-                        <td className="px-4 py-2 text-sm">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[pinColor]}`}>
-                            {STATUS_LABELS[pinColor]}
-                          </span>
                         </td>
                         <td className="px-4 py-2 text-sm text-slate-500">
                           {tree.dateCaptured ? new Date(tree.dateCaptured).toLocaleDateString() : '—'}
@@ -409,9 +476,12 @@ export default function InventoryView() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-3">
                 <MapPin size={24} className="text-green-700" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-1">{selectedTree.species}</h3>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">{selectedTree.species || 'Unknown species'}</h3>
               <p className="text-sm text-slate-500 mb-4">
-                {selectedTree.tree_id || 'Untagged'} • DBH: {selectedTree.dbh}
+                {selectedTree.barangay || '—'}
+                {selectedTree.dbh != null && selectedTree.dbh !== '' && (
+                  <span> · DBH: {parseFloat(selectedTree.dbh)} cm</span>
+                )}
               </p>
               <div className="flex gap-3">
                 <button
@@ -438,13 +508,17 @@ export default function InventoryView() {
       {/* QR Sticker Sheet (print only) */}
       <div className="hidden print:block" data-testid="qr-sticker-sheet">
         <div className="grid grid-cols-[repeat(auto-fill,85mm)] gap-4">
-          {trees.map((tree) => (
-            <div key={tree.id} data-testid="qr-sticker" className="flex flex-col items-center justify-center border border-slate-300 p-2" style={{ width: '85mm', height: '54mm' }}>
-              <div data-testid="lgu-logo-placeholder" className="mb-2 h-6 w-12" />
-              <p className="mb-1 text-xs font-medium text-slate-800">Tree ID: {tree.tree_id ?? '—'}</p>
-              <QRCodeSVG value={tree.tree_id ?? ''} size={80} />
-            </div>
-          ))}
+          {filteredTrees.map((tree) => {
+            const tagValue = tree.tree_id ?? tree.id;
+            const tagDisplay = tree.tree_id ?? (tree.id ? String(tree.id).slice(0, 8).toUpperCase() : '—');
+            return (
+              <div key={tree.id} data-testid="qr-sticker" className="flex flex-col items-center justify-center border border-slate-300 p-2" style={{ width: '85mm', height: '54mm' }}>
+                <div data-testid="lgu-logo-placeholder" className="mb-2 h-6 w-12" />
+                <p className="mb-1 text-xs font-medium text-slate-800">Tag: {tagDisplay}</p>
+                <QRCodeSVG value={String(tagValue ?? '')} size={80} />
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Rectangle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { classifyPinColor } from '../lib/pinColor.js';
-import { classifyHazard, HAZARD_STATUS } from '../lib/hazardStatus.js';
 import { iconForPinColor, buildBiodiversityIcon } from '../lib/markerIcons.js';
 import TreePinPopup from '../components/TreePinPopup.jsx';
 import DispatchModal from '../components/DispatchModal.jsx';
@@ -32,12 +31,6 @@ const TILE_LAYERS = {
     label: 'Topographic Terrain (Elevation)',
   },
 };
-
-// Bounding box for the UHI base heat layer (covers LSPU Santa Cruz area)
-const UHI_HEAT_BOUNDS = [
-  [14.255, 121.390],  // SW corner
-  [14.270, 121.405],  // NE corner
-];
 
 const isFinitePair = (tree) =>
   Number.isFinite(tree?.latitude) && Number.isFinite(tree?.longitude);
@@ -74,7 +67,6 @@ export default function CommandCenter() {
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [uhiActive, setUhiActive] = useState(false);
   const [dispatchTree, setDispatchTree] = useState(null);
   const [permitModalOpen, setPermitModalOpen] = useState(false);
   const [permitTree, setPermitTree] = useState(null);
@@ -89,10 +81,6 @@ export default function CommandCenter() {
   const targetLat = searchParams.get('lat') ? parseFloat(searchParams.get('lat')) : null;
   const targetLng = searchParams.get('lng') ? parseFloat(searchParams.get('lng')) : null;
   const markerRefs = useRef({});
-
-  const handleUhiToggle = (next) => {
-    setUhiActive(next);
-  };
 
   function handleDispatch(tree) {
     setDispatchTree(tree);
@@ -159,19 +147,28 @@ export default function CommandCenter() {
       return () => clearTimeout(timer);
     }
   }, [targetTreeId, loading, trees]);
-  const totalTagged = trees.filter((t) => t.tree_id != null).length;
-  const estCarbon = (trees.length * 62.47).toFixed(2);
-  const criticalHazards = trees.filter(
-    (t) => classifyHazard(t) === HAZARD_STATUS.HAZARD
-  ).length;
 
-  // Biodiversity color mapping based on tree_category
+  // Biodiversity color mapping based on tree_category.
+  // Tolerant to both singular ("Fruit") and plural ("Fruit Trees") shapes,
+  // case differences, and surrounding whitespace — Supabase rows have
+  // historically mixed these.
   function getBiodiversityColor(tree) {
-    const category = tree.tree_category;
-    if (category === 'Fruit Trees') return '#4ade80'; // apple green
-    if (category === 'Timber Trees') return '#92400e'; // brown
-    if (category === 'Ornamental Trees') return '#f472b6'; // pink
+    const raw = (tree.tree_category || '').toString().trim().toLowerCase();
+    if (raw.includes('fruit')) return '#4ade80'; // apple green
+    if (raw.includes('timber')) return '#92400e'; // brown
+    if (raw.includes('ornamental')) return '#f472b6'; // pink
     return '#6b7280'; // grey fallback for uncategorized
+  }
+
+  // Detect invasive species across the same biodiversity_status / species_type
+  // fallback used by the rest of the app. Case-insensitive so "invasive",
+  // "Invasive", and " INVASIVE " all match.
+  function isInvasive(tree) {
+    const status = (tree.biodiversity_status || tree.species_type || '')
+      .toString()
+      .trim()
+      .toLowerCase();
+    return status === 'invasive';
   }
 
   return (
@@ -193,7 +190,7 @@ export default function CommandCenter() {
           const icon = mapMode === 'biodiversity'
             ? buildBiodiversityIcon(
                 getBiodiversityColor(tree),
-                (tree.biodiversity_status || tree.species_type) === 'Invasive'
+                isInvasive(tree)
               )
             : iconForPinColor(color);
           return (
@@ -209,30 +206,6 @@ export default function CommandCenter() {
             </Marker>
           );
         })}
-        {uhiActive && (
-          <>
-            {/* Base heat layer — red rectangle covering the area */}
-            <Rectangle
-              bounds={UHI_HEAT_BOUNDS}
-              pathOptions={{ color: 'transparent', fillColor: '#ef4444', fillOpacity: 0.15 }}
-            />
-            {/* Cooling nodes — one cyan circle per tree, radius based on DBH */}
-            {visibleTrees.map((tree) => {
-              // DBH is stored as a string like "37.35 cm" — parse the number
-              const dbhValue = parseFloat(tree.dbh) || 10;
-              // Scale: DBH in cm → canopy radius in meters (roughly DBH * 0.8, min 15m, max 80m)
-              const canopyRadius = Math.min(Math.max(dbhValue * 0.8, 15), 80);
-              return (
-                <Circle
-                  key={`uhi-${tree.id}`}
-                  center={[tree.latitude, tree.longitude]}
-                  radius={canopyRadius}
-                  pathOptions={{ color: 'transparent', fillColor: '#06b6d4', fillOpacity: 0.25 }}
-                />
-              );
-            })}
-          </>
-        )}
       </MapContainer>
 
       {loading && (
@@ -267,19 +240,6 @@ export default function CommandCenter() {
           ))}
         </select>
 
-        {/* UHI Overlay toggle */}
-        <button
-          type="button"
-          onClick={() => handleUhiToggle(!uhiActive)}
-          className={`px-3 py-2 rounded-lg shadow-md text-sm font-medium transition ${
-            uhiActive
-              ? 'bg-green-700 text-white'
-              : 'bg-white text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          Urban Heat Island Map
-        </button>
-
         {/* Map mode toggles */}
         <button
           type="button"
@@ -313,39 +273,6 @@ export default function CommandCenter() {
       >
         <Navigation size={20} className="text-green-700 group-hover:text-green-800" />
       </button>
-
-      {/* Stat cards overlay */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] flex gap-4">
-        <div className="bg-white rounded-lg shadow-md px-4 py-3 border-l-4 border-green-500">
-          <div className="text-xs font-semibold text-slate-500 uppercase">Total Trees Tagged</div>
-          <div className="text-xl font-bold text-slate-800">{totalTagged}</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md px-4 py-3 border-l-4 border-blue-500">
-          <div className="text-xs font-semibold text-slate-500 uppercase">Est. Carbon</div>
-          <div className="text-xl font-bold text-slate-800">{estCarbon} kg</div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md px-4 py-3 border-l-4 border-red-500">
-          <div className="text-xs font-semibold text-slate-500 uppercase">Critical Hazards</div>
-          <div className="text-xl font-bold text-slate-800">{criticalHazards}</div>
-        </div>
-      </div>
-
-      {/* UHI Cooling Shade legend — shown when UHI is active */}
-      {uhiActive && (
-        <div className="absolute bottom-4 left-16 z-[400] bg-white rounded-lg shadow-md p-4">
-          <div className="text-sm font-semibold text-slate-700 mb-2">Urban Heat Island</div>
-          <ul className="space-y-1.5 text-sm text-slate-600">
-            <li className="flex items-center gap-2">
-              <span className="w-4 h-3 rounded-sm inline-block" style={{background: '#ef4444', opacity: 0.6}}></span>
-              Baseline Heat Index
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="w-4 h-3 rounded-full inline-block" style={{background: '#06b6d4', opacity: 0.7}}></span>
-              Tree Canopy Cooling (Shade)
-            </li>
-          </ul>
-        </div>
-      )}
 
       {/* Map legend panel */}
       <div className="absolute bottom-4 right-4 z-[400] bg-white rounded-lg shadow-md p-4">

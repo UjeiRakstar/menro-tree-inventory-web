@@ -14,6 +14,36 @@ export default function ManageArborists() {
   const [email, setEmail] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [formErrors, setFormErrors] = useState({});
+
+  const PH_MOBILE_DIGITS = 11;
+
+  /** Strip non-digits and clamp to 11 characters. */
+  function handleContactChange(e) {
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, PH_MOBILE_DIGITS);
+    setContactNumber(digitsOnly);
+    setFormErrors((prev) => ({ ...prev, contactNumber: undefined }));
+  }
+
+  /** Validate all form fields. Returns error map (empty = valid). */
+  function validateForm() {
+    const errs = {};
+    if (!name.trim()) errs.name = 'Full name is required.';
+    if (!email.trim()) {
+      errs.email = 'Email address is required.';
+    } else if (!email.includes('@') || !email.includes('.')) {
+      errs.email = 'Enter a valid email address (must contain @ and a domain).';
+    }
+    if (contactNumber && contactNumber.length !== PH_MOBILE_DIGITS) {
+      errs.contactNumber = `Contact number must be exactly ${PH_MOBILE_DIGITS} digits (e.g. 09171234567).`;
+    }
+    if (!temporaryPassword) {
+      errs.temporaryPassword = 'Temporary password is required.';
+    } else if (temporaryPassword.length < 6) {
+      errs.temporaryPassword = 'Password must be at least 6 characters.';
+    }
+    return errs;
+  }
 
   // Fetch arborists from public.arborists
   useEffect(() => {
@@ -83,10 +113,9 @@ export default function ManageArborists() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!email || !temporaryPassword) {
-      alert('Email and temporary password are required.');
-      return;
-    }
+    const errs = validateForm();
+    setFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
 
     // 1. Create auth account so the arborist can log into the mobile app
     const { error: authError } = await supabase.auth.signUp({
@@ -99,7 +128,7 @@ export default function ManageArborists() {
 
     if (authError) {
       console.error('Failed to create auth account:', authError.message);
-      alert(`Auth error: ${authError.message}`);
+      setFormErrors({ submit: `Auth error: ${authError.message}` });
       return;
     }
 
@@ -115,6 +144,7 @@ export default function ManageArborists() {
 
     if (error) {
       console.error('Failed to create arborist record:', error.message);
+      setFormErrors({ submit: `Database error: ${error.message}` });
       return;
     }
 
@@ -126,6 +156,7 @@ export default function ManageArborists() {
     setEmail('');
     setContactNumber('');
     setTemporaryPassword('');
+    setFormErrors({});
   }
 
   async function handleDeleteArborist(arboristId) {
@@ -180,41 +211,74 @@ export default function ManageArborists() {
           <h2 className="text-lg font-semibold text-slate-900">Create Arborist Account</h2>
         </div>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {formErrors.submit && (
+            <div className="md:col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formErrors.submit}
+            </div>
+          )}
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Full Name</span>
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+              onChange={(e) => { setName(e.target.value); setFormErrors((p) => ({ ...p, name: undefined })); }}
+              className={`mt-1 block w-full rounded-lg border px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 ${
+                formErrors.name ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200 focus:border-green-500 focus:ring-green-500/20'
+              }`}
             />
+            {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Email Address</span>
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+              onChange={(e) => { setEmail(e.target.value); setFormErrors((p) => ({ ...p, email: undefined })); }}
+              placeholder="name@example.com"
+              className={`mt-1 block w-full rounded-lg border px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 ${
+                formErrors.email ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200 focus:border-green-500 focus:ring-green-500/20'
+              }`}
             />
+            {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Contact Number</span>
+            <span className="text-sm font-medium text-slate-700">
+              Contact Number <span className="text-slate-400 font-normal">(11-digit PH mobile)</span>
+            </span>
             <input
-              type="text"
+              type="tel"
+              inputMode="numeric"
+              pattern="\d*"
+              maxLength={PH_MOBILE_DIGITS}
               value={contactNumber}
-              onChange={(e) => setContactNumber(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+              onChange={handleContactChange}
+              placeholder="09171234567"
+              className={`mt-1 block w-full rounded-lg border px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 ${
+                formErrors.contactNumber ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200 focus:border-green-500 focus:ring-green-500/20'
+              }`}
             />
+            <div className="mt-1 flex items-center justify-between">
+              {formErrors.contactNumber ? (
+                <p className="text-xs text-red-600">{formErrors.contactNumber}</p>
+              ) : (
+                <span className="text-[10px] text-slate-400">Numbers only.</span>
+              )}
+              <span className={`text-[10px] ${contactNumber.length === PH_MOBILE_DIGITS ? 'text-green-600' : 'text-slate-400'}`}>
+                {contactNumber.length}/{PH_MOBILE_DIGITS}
+              </span>
+            </div>
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Temporary Password</span>
             <input
               type="password"
               value={temporaryPassword}
-              onChange={(e) => setTemporaryPassword(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+              onChange={(e) => { setTemporaryPassword(e.target.value); setFormErrors((p) => ({ ...p, temporaryPassword: undefined })); }}
+              className={`mt-1 block w-full rounded-lg border px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 ${
+                formErrors.temporaryPassword ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200 focus:border-green-500 focus:ring-green-500/20'
+              }`}
             />
+            {formErrors.temporaryPassword && <p className="mt-1 text-xs text-red-600">{formErrors.temporaryPassword}</p>}
           </label>
           <div className="md:col-span-2">
             <button
