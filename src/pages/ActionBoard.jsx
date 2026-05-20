@@ -63,34 +63,22 @@ export default function ActionBoard() {
   // Filter hazard trees
   const hazardTrees = trees.filter(t => classifyHazard(t) === HAZARD_STATUS.HAZARD);
 
-  // Filter crowdsourced trees pending field verification
-  const crowdsourcedTrees = trees.filter(t => t.source === 'crowdsourced' && t.task_status === 'Pending');
-
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">Action Board</h1>
 
       {/* Tabs */}
-      <div role="tablist" className="flex gap-2 border-b border-slate-200 overflow-x-auto">
+      <div role="tablist" className="flex gap-2 border-b border-slate-200">
         <button type="button" onClick={() => setActiveTab('hazards')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'hazards' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'hazards' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           🚨 Hazard Management &amp; Permits
         </button>
-        <button type="button" onClick={() => setActiveTab('crowdsourced')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap inline-flex items-center gap-1.5 ${activeTab === 'crowdsourced' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          🌳 Field Verification
-          {crowdsourcedTrees.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-bold rounded-full bg-slate-500 text-white">
-              {crowdsourcedTrees.length}
-            </span>
-          )}
-        </button>
         <button type="button" onClick={() => setActiveTab('walkins')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'walkins' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'walkins' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           📋 Public Walk-in Requests
         </button>
         <button type="button" onClick={() => setActiveTab('permits')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'permits' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'permits' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           📄 Permit Logs
         </button>
       </div>
@@ -113,32 +101,6 @@ export default function ActionBoard() {
                   onViewOnMap={() => handleViewOnMap(tree)}
                 />
               ))}
-            </div>
-          )}
-        </div>
-      ) : activeTab === 'crowdsourced' ? (
-        <div>
-          {status === 'loading' && <div className="text-sm text-slate-600">Loading…</div>}
-          {status === 'loaded' && crowdsourcedTrees.length === 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">
-              No crowdsourced trees awaiting field verification.
-            </div>
-          )}
-          {status === 'loaded' && crowdsourcedTrees.length > 0 && (
-            <div>
-              <p className="text-sm text-slate-600 mb-4">
-                These trees were submitted by citizens and dispatched for field verification. Arborists must visit the location, confirm the species, and officially tag the tree.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {crowdsourcedTrees.map((tree) => (
-                  <CrowdsourcedCard
-                    key={tree.id}
-                    tree={tree}
-                    onViewOnMap={() => handleViewOnMap(tree)}
-                    onReassign={() => setDispatchTree(tree)}
-                  />
-                ))}
-              </div>
             </div>
           )}
         </div>

@@ -65,38 +65,7 @@ export default function PendingTreesTable({ onCountChange }) {
     if (!dispatchModal) return;
     setActionLoading(dispatchModal.id);
 
-    // Insert into trees table with all required fields
-    const { error: insertError } = await supabase.from('trees').insert({
-      latitude: dispatchModal.latitude,
-      longitude: dispatchModal.longitude,
-      barangay: dispatchModal.barangay || null,
-      species: dispatchModal.species || 'Unknown',
-      photo_url: dispatchModal.photo_url || null,
-      leaves_url: dispatchModal.leaves_url || null,
-      bark_url: dispatchModal.bark_url || null,
-      fruits_url: dispatchModal.fruits_url || null,
-      assigned_to: arboristEmail,
-      task_status: 'Pending',
-      source: 'crowdsourced',
-      dbh: null,
-      scientific_name: null,
-      species_type: null,
-      tree_category: null,
-      is_leaning: false,
-      has_powerline_conflict: false,
-      is_decayed: false,
-      is_root_problem: false,
-      has_cutting_permit: false,
-    });
-
-    if (insertError) {
-      console.error('Failed to insert into trees:', insertError);
-      alert(`Error creating tree record: ${insertError.message}`);
-      setActionLoading(null);
-      return;
-    }
-
-    // Update pending_trees status to dispatched
+    // Only update the pending_trees row — no insert into trees
     const { error: updateError } = await supabase
       .from('pending_trees')
       .update({ status: 'dispatched', assigned_to: arboristEmail })
@@ -104,6 +73,9 @@ export default function PendingTreesTable({ onCountChange }) {
 
     if (updateError) {
       console.error('Failed to update pending_trees:', updateError);
+      alert(`Error dispatching: ${updateError.message}`);
+      setActionLoading(null);
+      return;
     }
 
     // Remove from local list

@@ -41,11 +41,6 @@ export function hasHazard(tree) {
  * @returns {'Grey' | 'Red' | 'Orange' | 'Yellow' | 'Green'}
  */
 export function classifyPinColor(tree) {
-  // 0. Crowdsourced / unverified trees get GREY
-  if (tree.source === 'crowdsourced' && tree.task_status === 'Pending') {
-    return PIN_COLOR.GREY;
-  }
-
   // 1. Check if the tree is a hazard first
   const isHazard =
     tree.isLeaning || tree.is_leaning ||

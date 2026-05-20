@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
@@ -65,6 +65,7 @@ function DynamicTileLayer({ layerKey }) {
 
 export default function CommandCenter() {
   const [trees, setTrees] = useState([]);
+  const [pendingTrees, setPendingTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const [dispatchTree, setDispatchTree] = useState(null);
@@ -110,6 +111,17 @@ export default function CommandCenter() {
         }
         setLoading(false);
       });
+
+    // Also fetch dispatched pending trees for grey markers
+    supabase
+      .from('pending_trees')
+      .select('*')
+      .eq('status', 'dispatched')
+      .then(({ data }) => {
+        if (cancelled) return;
+        setPendingTrees(Array.isArray(data) ? data : []);
+      });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -206,6 +218,32 @@ export default function CommandCenter() {
             </Marker>
           );
         })}
+
+        {/* Grey markers for dispatched pending trees (crowdsourced, awaiting field verification) */}
+        {pendingTrees.filter(t => t.latitude && t.longitude).map((pt) => (
+          <CircleMarker
+            key={`pending-${pt.id}`}
+            center={[pt.latitude, pt.longitude]}
+            radius={10}
+            pathOptions={{
+              color: '#ffffff',
+              weight: 2,
+              fillColor: '#94a3b8',
+              fillOpacity: 0.85,
+            }}
+          >
+            <Popup>
+              <div className="text-xs w-48">
+                <p className="font-semibold text-slate-800">{pt.species || 'Unknown'}</p>
+                <p className="text-slate-500">{pt.barangay || 'Unknown barangay'}</p>
+                <p className="text-slate-400 mt-1">Assigned to: {pt.assigned_to || '—'}</p>
+                <span className="inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                  Awaiting Field Verification
+                </span>
+              </div>
+            </Popup>
+          </CircleMarker>
+        ))}
       </MapContainer>
 
       {loading && (
