@@ -19,6 +19,7 @@ import { supabase } from '../supabaseClient.js';
 import { classifyPinColor } from '../lib/pinColor.js';
 import { HEX_FOR_COLOR } from '../lib/markerIcons.js';
 import InventoryView from './InventoryView.jsx';
+import PendingTreesTable from '../components/admin/PendingTreesTable.jsx';
 import santaCruzBoundary from '../data/Santa-Cruz-Boundary.geojson';
 
 const SANTA_CRUZ_CENTER = [14.2823, 121.4163];
@@ -93,6 +94,7 @@ export default function BiodiversityDashboard() {
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Fetch all trees on mount
   useEffect(() => {
@@ -111,6 +113,21 @@ export default function BiodiversityDashboard() {
       setLoading(false);
     }
     fetchTrees();
+
+    // Fetch initial pending count
+    async function fetchPendingCount() {
+      const { data } = await supabase
+        .from('pending_trees')
+        .select('status');
+      if (!cancelled && Array.isArray(data)) {
+        const count = data.filter((t) => {
+          const s = (t.status || '').toLowerCase();
+          return s === 'pending' || s === '';
+        }).length;
+        setPendingCount(count);
+      }
+    }
+    fetchPendingCount();
     return () => { cancelled = true; };
   }, []);
 
@@ -323,6 +340,22 @@ export default function BiodiversityDashboard() {
           }`}
         >
           Inventory
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('pending')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition inline-flex items-center gap-1.5 ${
+            activeTab === 'pending'
+              ? 'border-green-700 text-green-700'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Pending Review
+          {pendingCount > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-bold rounded-full bg-amber-500 text-white">
+              {pendingCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -668,6 +701,11 @@ export default function BiodiversityDashboard() {
 
       {/* Tab 2: Inventory (preserved) */}
       {activeTab === 'inventory' && <InventoryView />}
+
+      {/* Tab 3: Pending Review (Crowdsourced) */}
+      {activeTab === 'pending' && (
+        <PendingTreesTable onCountChange={setPendingCount} />
+      )}
     </section>
   );
 }

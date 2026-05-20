@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
+import PublicNavbar from './components/PublicNavbar.jsx';
 import CommandCenter from './pages/CommandCenter.jsx';
 import BiodiversityHub from './pages/BiodiversityHub.jsx';
 import ActionBoard from './pages/ActionBoard.jsx';
 import ManageArborists from './pages/ManageArborists.jsx';
 import PermitsLog from './pages/PermitsLog.jsx';
 import BiodiversityDashboard from './pages/BiodiversityDashboard.jsx';
+import AboutUs from './pages/public/AboutUs.jsx';
+import PublicDashboard from './pages/public/PublicDashboard.jsx';
+import PublicMap from './pages/public/PublicMap.jsx';
+import WikiTrees from './pages/public/WikiTrees.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -22,6 +27,17 @@ function Shell() {
     <div className="h-screen flex flex-col">
       <Header />
       <main className={mainClassName}>
+        <Outlet />
+      </main>
+    </div>
+  );
+}
+
+function PublicShell() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <PublicNavbar />
+      <main className="flex-1">
         <Outlet />
       </main>
     </div>
@@ -65,13 +81,21 @@ export default function App() {
 
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Auth routes */}
       <Route path="/login" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Login />} />
       <Route path="/signup" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Signup />} />
 
+      {/* Public-facing routes with PublicNavbar */}
+      <Route element={<PublicShell />}>
+        <Route index element={<Navigate to="/biodiversity" replace />} />
+        <Route path="/about" element={<AboutUs />} />
+        <Route path="/biodiversity" element={<PublicDashboard />} />
+        <Route path="/public-map" element={<PublicMap />} />
+        <Route path="/wiki-trees" element={<WikiTrees />} />
+      </Route>
+
       {/* Protected routes */}
       <Route element={<ProtectedRoute session={session} />}>
-        <Route index element={<Navigate to="/biodiversity-dashboard" replace />} />
         <Route path="map" element={<CommandCenter />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />

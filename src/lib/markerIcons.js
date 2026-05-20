@@ -6,12 +6,14 @@ import { PIN_COLOR } from './pinColor.js';
  * inside the divIcon HTML because Leaflet's marker pane is mounted outside
  * Tailwind's JIT content scan, so class-based backgrounds would not apply.
  *
+ * Grey   #94a3b8  (slate-400)  crowdsourced / unverified
  * Red    #dc2626  (red-600)    unassigned hazard — life safety
  * Orange #ea580c  (orange-600) dispatched hazard
  * Yellow #eab308  (yellow-500) cutting permit
  * Green  #16a34a  (green-600)  healthy tree
  */
 export const HEX_FOR_COLOR = Object.freeze({
+  [PIN_COLOR.GREY]: '#94a3b8',
   [PIN_COLOR.RED]: '#dc2626',
   [PIN_COLOR.ORANGE]: '#ea580c',
   [PIN_COLOR.YELLOW]: '#eab308',
@@ -32,6 +34,7 @@ const buildDivIcon = (hex, ariaColor) =>
   });
 
 const ICONS = Object.freeze({
+  [PIN_COLOR.GREY]: buildDivIcon(HEX_FOR_COLOR[PIN_COLOR.GREY], 'grey'),
   [PIN_COLOR.RED]: buildDivIcon(HEX_FOR_COLOR[PIN_COLOR.RED], 'red'),
   [PIN_COLOR.ORANGE]: buildDivIcon(HEX_FOR_COLOR[PIN_COLOR.ORANGE], 'orange'),
   [PIN_COLOR.YELLOW]: buildDivIcon(HEX_FOR_COLOR[PIN_COLOR.YELLOW], 'yellow'),

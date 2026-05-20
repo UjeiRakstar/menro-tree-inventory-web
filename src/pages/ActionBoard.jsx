@@ -63,22 +63,34 @@ export default function ActionBoard() {
   // Filter hazard trees
   const hazardTrees = trees.filter(t => classifyHazard(t) === HAZARD_STATUS.HAZARD);
 
+  // Filter crowdsourced trees pending field verification
+  const crowdsourcedTrees = trees.filter(t => t.source === 'crowdsourced' && t.task_status === 'Pending');
+
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">Action Board</h1>
 
       {/* Tabs */}
-      <div role="tablist" className="flex gap-2 border-b border-slate-200">
+      <div role="tablist" className="flex gap-2 border-b border-slate-200 overflow-x-auto">
         <button type="button" onClick={() => setActiveTab('hazards')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'hazards' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          🚨 Hazard Management & Permits
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'hazards' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          🚨 Hazard Management &amp; Permits
+        </button>
+        <button type="button" onClick={() => setActiveTab('crowdsourced')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap inline-flex items-center gap-1.5 ${activeTab === 'crowdsourced' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          🌳 Field Verification
+          {crowdsourcedTrees.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-bold rounded-full bg-slate-500 text-white">
+              {crowdsourcedTrees.length}
+            </span>
+          )}
         </button>
         <button type="button" onClick={() => setActiveTab('walkins')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'walkins' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'walkins' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           📋 Public Walk-in Requests
         </button>
         <button type="button" onClick={() => setActiveTab('permits')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'permits' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'permits' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           📄 Permit Logs
         </button>
       </div>
@@ -101,6 +113,32 @@ export default function ActionBoard() {
                   onViewOnMap={() => handleViewOnMap(tree)}
                 />
               ))}
+            </div>
+          )}
+        </div>
+      ) : activeTab === 'crowdsourced' ? (
+        <div>
+          {status === 'loading' && <div className="text-sm text-slate-600">Loading…</div>}
+          {status === 'loaded' && crowdsourcedTrees.length === 0 && (
+            <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">
+              No crowdsourced trees awaiting field verification.
+            </div>
+          )}
+          {status === 'loaded' && crowdsourcedTrees.length > 0 && (
+            <div>
+              <p className="text-sm text-slate-600 mb-4">
+                These trees were submitted by citizens and dispatched for field verification. Arborists must visit the location, confirm the species, and officially tag the tree.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {crowdsourcedTrees.map((tree) => (
+                  <CrowdsourcedCard
+                    key={tree.id}
+                    tree={tree}
+                    onViewOnMap={() => handleViewOnMap(tree)}
+                    onReassign={() => setDispatchTree(tree)}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -250,6 +288,54 @@ function HazardCard({ tree, onDispatch, onIssuePermit, onViewOnMap }) {
           <MapPin size={12} />
           View on Map
         </button>
+      </div>
+    </article>
+  );
+}
+
+/** Crowdsourced tree card — shows citizen-submitted trees awaiting field verification */
+function CrowdsourcedCard({ tree, onViewOnMap, onReassign }) {
+  const photo = tree.photo_url || tree.leaves_url || tree.bark_url || tree.fruits_url;
+
+  return (
+    <article className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      {/* Photo */}
+      <div className="h-32 bg-slate-100 relative">
+        {photo ? (
+          <img src={photo} alt={tree.species} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">No photo</div>
+        )}
+        <span className="absolute top-2 left-2 bg-slate-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
+          Crowdsourced
+        </span>
+      </div>
+
+      {/* Info */}
+      <div className="p-4">
+        <h4 className="text-sm font-bold text-slate-800">{tree.species || 'Unknown Species'}</h4>
+        <p className="text-xs text-slate-500 mt-0.5">{tree.barangay || 'Unknown barangay'}</p>
+
+        <div className="mt-2 text-xs text-slate-500 space-y-0.5">
+          <p>Assigned to: <span className="font-medium text-slate-700">{tree.assigned_to || '—'}</span></p>
+          <p>Status: <span className="font-medium text-amber-600">Awaiting Field Verification</span></p>
+        </div>
+
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={onViewOnMap}
+            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-white bg-green-700 rounded-lg hover:bg-green-800 transition"
+          >
+            <MapPin size={12} />
+            View on Map
+          </button>
+          <button
+            onClick={onReassign}
+            className="flex-1 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition"
+          >
+            Re-Assign
+          </button>
+        </div>
       </div>
     </article>
   );

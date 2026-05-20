@@ -1,8 +1,9 @@
 /**
  * Pin color classification for the Command Center Map.
  *
- * Precedence: Red > Orange > Yellow > Green.
+ * Precedence: Grey > Red > Orange > Yellow > Green.
  *
+ *   Grey   = Crowdsourced / unverified (pending field verification)
  *   Red    = Hazard detected AND unassigned (Action Required)
  *   Orange = Hazard detected AND assigned (Dispatched)
  *   Yellow = No hazard, has cutting permit
@@ -10,6 +11,7 @@
  */
 
 export const PIN_COLOR = Object.freeze({
+  GREY: 'Grey',
   RED: 'Red',
   ORANGE: 'Orange',
   YELLOW: 'Yellow',
@@ -33,12 +35,17 @@ export function hasHazard(tree) {
 
 /**
  * Classify a Tree_Record into exactly one Pin_Color using strict precedence
- * Red > Orange > Yellow > Green.
+ * Grey > Red > Orange > Yellow > Green.
  *
  * @param {object} tree
- * @returns {'Red' | 'Orange' | 'Yellow' | 'Green'}
+ * @returns {'Grey' | 'Red' | 'Orange' | 'Yellow' | 'Green'}
  */
 export function classifyPinColor(tree) {
+  // 0. Crowdsourced / unverified trees get GREY
+  if (tree.source === 'crowdsourced' && tree.task_status === 'Pending') {
+    return PIN_COLOR.GREY;
+  }
+
   // 1. Check if the tree is a hazard first
   const isHazard =
     tree.isLeaning || tree.is_leaning ||
