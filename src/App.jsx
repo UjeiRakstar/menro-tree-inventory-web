@@ -12,6 +12,7 @@ import AboutUs from './pages/public/AboutUs.jsx';
 import PublicDashboard from './pages/public/PublicDashboard.jsx';
 import PublicMap from './pages/public/PublicMap.jsx';
 import WikiTrees from './pages/public/WikiTrees.jsx';
+import PublicFooter from './components/PublicFooter.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -40,6 +41,7 @@ function PublicShell() {
       <main className="flex-1">
         <Outlet />
       </main>
+      <PublicFooter />
     </div>
   );
 }
@@ -87,7 +89,7 @@ export default function App() {
 
       {/* Public-facing routes with PublicNavbar */}
       <Route element={<PublicShell />}>
-        <Route index element={<Navigate to="/biodiversity" replace />} />
+        <Route index element={<Navigate to="/about" replace />} />
         <Route path="/about" element={<AboutUs />} />
         <Route path="/biodiversity" element={<PublicDashboard />} />
         <Route path="/public-map" element={<PublicMap />} />
