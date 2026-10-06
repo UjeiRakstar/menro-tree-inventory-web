@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import { Upload, X, Loader2 } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, LayersControl } from 'react-leaflet';
+import { Upload, X, Loader2, CheckCircle, AlertTriangle, MapPin } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import CertificatePrint from './CertificatePrint.jsx';
 
@@ -8,454 +8,512 @@ const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'YOU
 const CLOUDINARY_UPLOAD_PRESET = 'tree_inventory_mobile';
 
 const MAP_CENTER = [14.2623, 121.3976];
-
-const OTHER_SPECIES_VALUE = '__other__';
-
-// Fallback list used when the trees table has no species yet — keeps the
-// dropdown usable on a brand-new install.
-const FALLBACK_SPECIES = [
-  { common: 'Narra', scientific: 'Pterocarpus indicus' },
-  { common: 'Mahogany', scientific: 'Swietenia macrophylla' },
-  { common: 'Mango', scientific: 'Mangifera indica' },
-  { common: 'Coconut', scientific: 'Cocos nucifera' },
-  { common: 'Acacia', scientific: 'Samanea saman' },
-];
-
 const PH_MOBILE_DIGITS = 11;
+const ZONE_TYPES = ['Residential', 'Commercial', 'Industrial', 'Institutional'];
 
-function LocationPicker({ onLocationSelect }) {
+function LocationPicker({ onLocationSelect, canSelect }) {
   useMapEvents({
     click(e) {
-      onLocationSelect(e.latlng.lat, e.latlng.lng);
+      if (canSelect) {
+        onLocationSelect(e.latlng.lat, e.latlng.lng);
+      }
     },
   });
   return null;
 }
 
 export default function WalkInPermitForm() {
-  const [species, setSpecies] = useState('');
-  const [otherSpecies, setOtherSpecies] = useState('');
-  const [numberOfTrees, setNumberOfTrees] = useState(1);
-  const [address, setAddress] = useState('');
-  const [latitude, setLatitude] = useState(null);
-  const [longitude, setLongitude] = useState(null);
+  // Part 1 State
   const [clientName, setClientName] = useState('');
   const [contactInfo, setContactInfo] = useState('');
+  const [address, setAddress] = useState('');
   const [reason, setReason] = useState('');
-  const [files, setFiles] = useState([]);
-  const [dragOver, setDragOver] = useState(false);
+  const [brgyClearanceFile, setBrgyClearanceFile] = useState(null);
+  const [photoFiles, setPhotoFiles] = useState([]);
+  
+  // Part 2 State
+  const [zoneType, setZoneType] = useState('');
+  const [numberOfTrees, setNumberOfTrees] = useState('');
+
+  // Part 3 State
+  const [trees, setTrees] = useState([]);
+  const [selectedTrees, setSelectedTrees] = useState([]); // { id?, lat, lng, species, isTagged, photo_url, common_name, dbh, height, barangay }
+  const [highlightedTreeId, setHighlightedTreeId] = useState(null);
+  const [mapInstance, setMapInstance] = useState(null);
+
+  // Other State
   const [submitting, setSubmitting] = useState(false);
   const [printData, setPrintData] = useState(null);
-  const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
-  const [speciesFromDb, setSpeciesFromDb] = useState([]);
-  const fileInputRef = useRef(null);
 
-  // Fetch distinct species names from the trees table once on mount
+  const brgyInputRef = useRef(null);
+  const photosInputRef = useRef(null);
+
   useEffect(() => {
     let cancelled = false;
-    async function fetchSpecies() {
-      const { data, error } = await supabase.from('trees').select('species, scientific_name');
-      if (cancelled || error || !Array.isArray(data)) return;
-      // Build unique-by-common-name list, preserving any scientific_name we find
-      const seen = new Map();
-      data.forEach((row) => {
-        const common = (row?.species || '').trim();
-        if (!common) return;
-        if (!seen.has(common)) {
-          seen.set(common, {
-            common,
-            scientific: (row?.scientific_name || '').trim(),
-          });
-        } else if (!seen.get(common).scientific && row?.scientific_name) {
-          seen.set(common, {
-            common,
-            scientific: String(row.scientific_name).trim(),
-          });
-        }
-      });
-      setSpeciesFromDb(
-        Array.from(seen.values()).sort((a, b) => a.common.localeCompare(b.common)),
-      );
+    async function fetchTrees() {
+      const { data, error } = await supabase.from('trees').select('*');
+      if (cancelled || error) return;
+      setTrees(Array.isArray(data) ? data : []);
     }
-    fetchSpecies();
+    fetchTrees();
     return () => { cancelled = true; };
   }, []);
 
-  // Use DB-sourced species when available, otherwise the fallback list
-  const speciesOptions = useMemo(
-    () => (speciesFromDb.length > 0 ? speciesFromDb : FALLBACK_SPECIES),
-    [speciesFromDb],
-  );
+  const isPart1Complete = clientName.trim() !== '' && 
+                          contactInfo.length === PH_MOBILE_DIGITS && 
+                          address.trim() !== '' && 
+                          reason.trim() !== '' &&
+                          brgyClearanceFile !== null &&
+                          photoFiles.length > 0;
 
-  const isOtherSelected = species === OTHER_SPECIES_VALUE;
+  const isExempted = zoneType === 'Residential' && Number(numberOfTrees) > 0 && Number(numberOfTrees) <= 2;
+  const isPart2Complete = isPart1Complete && zoneType !== '' && Number(numberOfTrees) > 0 && !isExempted;
 
-  function handleMapClick(lat, lng) {
-    setLatitude(lat);
-    setLongitude(lng);
-    setErrors((prev) => ({ ...prev, location: undefined }));
-  }
-
-  function handleDrop(e) {
-    e.preventDefault();
-    setDragOver(false);
-    setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
-  }
-
-  function removeFile(index) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  /** Strip non-digits and clamp to 11 characters. */
-  function handleContactChange(e) {
+  const handleContactChange = (e) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, PH_MOBILE_DIGITS);
     setContactInfo(digitsOnly);
-    setErrors((prev) => ({ ...prev, contactInfo: undefined }));
-  }
+  };
 
-  /** Validate every field and return a map of errors. Empty map = valid. */
-  function validate() {
-    const next = {};
-    if (!species) next.species = 'Please select a species.';
-    if (isOtherSelected && !otherSpecies.trim()) {
-      next.otherSpecies = 'Please specify the species name.';
+  const handleMapClick = (lat, lng) => {
+    if (selectedTrees.length < Number(numberOfTrees)) {
+      const newId = Date.now();
+      setSelectedTrees(prev => [...prev, {
+        lat, lng, isTagged: false, species: '', id: newId
+      }]);
+      setHighlightedTreeId(newId);
     }
-    if (!Number.isFinite(numberOfTrees) || numberOfTrees < 1) {
-      next.numberOfTrees = 'Number of trees must be at least 1.';
+  };
+
+  const selectTaggedTree = (tree) => {
+    if (selectedTrees.length < Number(numberOfTrees) && !selectedTrees.find(t => t.id === tree.id)) {
+      setSelectedTrees(prev => [...prev, {
+        id: tree.id,
+        lat: tree.latitude,
+        lng: tree.longitude,
+        isTagged: true,
+        species: tree.species || '',
+        photo_url: tree.photo_url,
+        common_name: tree.species,
+        dbh: tree.dbh,
+        height: tree.merchantable_height,
+        barangay: tree.barangay
+      }]);
+      setHighlightedTreeId(tree.id);
     }
-    if (!address.trim()) next.address = 'Complete address is required.';
-    if (latitude == null || longitude == null) {
-      next.location = 'Pin a location on the map.';
+  };
+
+  const updateSelectedTree = (id, field, value) => {
+    setSelectedTrees(prev => prev.map(t => t.id === id ? { ...t, [field]: value } : t));
+  };
+
+  const removeSelectedTree = (id) => {
+    setSelectedTrees(prev => prev.filter(t => t.id !== id));
+  };
+
+  const focusTreeOnMap = (tree) => {
+    setHighlightedTreeId(tree.id);
+    if (mapInstance) {
+      mapInstance.flyTo([tree.lat, tree.lng], 18, { duration: 0.5 });
     }
-    if (!clientName.trim()) next.clientName = 'Client name is required.';
-    if (!contactInfo) {
-      next.contactInfo = 'Contact number is required.';
-    } else if (!/^\d+$/.test(contactInfo)) {
-      next.contactInfo = 'Contact number must contain digits only.';
-    } else if (contactInfo.length !== PH_MOBILE_DIGITS) {
-      next.contactInfo = `Contact number must be ${PH_MOBILE_DIGITS} digits (e.g. 09171234567).`;
-    }
-    if (!reason.trim()) next.reason = 'Reason for cutting is required.';
-    return next;
-  }
+  };
 
   async function uploadToCloudinary(file) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.secure_url;
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.secure_url;
+    } catch {
+      return null;
+    }
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSubmitError('');
-    const fieldErrors = validate();
-    setErrors(fieldErrors);
-    if (Object.keys(fieldErrors).length > 0) {
-      setSubmitError('Please fix the highlighted fields and try again.');
+    if (!isPart2Complete) return;
+    if (selectedTrees.length !== Number(numberOfTrees)) {
+      setSubmitError(`Please select ${numberOfTrees} trees on the map.`);
+      return;
+    }
+    const incompleteCards = selectedTrees.some(t => !t.species.trim());
+    if (incompleteCards) {
+      setSubmitError('Please fill in the species for all selected trees.');
       return;
     }
 
     setSubmitting(true);
-    const speciesCommonName = isOtherSelected ? otherSpecies.trim() : species;
-    const speciesScientific = isOtherSelected
-      ? ''
-      : speciesOptions.find((s) => s.common === species)?.scientific || '';
+    setSubmitError('');
 
     try {
-      let uploadedUrls = [];
-      if (files.length > 0) {
-        const results = await Promise.all(files.map((f) => uploadToCloudinary(f)));
-        uploadedUrls = results.filter(Boolean);
-      }
+      const brgyUrl = await uploadToCloudinary(brgyClearanceFile);
+      const photoUrls = (await Promise.all(photoFiles.map(f => uploadToCloudinary(f)))).filter(Boolean);
+      const allUrls = [brgyUrl, ...photoUrls].filter(Boolean);
 
-      await supabase.from('permits').insert({
-        tree_id: null,
+      const permitInserts = selectedTrees.map(t => ({
+        tree_id: t.isTagged ? t.id : null,
         client_name: clientName,
         contact_info: contactInfo,
-        reason,
-        requirements_urls: uploadedUrls,
-        species: speciesCommonName,
-        number_of_trees: numberOfTrees,
+        reason: `${reason} - Zone: ${zoneType}`,
+        requirements_urls: allUrls,
+        species: t.species,
+        number_of_trees: 1,
         address,
-        latitude,
-        longitude,
-      });
+        latitude: t.lat,
+        longitude: t.lng,
+      }));
+
+      await supabase.from('permits').insert(permitInserts);
 
       setPrintData({
-        tree: {
-          species: speciesCommonName,
-          scientific_name: speciesScientific,
-          latitude,
-          longitude,
-          barangay: address,
-          merchantable_height: 'N/A',
-        },
+        trees: selectedTrees,
         clientName,
         contactInfo,
         reason,
         numberOfTrees,
+        zoneType
       });
 
       setTimeout(() => {
         window.print();
         setPrintData(null);
-        // Reset form
-        setSpecies('');
-        setOtherSpecies('');
-        setNumberOfTrees(1);
-        setAddress('');
-        setLatitude(null);
-        setLongitude(null);
-        setClientName('');
-        setContactInfo('');
-        setReason('');
-        setFiles([]);
-        setErrors({});
+        setClientName(''); setContactInfo(''); setAddress(''); setReason('');
+        setBrgyClearanceFile(null); setPhotoFiles([]);
+        setZoneType(''); setNumberOfTrees('');
+        setSelectedTrees([]);
         setSubmitting(false);
       }, 300);
     } catch (err) {
-      console.error('Walk-in submission error:', err);
-      setSubmitError(err?.message || 'Submission failed. Please try again.');
+      setSubmitError('Submission failed. Please try again.');
       setSubmitting(false);
     }
   }
 
-  // Tailwind class helper to highlight fields with errors
-  const fieldClass = (key, base) =>
-    `${base} ${errors[key] ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : 'focus:border-green-500 focus:ring-green-500/20'}`;
-  const baseInput =
-    'w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2';
+  const baseInput = "w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:border-green-500 focus:ring-green-500/20";
+  const disabledInput = "w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm bg-slate-100 text-slate-400 cursor-not-allowed";
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
-        {/* Top action bar — Submit lives here so it's always visible */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800">Walk-in Cutting Permit</h3>
-            <p className="text-xs text-slate-500">Submit and print the cutting certificate when complete.</p>
-          </div>
-          <button type="submit" disabled={submitting}
-            className="px-5 py-2.5 rounded-lg bg-green-600 text-sm font-medium text-white hover:bg-green-700 transition disabled:opacity-50 inline-flex items-center gap-2 shadow-sm">
-            {submitting && <Loader2 size={14} className="animate-spin" />}
-            {submitting ? 'Processing…' : 'Submit & Print Certificate'}
-          </button>
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        
+        {/* Part 1: Client Details & Requirements */}
+        <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 relative overflow-hidden transition-all duration-500">
+          <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs">1</span>
+            Client Details &amp; Requirements
+          </h2>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Client Full Name</label>
+                <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} className={baseInput} placeholder="e.g. Juan Dela Cruz" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Contact Number</label>
+                <input type="tel" value={contactInfo} onChange={handleContactChange} className={baseInput} placeholder="09171234567" maxLength={PH_MOBILE_DIGITS} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Complete Address</label>
+                <textarea value={address} onChange={e => setAddress(e.target.value)} className={`${baseInput} resize-none`} rows={2} placeholder="House No, Street, Barangay..." />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Reason for Cutting</label>
+                <textarea value={reason} onChange={e => setReason(e.target.value)} className={`${baseInput} resize-none`} rows={2} placeholder="Describe reason..." />
+              </div>
+            </div>
 
-        {/* Inline submission summary */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Barangay Clearance</label>
+                <div 
+                  onClick={() => brgyInputRef.current?.click()}
+                  className={`border-2 rounded-lg p-5 text-center cursor-pointer transition-colors ${brgyClearanceFile ? 'border-green-500 border-solid bg-green-50' : 'border-dashed border-gray-300 bg-gray-50 hover:border-gray-400'}`}
+                >
+                  {brgyClearanceFile ? (
+                    <div className="flex flex-col items-center">
+                      <CheckCircle className="text-green-500 mb-1" size={24} />
+                      <p className="text-xs font-medium text-green-700">{brgyClearanceFile.name}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="mx-auto text-slate-400 mb-1" size={24} />
+                      <p className="text-xs font-medium text-slate-600">Upload Barangay Clearance</p>
+                    </>
+                  )}
+                  <input ref={brgyInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => {
+                    if (e.target.files?.[0]) setBrgyClearanceFile(e.target.files[0]);
+                  }} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Photos of Trees</label>
+                <div 
+                  onClick={() => photosInputRef.current?.click()}
+                  className={`border-2 rounded-lg p-5 text-center cursor-pointer transition-colors ${photoFiles.length > 0 ? 'border-green-500 border-solid bg-green-50' : 'border-dashed border-gray-300 bg-gray-50 hover:border-gray-400'}`}
+                >
+                  {photoFiles.length > 0 ? (
+                    <div className="flex flex-col items-center">
+                      <CheckCircle className="text-green-500 mb-1" size={24} />
+                      <p className="text-xs font-medium text-green-700">{photoFiles.length} Photo{photoFiles.length > 1 ? 's' : ''} uploaded</p>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="mx-auto text-slate-400 mb-1" size={24} />
+                      <p className="text-xs font-medium text-slate-600">Upload Tree Photos</p>
+                    </>
+                  )}
+                  <input ref={photosInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(e) => {
+                    if (e.target.files?.length) setPhotoFiles(Array.from(e.target.files));
+                  }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Part 2: Zone & Tree Quota */}
+        <section className="relative rounded-xl overflow-hidden">
+          {!isPart1Complete && (
+            <div className="absolute inset-0 bg-slate-100/70 backdrop-blur-[1px] z-10 flex items-center justify-center transition-all duration-500 ease-in-out">
+              <p className="text-slate-500 font-medium text-sm flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm">
+                Complete Part 1 to unlock
+              </p>
+            </div>
+          )}
+          <div className="bg-white border border-slate-200 shadow-sm p-6 relative">
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <span className={`flex items-center justify-center w-6 h-6 rounded-full text-white text-xs transition-colors ${isPart1Complete ? 'bg-slate-900' : 'bg-slate-400'}`}>2</span>
+              Zone &amp; Tree Quota
+            </h2>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-2">Zone Type</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {ZONE_TYPES.map(type => (
+                    <button
+                      key={type}
+                      type="button"
+                      disabled={!isPart1Complete}
+                      onClick={() => setZoneType(type)}
+                      className={`py-4 px-2 rounded-xl border-2 font-semibold text-sm transition-colors text-center
+                        ${zoneType === type ? 'border-slate-900 bg-slate-900 text-white shadow-md' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}
+                        ${!isPart1Complete ? 'opacity-50 cursor-not-allowed' : ''}
+                      `}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Number of Trees</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  value={numberOfTrees} 
+                  onChange={e => setNumberOfTrees(e.target.value)}
+                  disabled={!zoneType}
+                  className={zoneType ? baseInput : disabledInput} 
+                  placeholder="0"
+                />
+              </div>
+
+              {isExempted && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3 text-amber-800">
+                  <AlertTriangle className="shrink-0 text-amber-500" size={20} />
+                  <div className="text-sm leading-relaxed">
+                    <strong>Exempted from Permit.</strong> Based on current DENR Administrative Order No. 6-2026, Section 4, No permit shall be required for the cutting, gathering, collecting and/or removing of not more than two (2) trees within a residential lot.{' '}
+                    <a href="https://databank.denr.gov.ph/views/data/index.php?action=view&id=65987&type=35" target="_blank" rel="noreferrer" className="underline font-semibold hover:text-amber-900">
+                      Click here for the DAO.
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Part 3: Map & Selection */}
+        <section className="relative rounded-xl overflow-hidden">
+          {!isPart2Complete && (
+            <div className="absolute inset-0 bg-slate-100/70 backdrop-blur-[1px] z-10 flex items-center justify-center transition-all duration-500 ease-in-out">
+              <p className="text-slate-500 font-medium text-sm flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm">
+                {isExempted ? "Permit is exempted for this quota." : "Select Zone & Quota to unlock Map"}
+              </p>
+            </div>
+          )}
+          
+          <div className="bg-white border border-slate-200 shadow-sm p-6 relative">
+             <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                 <span className={`flex items-center justify-center w-6 h-6 rounded-full text-white text-xs transition-colors ${isPart2Complete ? 'bg-slate-900' : 'bg-slate-400'}`}>3</span>
+                 Map &amp; Tree Selection
+               </div>
+               {isPart2Complete && (
+                 <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                   Selected: {selectedTrees.length} / {numberOfTrees}
+                 </span>
+               )}
+            </h2>
+
+            <div className="h-[400px] w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner relative z-0">
+              <MapContainer center={MAP_CENTER} zoom={16} className="h-full w-full" ref={setMapInstance}>
+                <LayersControl position="topright">
+                  <LayersControl.BaseLayer checked name="Street View">
+                    <TileLayer
+                      attribution='&copy; OpenStreetMap'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                  </LayersControl.BaseLayer>
+                  <LayersControl.BaseLayer name="Copernicus Satellite View">
+                    <TileLayer
+                      attribution='Tiles &copy; Esri'
+                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    />
+                  </LayersControl.BaseLayer>
+                </LayersControl>
+                
+                <LocationPicker onLocationSelect={handleMapClick} canSelect={selectedTrees.length < Number(numberOfTrees)} />
+                
+                {trees.map(tree => {
+                  const isAlreadySelected = selectedTrees.find(t => t.id === tree.id);
+                  return (
+                    <Marker 
+                      key={tree.id} 
+                      position={[tree.latitude, tree.longitude]}
+                      eventHandlers={{
+                        click: () => setHighlightedTreeId(tree.id),
+                      }}
+                    >
+                      <Popup className="custom-popup">
+                        <div className="p-1 w-48">
+                           {tree.photo_url ? (
+                             <img src={tree.photo_url} alt={tree.species} className="w-full h-24 object-cover rounded-md mb-2" />
+                           ) : (
+                             <div className="w-full h-24 bg-slate-100 flex items-center justify-center rounded-md mb-2 text-xs text-slate-400">No Photo</div>
+                           )}
+                           <h4 className="font-bold text-sm text-slate-800 leading-tight">{tree.species || 'Unknown'}</h4>
+                           {tree.barangay && (
+                             <p className="text-[10px] text-slate-500 font-medium leading-tight mb-2">{tree.barangay}</p>
+                           )}
+                           <div className="text-xs text-slate-600 mt-1 flex flex-col gap-0.5">
+                             <div className="flex justify-between"><span>DBH:</span> <span>{tree.dbh ? `${tree.dbh} cm` : '--'}</span></div>
+                             <div className="flex justify-between"><span>Height:</span> <span>{tree.merchantable_height ? `${tree.merchantable_height} m` : '--'}</span></div>
+                           </div>
+                           {!isAlreadySelected ? (
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); selectTaggedTree(tree); }}
+                               className="mt-3 w-full bg-slate-800 text-white rounded-lg py-1.5 text-xs font-semibold hover:bg-slate-900"
+                             >
+                               Select this Tree
+                             </button>
+                           ) : (
+                             <div className="mt-3 w-full bg-green-50 text-green-700 border border-green-200 rounded-lg py-1.5 text-xs font-semibold text-center">
+                               Selected
+                             </div>
+                           )}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )
+                })}
+
+                {selectedTrees.filter(t => !t.isTagged).map(t => (
+                  <Marker 
+                    key={t.id} 
+                    position={[t.lat, t.lng]} 
+                    eventHandlers={{ click: () => setHighlightedTreeId(t.id) }} 
+                  />
+                ))}
+              </MapContainer>
+            </div>
+
+            {selectedTrees.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Selected Trees Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {selectedTrees.map((tree, i) => (
+                    <div 
+                      key={tree.id} 
+                      onClick={() => focusTreeOnMap(tree)}
+                      onFocus={() => focusTreeOnMap(tree)}
+                      className={`border rounded-xl p-4 relative transition-all duration-300 cursor-pointer ${highlightedTreeId === tree.id ? 'border-green-500 bg-green-50 shadow-md ring-2 ring-green-500/20' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}`}
+                    >
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeSelectedTree(tree.id); }}
+                        className="absolute top-3 right-3 text-slate-400 hover:text-red-500 z-10 p-1"
+                      >
+                        <X size={16} />
+                      </button>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-full bg-white border border-slate-300 flex items-center justify-center text-xs font-bold text-slate-600 shadow-sm">
+                          {i + 1}
+                        </div>
+                        <span className="text-xs font-semibold text-slate-700">
+                          {tree.isTagged ? 'Tagged Tree' : 'New Pin'}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1">Species</label>
+                          {tree.isTagged ? (
+                            <div className="font-medium text-sm text-slate-900 bg-white border border-slate-200 rounded px-2 py-1.5 shadow-sm">{tree.species || 'Unknown'}</div>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={tree.species}
+                              onChange={e => updateSelectedTree(tree.id, 'species', e.target.value)}
+                              className="w-full text-sm border-slate-300 rounded-lg px-3 py-2 focus:ring-green-500 focus:border-green-500 shadow-sm"
+                              placeholder="e.g. Mahogany"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
         {submitError && (
-          <div role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2">
+            <AlertTriangle size={18} />
             {submitError}
           </div>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Column 1: Tree & Location */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700">Tree &amp; Location Details</h3>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Species</label>
-              <select
-                value={species}
-                onChange={(e) => {
-                  setSpecies(e.target.value);
-                  setErrors((prev) => ({ ...prev, species: undefined }));
-                }}
-                className={fieldClass('species', `${baseInput} bg-white text-slate-900`)}
-              >
-                <option value="">Select species…</option>
-                {speciesOptions.map((s) => (
-                  <option key={s.common} value={s.common}>
-                    {s.scientific ? `${s.common} (${s.scientific})` : s.common}
-                  </option>
-                ))}
-                <option value={OTHER_SPECIES_VALUE}>Other (specify below)</option>
-              </select>
-              {errors.species && <p className="mt-1 text-xs text-red-600">{errors.species}</p>}
-              {isOtherSelected && (
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    value={otherSpecies}
-                    onChange={(e) => {
-                      setOtherSpecies(e.target.value);
-                      setErrors((prev) => ({ ...prev, otherSpecies: undefined }));
-                    }}
-                    placeholder="Enter species name (common or scientific)"
-                    className={fieldClass('otherSpecies', baseInput)}
-                  />
-                  {errors.otherSpecies && (
-                    <p className="mt-1 text-xs text-red-600">{errors.otherSpecies}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Number of Trees</label>
-              <input
-                type="number"
-                min="1"
-                value={numberOfTrees}
-                onChange={(e) => {
-                  setNumberOfTrees(parseInt(e.target.value, 10) || 1);
-                  setErrors((prev) => ({ ...prev, numberOfTrees: undefined }));
-                }}
-                className={fieldClass('numberOfTrees', baseInput)}
-              />
-              {errors.numberOfTrees && (
-                <p className="mt-1 text-xs text-red-600">{errors.numberOfTrees}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Complete Address</label>
-              <textarea
-                value={address}
-                onChange={(e) => {
-                  setAddress(e.target.value);
-                  setErrors((prev) => ({ ...prev, address: undefined }));
-                }}
-                rows={2}
-                placeholder="Barangay, Street, Landmark…"
-                className={fieldClass('address', `${baseInput} resize-none`)}
-              />
-              {errors.address && <p className="mt-1 text-xs text-red-600">{errors.address}</p>}
-            </div>
-
-            {/* Mini Map */}
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Pin Location on Map
-                {latitude != null && (
-                  <span className="ml-2 text-green-600">
-                    ({latitude.toFixed(5)}, {longitude.toFixed(5)})
-                  </span>
-                )}
-              </label>
-              <div className={`h-64 rounded-lg overflow-hidden border ${errors.location ? 'border-red-400' : 'border-slate-200'}`}>
-                <MapContainer center={MAP_CENTER} zoom={16} className="h-full w-full">
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OSM" />
-                  <LocationPicker onLocationSelect={handleMapClick} />
-                  {latitude != null && longitude != null && <Marker position={[latitude, longitude]} />}
-                </MapContainer>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">Click the map to drop a pin</p>
-              {errors.location && <p className="mt-1 text-xs text-red-600">{errors.location}</p>}
-            </div>
-          </div>
-
-          {/* Column 2: Client & Uploads */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700">Client Details &amp; Requirements</h3>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Client Name</label>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => {
-                  setClientName(e.target.value);
-                  setErrors((prev) => ({ ...prev, clientName: undefined }));
-                }}
-                placeholder="Full name of applicant"
-                className={fieldClass('clientName', baseInput)}
-              />
-              {errors.clientName && <p className="mt-1 text-xs text-red-600">{errors.clientName}</p>}
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Contact Number <span className="text-slate-400">(11-digit PH mobile)</span>
-              </label>
-              <input
-                type="tel"
-                inputMode="numeric"
-                pattern="\d*"
-                maxLength={PH_MOBILE_DIGITS}
-                value={contactInfo}
-                onChange={handleContactChange}
-                placeholder="09171234567"
-                className={fieldClass('contactInfo', baseInput)}
-                aria-invalid={errors.contactInfo ? 'true' : 'false'}
-              />
-              <div className="mt-1 flex items-center justify-between">
-                {errors.contactInfo ? (
-                  <p className="text-xs text-red-600">{errors.contactInfo}</p>
-                ) : (
-                  <span className="text-[10px] text-slate-400">Numbers only.</span>
-                )}
-                <span className={`text-[10px] ${contactInfo.length === PH_MOBILE_DIGITS ? 'text-green-600' : 'text-slate-400'}`}>
-                  {contactInfo.length}/{PH_MOBILE_DIGITS}
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Reason for Cutting</label>
-              <textarea
-                value={reason}
-                onChange={(e) => {
-                  setReason(e.target.value);
-                  setErrors((prev) => ({ ...prev, reason: undefined }));
-                }}
-                rows={3}
-                placeholder="Describe the reason…"
-                className={fieldClass('reason', `${baseInput} resize-none`)}
-              />
-              {errors.reason && <p className="mt-1 text-xs text-red-600">{errors.reason}</p>}
-            </div>
-
-            {/* Dropzone */}
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer transition ${
-                dragOver ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400'
-              }`}
-            >
-              <Upload size={24} className="mx-auto text-slate-400 mb-1" />
-              <p className="text-xs font-medium text-slate-600">Drag &amp; drop requirements</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Photos, Barangay Clearance, etc.</p>
-              <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf"
-                onChange={(e) => setFiles((prev) => [...prev, ...Array.from(e.target.files)])}
-                className="hidden" />
-            </div>
-
-            {files.length > 0 && (
-              <div className="space-y-1">
-                {files.map((file, i) => (
-                  <div key={i} className="flex items-center justify-between bg-slate-50 rounded px-3 py-1.5 text-xs">
-                    <span className="text-slate-700 truncate">{file.name}</span>
-                    <button type="button" onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-500 ml-2">
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <div className="flex justify-end pt-4">
+          <button 
+            type="submit" 
+            disabled={submitting || !isPart2Complete || selectedTrees.length === 0}
+            className="px-8 py-3 rounded-xl bg-green-600 text-base font-bold text-white hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
+          >
+            {submitting && <Loader2 size={18} className="animate-spin" />}
+            {submitting ? 'Processing...' : 'Submit & Print Certificate'}
+          </button>
         </div>
       </form>
 
-      {/* Certificate Print */}
       {printData && (
         <CertificatePrint
           walkInData={{
-            species: printData.tree.species,
-            scientificName: printData.tree.scientific_name,
-            address: printData.tree.barangay,
-            latitude: printData.tree.latitude,
-            longitude: printData.tree.longitude,
             clientName: printData.clientName,
+            address: address,
             numberOfTrees: printData.numberOfTrees,
+            species: printData.trees.map(t => t.species).join(', '),
+            latitude: printData.trees[0]?.lat,
+            longitude: printData.trees[0]?.lng,
           }}
         />
       )}
