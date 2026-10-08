@@ -11,7 +11,6 @@ import BiodiversityDashboard from './pages/BiodiversityDashboard.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicDashboard from './pages/public/PublicDashboard.jsx';
 import PublicMap from './pages/public/PublicMap.jsx';
-import WikiTrees from './pages/public/WikiTrees.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import NotFound from './pages/NotFound.jsx';
 import Login from './pages/Login.jsx';
@@ -93,7 +92,6 @@ export default function App() {
         <Route path="/about" element={<AboutUs />} />
         <Route path="/biodiversity" element={<PublicDashboard />} />
         <Route path="/public-map" element={<PublicMap />} />
-        <Route path="/wiki-trees" element={<WikiTrees />} />
       </Route>
 
       {/* Protected routes */}

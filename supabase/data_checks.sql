@@ -1,0 +1,89 @@
+-- Green Tag: what the public map cannot show, and why.
+--
+-- Nothing here changes data. Each query answers one question the map raises but
+-- has no way to report on its own — a tree the map silently cannot draw looks
+-- exactly like a tree that was never tagged. Run it now and then; the fixes are
+-- at the bottom, commented out, so nothing runs by accident.
+--
+-- Counts in the comments are what these returned on 8 October 2026, against
+-- 112 trees.
+
+-- ---------------------------------------------------------------------------
+-- 1. Trees the map cannot place. (1 row: a Mahogany sitting at 0, 0.)
+--
+-- The web app skips 0,0 and null coordinates on purpose — drawing them would
+-- put a pin in the Gulf of Guinea — so these trees are invisible to the public
+-- and to anyone counting pins. They need their coordinates re-surveyed.
+-- ---------------------------------------------------------------------------
+select id, species, barangay, latitude, longitude, "dateCaptured", assigned_to
+from public.trees
+where latitude is null
+   or longitude is null
+   or (latitude = 0 and longitude = 0);
+
+-- ---------------------------------------------------------------------------
+-- 2. Trees outside Laguna. (0 rows.)
+--
+-- A rough box around the province. Anything here is a GPS or data-entry slip:
+-- the map would draw it under the grey cover, where nobody can see it.
+-- ---------------------------------------------------------------------------
+select id, species, barangay, latitude, longitude
+from public.trees
+where latitude <> 0
+  and (latitude not between 13.9 and 14.7 or longitude not between 120.9 and 121.7);
+
+-- ---------------------------------------------------------------------------
+-- 3. Category spellings. ("Fruit Tree" 48, "Timber" 41, "Ornamental" 19,
+--    "Fruit" 2, "Unknown" 2.)
+--
+-- The web app now treats "Fruit" and "Fruit Tree" as one category, so this no
+-- longer hides trees from the filter — but the mobile app should settle on one
+-- spelling, and "Unknown" means somebody could not tell at tagging time.
+-- ---------------------------------------------------------------------------
+select tree_category, count(*)
+from public.trees
+group by tree_category
+order by count(*) desc;
+
+-- ---------------------------------------------------------------------------
+-- 4. Barangay names that will not group. (7 unknown or blank, 8 written as
+--    "Brgy. X" beside the same barangay written plain.)
+--
+-- The panel strips a leading "Brgy."/"Barangay" before showing it, so this is
+-- cosmetic on the map — but any grouping by barangay counts them as two
+-- different places.
+-- ---------------------------------------------------------------------------
+select coalesce(barangay, '(null)') as barangay, count(*)
+from public.trees
+group by barangay
+order by barangay;
+
+-- ---------------------------------------------------------------------------
+-- 5. Species with no published write-up yet.
+--
+-- The PGENRO to-do list: every species on the map whose Description tab still
+-- says nothing has been published. (Mango has one; the rest do not.)
+-- ---------------------------------------------------------------------------
+select t.species, count(*) as tagged_trees
+from public.trees t
+left join public.species_profiles p on p.species = t.species
+where p.species is null
+  and t.species is not null
+group by t.species
+order by count(*) desc;
+
+-- ---------------------------------------------------------------------------
+-- FIXES — read the rows above first, then run the one you mean.
+-- ---------------------------------------------------------------------------
+
+-- Give the unmappable Mahogany its real coordinates once it has been
+-- re-surveyed (fill in the id and the readings):
+-- update public.trees set latitude = ?, longitude = ? where id = '?';
+
+-- Settle the category spelling on the value the filter pills use:
+-- update public.trees set tree_category = 'Fruit Tree' where tree_category = 'Fruit';
+
+-- Drop the "Brgy. " prefix so each barangay groups as one place:
+-- update public.trees
+-- set barangay = trim(regexp_replace(barangay, '^(brgy\.?|barangay)\s+', '', 'i'))
+-- where barangay ~* '^(brgy\.?|barangay)\s+';
