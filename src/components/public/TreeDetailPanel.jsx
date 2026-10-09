@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Info, Loader2, TreePine, X } from 'lucide-react';
 import { traitsOf, biodiversityTrait, categoryTrait, highlightForTrait } from '../../lib/treeTraits.js';
 import { DBH_EXPLAINER, dbhOf, heightOf, phenologyOf } from '../../lib/treeDetails.js';
@@ -315,14 +315,23 @@ export default function TreeDetailPanel({
   }, []);
 
   // Tapping another pin swaps the contents of the open panel instead of
-  // re-animating it, so start that tree at its first photo and first tab.
+  // re-animating it, so start that tree at its first photo and first tab — and
+  // bring the panel back if it was collapsed, or tapping a pin would look like
+  // it did nothing at all.
+  const collapsedRef = useRef(false);
   useEffect(() => {
     setActiveTab('description');
     setSlide(0);
+    if (collapsedRef.current) {
+      collapsedRef.current = false;
+      setCollapsed(false);
+      onCollapsedChange?.(false);
+    }
   }, [tree.id]);
 
   function toggleCollapsed() {
     const next = !collapsed;
+    collapsedRef.current = next;
     setCollapsed(next);
     onCollapsedChange?.(next);
   }

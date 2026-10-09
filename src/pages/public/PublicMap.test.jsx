@@ -259,6 +259,21 @@ describe('PublicMap', () => {
     ]);
   });
 
+  it('brings a collapsed panel back when another tree is tapped', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(markers()[0]);
+    const panel = await screen.findByRole('complementary');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide tree details' }));
+    expect(panel).toHaveAttribute('aria-hidden', 'true');
+
+    // Otherwise tapping a pin looks like it does nothing.
+    fireEvent.click(markers()[1]);
+    await waitFor(() => expect(panel).toHaveAttribute('aria-hidden', 'false'));
+    expect(within(panel).getByRole('heading', { level: 2, name: 'Mango' })).toBeInTheDocument();
+  });
+
   it('a badge in the panel picks out every tree sharing that trait', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
@@ -357,6 +372,23 @@ describe('PublicMap', () => {
       'Santa Cruz',
       'Pila',
     ]);
+  });
+
+  it('says when the trees could not be loaded, instead of showing a bare map', async () => {
+    supabaseMock.setResponse('trees:select', { data: null, error: { message: 'connection refused' } });
+    renderMap();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The tagged trees could not be loaded');
+    expect(alert).toHaveTextContent('connection refused');
+    expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
+
+    // Trying again picks the trees up once the connection is back.
+    supabaseMock.setResponse('trees:select', { data: TREES, error: null });
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('offers no category filter buttons', () => {

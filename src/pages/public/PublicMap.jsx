@@ -279,6 +279,7 @@ function FlyToUserButton({ mapRef }) {
 export default function PublicMap() {
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedLgu, setSelectedLgu] = useState('');
   const [selectedTree, setSelectedTree] = useState(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -298,21 +299,35 @@ export default function PublicMap() {
   // One lookup per species, not one per pin the visitor taps.
   const profileCache = useRef(new Map());
 
-  // Fetch verified trees on mount
+  // Fetch verified trees on mount.
+  //
+  // A failed read used to leave an empty map behind, which a visitor cannot
+  // tell apart from a province where nothing has been tagged yet. It says so
+  // now, and offers to try again.
+  const [reloadToken, setReloadToken] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     async function fetchTrees() {
       setLoading(true);
-      const { data, error } = await supabase.from('trees').select('*');
-      if (cancelled) return;
-      if (!error && Array.isArray(data)) {
-        setTrees(data);
+      setLoadError('');
+      try {
+        const { data, error } = await supabase.from('trees').select('*');
+        if (cancelled) return;
+        if (error) {
+          setLoadError(error.message || 'The tree data could not be loaded.');
+        } else {
+          setTrees(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError(e?.message || 'The tree data could not be loaded.');
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
     fetchTrees();
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadToken]);
 
   // The write-up behind the open panel. A species nobody has written up yet —
   // and a database without the table at all — both read as "not published".
@@ -568,6 +583,23 @@ export default function PublicMap() {
           );
         })}
       </MapContainer>
+
+      {/* A map with no pins because the read failed, saying so */}
+      {loadError && (
+        <div
+          role="alert"
+          className="absolute top-3 left-1/2 z-[700] w-[min(26rem,90vw)] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-lg"
+        >
+          <p className="text-sm font-semibold text-amber-900">The tagged trees could not be loaded</p>
+          <p className="mt-0.5 text-xs text-amber-800">{loadError}</p>
+          <button
+            onClick={() => setReloadToken((n) => n + 1)}
+            className="mt-2 rounded-md bg-amber-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-900 transition"
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Fly-to-user button (outside map so clicks always work) */}
       <FlyToUserButton mapRef={mapRef} />
