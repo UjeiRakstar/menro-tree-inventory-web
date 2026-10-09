@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, GeoJSON, Polygon, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Loader2, Locate, X } from 'lucide-react';
+import { Loader2, Locate, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   LAGUNA_BOUNDS,
@@ -15,15 +15,14 @@ import {
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
 import { labelOf } from '../../lib/lguOptions.js';
-import { normalizeCategory } from '../../lib/treeTraits.js';
-import TaggingForm from '../../components/public/TaggingForm.jsx';
+import { matchesHighlight } from '../../lib/treeTraits.js';
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
-
-const CATEGORIES = ['All Trees', 'Fruit Tree', 'Timber', 'Ornamental'];
 
 /** Every tagged tree reads as one thing on this map, so they all share one colour. */
 const MARKER_COLOR = '#16a34a';
 const MARKER_SELECTED_COLOR = '#064e3b';
+/** What the trees outside the highlighted set fade back to. */
+const MARKER_MUTED_COLOR = '#94a3b8';
 
 /** Laguna is the area of responsibility; everything beyond it is covered over. */
 const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fillOpacity: 0.75 };
@@ -31,6 +30,31 @@ const PROVINCE_STYLE = { color: '#0f172a', weight: 2.5, opacity: 0.9, fill: fals
 const MUNICIPALITY_STYLE = { color: '#64748b', weight: 1, opacity: 0.85, fillColor: '#16a34a', fillOpacity: 0.04 };
 const HOVER_STYLE = { color: '#15803d', weight: 2, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.16 };
 const SELECTED_STYLE = { color: '#15803d', weight: 3, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.28 };
+
+/**
+ * Leaflet draws everything vector into one layer unless told otherwise, and
+ * within it the last layer added wins — which is how selecting a municipality
+ * used to bury the tree points: bringing the chosen boundary to the front put
+ * it over them and it swallowed their clicks. Giving each kind of layer its own
+ * pane fixes the stacking for good, whatever order things are added in.
+ */
+const PANES = [
+  ['laguna-mask', 410],
+  ['laguna-boundaries', 420],
+  ['tree-points', 450],
+];
+
+function MapPanes() {
+  const map = useMap();
+  // During render, not in an effect: the layers naming these panes are created
+  // by siblings that render after this one.
+  for (const [name, zIndex] of PANES) {
+    if (!map.getPane(name)) {
+      map.createPane(name).style.zIndex = String(zIndex);
+    }
+  }
+  return null;
+}
 
 /** Coerce latitude/longitude to a finite number pair, or null. */
 function getLatLng(tree) {
@@ -91,6 +115,7 @@ function MunicipalityLayer({ selected, onSelect }) {
     <GeoJSON
       ref={groupRef}
       data={LAGUNA_MUNICIPALITIES}
+      pane="laguna-boundaries"
       style={(feature) => styleFor(feature.properties.municipality)}
       onEachFeature={(feature, layer) => {
         const { municipality, municipality_label: label } = feature.properties;
@@ -107,8 +132,14 @@ function MunicipalityLayer({ selected, onSelect }) {
   );
 }
 
-/** Component that tracks user location and renders the blue dot on the map */
-function UserLocationMarker({ onLocationClick }) {
+/**
+ * Tracks the visitor's location and draws the blue dot.
+ *
+ * Tapping it used to start tagging a tree. Tagging belongs to the Green Tag
+ * mobile app — it needs the phone standing at the trunk — so here the dot
+ * explains where to do it instead.
+ */
+function UserLocationMarker({ onTagAttempt }) {
   const [position, setPosition] = useState(null);
   const [accuracy, setAccuracy] = useState(0);
 
@@ -154,9 +185,7 @@ function UserLocationMarker({ onLocationClick }) {
           fillColor: '#4285f4',
           fillOpacity: 0.15,
         }}
-        eventHandlers={{
-          click: () => onLocationClick(position),
-        }}
+        eventHandlers={{ click: onTagAttempt }}
       />
       {/* Inner blue dot */}
       <CircleMarker
@@ -168,19 +197,16 @@ function UserLocationMarker({ onLocationClick }) {
           fillColor: '#4285f4',
           fillOpacity: 1,
         }}
-        eventHandlers={{
-          click: () => onLocationClick(position),
-        }}
+        eventHandlers={{ click: onTagAttempt }}
       >
         <Popup>
           <div className="text-center p-1">
             <p className="text-sm font-semibold text-gray-800">You are here</p>
-            <p className="text-[11px] text-gray-500 mb-2">Tap below to tag a nearby tree</p>
             <button
-              onClick={() => onLocationClick(position)}
-              className="w-full bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg hover:bg-green-800 transition"
+              onClick={onTagAttempt}
+              className="mt-2 w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition"
             >
-              🌳 Tag a Tree Here
+              🌳 Tag a Tree
             </button>
           </div>
         </Popup>
@@ -225,17 +251,16 @@ function FlyToUserButton({ mapRef }) {
 export default function PublicMap() {
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('All Trees');
   const [selectedLgu, setSelectedLgu] = useState('');
   const [selectedTree, setSelectedTree] = useState(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [speciesProfile, setSpeciesProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  // Which set of trees stands out: the open tree's species, or whatever trait
+  // the visitor picked from the panel's badges.
+  const [highlight, setHighlight] = useState(null);
   const [tileIndex, setTileIndex] = useState(0);
-  const [showEthicsModal, setShowEthicsModal] = useState(false);
-  const [ethicsAgreed, setEthicsAgreed] = useState(false);
-  const [showTaggingForm, setShowTaggingForm] = useState(false);
-  const [userTagPosition, setUserTagPosition] = useState(null);
+  const [showMobileOnlyNotice, setShowMobileOnlyNotice] = useState(false);
   const mapRef = useRef(null);
   // One lookup per species, not one per pin the visitor taps.
   const profileCache = useRef(new Map());
@@ -288,29 +313,26 @@ export default function PublicMap() {
     return () => { cancelled = true; };
   }, [selectedTree]);
 
-  // Filter by category. Both sides go through the same normaliser, so a tree
-  // stored as "Fruit" is not left out of the "Fruit Trees" filter.
-  const filteredTrees = useMemo(() => {
-    if (activeCategory === 'All Trees') return trees;
-    const wanted = normalizeCategory(activeCategory);
-    return trees.filter((t) => normalizeCategory(t?.tree_category) === wanted);
-  }, [trees, activeCategory]);
-
   // Build map pins
   const mapPins = useMemo(() => {
-    return filteredTrees
+    return trees
       .map((tree) => {
         const position = getLatLng(tree);
         if (!position) return null;
-        return { id: tree.id, position, tree };
+        return { id: tree.id, position, tree, highlighted: matchesHighlight(tree, highlight) };
       })
       .filter(Boolean);
-  }, [filteredTrees]);
+  }, [trees, highlight]);
+
+  const highlightedCount = useMemo(
+    () => (highlight ? mapPins.filter((pin) => pin.highlighted).length : 0),
+    [mapPins, highlight]
+  );
 
   const selectedFeature = useMemo(() => municipalityNamed(selectedLgu), [selectedLgu]);
   const selectedLabel = selectedFeature?.properties.municipality_label || '';
 
-  // Trees carry a barangay but no LGU, so the count comes from the geometry.
+  // Trees are stored with a barangay but no LGU, so the count comes from the geometry.
   const selectedTreeCount = useMemo(() => {
     if (!selectedFeature) return 0;
     return mapPins.filter((pin) => containsPoint(selectedFeature.geometry, pin.position)).length;
@@ -335,8 +357,7 @@ export default function PublicMap() {
     return name ? labelOf(name) : '';
   }, [selectedTree, treeAreas]);
 
-  // Where else in Laguna this species has been tagged. Counted across every
-  // tree, not just the ones the category filter is showing.
+  // Where else in Laguna this species has been tagged.
   const speciesDistribution = useMemo(() => {
     const species = selectedTree?.species?.trim();
     if (!species) return [];
@@ -352,26 +373,30 @@ export default function PublicMap() {
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   }, [selectedTree, trees, treeAreas]);
 
+  /** Opening a tree picks out the rest of its species. */
+  function handleSelectTree(tree) {
+    setSelectedTree(tree);
+    setHighlight({ kind: 'species', value: (tree.species || '').trim() });
+  }
+
+  function handleCloseTree() {
+    setSelectedTree(null);
+    setPanelCollapsed(false);
+    setHighlight(null);
+  }
+
+  /** A badge picks out everything sharing that trait; tapping it again goes back. */
+  function handleHighlight(next) {
+    setHighlight((current) => {
+      const same = current && current.kind === next.kind && current.value === next.value;
+      if (!same) return next;
+      return selectedTree ? { kind: 'species', value: (selectedTree.species || '').trim() } : null;
+    });
+  }
+
   /** Clicking the area already in focus clears the selection. */
   function handleSelectLgu(name) {
     setSelectedLgu((current) => (current === name ? '' : name));
-  }
-
-  // When user taps their blue dot, show ethics modal
-  function handleUserLocationClick(position) {
-    setUserTagPosition(position);
-    setShowEthicsModal(true);
-    setEthicsAgreed(false);
-  }
-
-  function handleEthicsConfirm() {
-    setShowEthicsModal(false);
-    setShowTaggingForm(true);
-  }
-
-  function handleTaggingSuccess() {
-    setShowTaggingForm(false);
-    setUserTagPosition(null);
   }
 
   // The panel covers the left of the map, so the controls over there travel
@@ -396,7 +421,9 @@ export default function PublicMap() {
 
       {/* Pulsing blue dot, and the slide the left-hand controls share with the
           detail panel. Leaflet owns the zoom control's markup, so it is moved
-          from here rather than with a className on the element. */}
+          from here rather than with a className on the element. On a phone the
+          panel covers the whole map, so the zoom control steps aside entirely
+          instead of sliding off-screen under it. */}
       <style>{`
         @keyframes pulse-blue {
           0% { transform: scale(1); opacity: 0.6; }
@@ -405,12 +432,19 @@ export default function PublicMap() {
         }
         .leaflet-top.leaflet-left,
         .map-side-control {
-          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1);
+          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease;
         }
         @media (min-width: 640px) {
           .panel-open .leaflet-top.leaflet-left,
           .panel-open .map-side-control {
             transform: translateX(380px);
+          }
+        }
+        @media (max-width: 639px) {
+          .panel-open .leaflet-top.leaflet-left,
+          .panel-open .map-side-control {
+            opacity: 0;
+            pointer-events: none;
           }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -430,40 +464,49 @@ export default function PublicMap() {
         zoomControl={true}
         ref={mapRef}
       >
+        <MapPanes />
+
         <TileLayer
           url={TILE_LAYERS[tileIndex].url}
           attribution="&copy; OpenStreetMap contributors"
         />
 
         {/* Everything outside Laguna is covered over, not detailed */}
-        <Polygon positions={OUTSIDE_LAGUNA_MASK} pathOptions={MASK_STYLE} interactive={false} />
+        <Polygon
+          positions={OUTSIDE_LAGUNA_MASK}
+          pathOptions={MASK_STYLE}
+          pane="laguna-mask"
+          interactive={false}
+        />
 
         {/* Cities and municipalities inside Laguna */}
         <MunicipalityLayer selected={selectedLgu} onSelect={handleSelectLgu} />
 
         {/* Province outline, drawn over the municipal lines */}
-        <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} interactive={false} />
+        <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} pane="laguna-boundaries" interactive={false} />
 
         <FocusController selected={selectedLgu} />
 
         {/* User location blue dot */}
-        <UserLocationMarker onLocationClick={handleUserLocationClick} />
+        <UserLocationMarker onTagAttempt={() => setShowMobileOnlyNotice(true)} />
 
         {/* Tree markers — tapping one opens the side panel */}
         {mapPins.map((pin) => {
           const isOpen = pin.id === selectedTree?.id;
+          const muted = Boolean(highlight) && !pin.highlighted;
           return (
             <CircleMarker
               key={pin.id}
               center={pin.position}
               radius={isOpen ? 10 : 7}
+              pane="tree-points"
               pathOptions={{
                 color: '#ffffff',
                 weight: isOpen ? 3 : 2,
-                fillColor: isOpen ? MARKER_SELECTED_COLOR : MARKER_COLOR,
-                fillOpacity: 0.95,
+                fillColor: isOpen ? MARKER_SELECTED_COLOR : muted ? MARKER_MUTED_COLOR : MARKER_COLOR,
+                fillOpacity: muted ? 0.55 : 0.95,
               }}
-              eventHandlers={{ click: () => setSelectedTree(pin.tree) }}
+              eventHandlers={{ click: () => handleSelectTree(pin.tree) }}
             />
           );
         })}
@@ -481,7 +524,9 @@ export default function PublicMap() {
           profile={speciesProfile}
           profileLoading={profileLoading}
           distribution={speciesDistribution}
-          onClose={() => { setSelectedTree(null); setPanelCollapsed(false); }}
+          highlight={highlight}
+          onHighlight={handleHighlight}
+          onClose={handleCloseTree}
           onCollapsedChange={setPanelCollapsed}
         />
       )}
@@ -533,23 +578,6 @@ export default function PublicMap() {
             <option key={i} value={i}>{layer.label}</option>
           ))}
         </select>
-
-        {/* Category filter pills */}
-        <div className="flex flex-col gap-1.5">
-          {CATEGORIES.filter(c => c !== 'All Trees').map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(activeCategory === cat ? 'All Trees' : cat)}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold shadow transition whitespace-nowrap ${
-                activeCategory === cat
-                  ? 'bg-green-700 text-white'
-                  : 'bg-white text-green-800 border border-green-600 hover:bg-green-50'
-              }`}
-            >
-              {cat === 'Fruit Tree' ? 'Fruit Trees' : cat === 'Timber' ? 'Timber Trees' : `${cat} Trees`}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Legend */}
@@ -561,8 +589,19 @@ export default function PublicMap() {
               className="w-3 h-3 rounded-full border-2 border-white shadow-sm flex-shrink-0"
               style={{ backgroundColor: MARKER_COLOR }}
             />
-            <span className="text-[10px] text-slate-600">Tagged tree</span>
+            <span className="text-[10px] text-slate-600">
+              {highlight ? `Highlighted (${highlightedCount})` : 'Tagged tree'}
+            </span>
           </div>
+          {highlight && (
+            <div className="flex items-center gap-2">
+              <span
+                className="w-3 h-3 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+                style={{ backgroundColor: MARKER_MUTED_COLOR }}
+              />
+              <span className="text-[10px] text-slate-600">Other trees</span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-sm flex-shrink-0 border border-green-700 bg-green-500/30" />
             <span className="text-[10px] text-slate-600">Area in focus</span>
@@ -578,60 +617,34 @@ export default function PublicMap() {
         </div>
       </div>
 
-      {/* Ethics Modal */}
-      {showEthicsModal && (
+      {/* Tagging lives in the mobile app */}
+      {showMobileOnlyNotice && (
         <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Tag a Tree 🌳</h2>
-            <div className="text-sm text-gray-600 space-y-2 mb-4">
-              <p>
-                Your current GPS location will be used as the tree's coordinates.
-                Please make sure you are <strong>standing as close to the tree as possible</strong> for accurate tagging.
-              </p>
-              <p>Ensure good lighting for clear photos. Take pictures of the full tree, leaves, bark, and fruits if available.</p>
-              <p className="font-medium text-amber-700">
-                Do not harm the tree — do not pick leaves, fruits, or bark without consent from the property owner.
-              </p>
-            </div>
-
-            <label className="flex items-start gap-2 mb-5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={ethicsAgreed}
-                onChange={(e) => setEthicsAgreed(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-              />
-              <span className="text-sm text-gray-700">
-                I understand and agree. I am standing near the tree.
+            <div className="flex items-center gap-3 mb-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-700">
+                <Smartphone size={20} />
               </span>
-            </label>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowEthicsModal(false); setUserTagPosition(null); }}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEthicsConfirm}
-                disabled={!ethicsAgreed}
-                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-green-700 rounded-lg hover:bg-green-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Start Tagging
-              </button>
+              <h2 className="text-lg font-bold text-gray-900">Tag a Tree 🌳</h2>
             </div>
+            <div className="text-sm text-gray-600 space-y-2 mb-5">
+              <p>
+                Tagging a tree is available in the <strong>Green Tag mobile app</strong>, not on this
+                website.
+              </p>
+              <p>
+                A tag records the tree&apos;s exact GPS position along with photos of its leaves, bark and
+                fruit, which means standing at the trunk with a phone in hand.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowMobileOnlyNotice(false)}
+              className="w-full px-4 py-2 text-sm font-semibold text-white bg-green-700 rounded-lg hover:bg-green-800 transition"
+            >
+              Got it
+            </button>
           </div>
         </div>
-      )}
-
-      {/* Tagging Form — passes the user's GPS position directly */}
-      {showTaggingForm && (
-        <TaggingForm
-          initialPosition={userTagPosition}
-          onClose={() => { setShowTaggingForm(false); setUserTagPosition(null); }}
-          onSuccess={handleTaggingSuccess}
-        />
       )}
     </div>
   );

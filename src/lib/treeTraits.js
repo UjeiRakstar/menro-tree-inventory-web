@@ -34,6 +34,7 @@ export function biodiversityTrait(tree) {
   if (value === 'endemic') {
     return {
       key: 'endemic',
+      kind: 'biodiversity',
       icon: endemicIcon,
       label: 'Endemic species',
       description: 'Native to the Philippines and part of the local ecosystem.',
@@ -42,6 +43,7 @@ export function biodiversityTrait(tree) {
   if (value === 'invasive') {
     return {
       key: 'invasive',
+      kind: 'biodiversity',
       icon: invasiveIcon,
       label: 'Invasive species',
       description: 'Introduced species that spreads and crowds out native trees.',
@@ -56,6 +58,7 @@ export function categoryTrait(tree) {
   if (value === 'fruit') {
     return {
       key: 'fruit',
+      kind: 'category',
       icon: fruitIcon,
       label: 'Fruit tree',
       description: 'Grown for its edible fruit.',
@@ -64,6 +67,7 @@ export function categoryTrait(tree) {
   if (value === 'ornamental') {
     return {
       key: 'ornamental',
+      kind: 'category',
       icon: ornamentalIcon,
       label: 'Ornamental tree',
       description: 'Planted for shade, form or flowers along streets and open spaces.',
@@ -72,6 +76,7 @@ export function categoryTrait(tree) {
   if (value === 'timber') {
     return {
       key: 'timber',
+      kind: 'category',
       icon: timberIcon,
       label: 'Timber tree',
       description: 'Grown for wood used in construction and furniture.',
@@ -99,6 +104,7 @@ export function sourceTrait(tree) {
   if (value === 'crowdsource' || value === 'crowdsourced' || value === 'public') {
     return {
       key: 'crowdsource',
+      kind: 'source',
       icon: crowdsourceIcon,
       label: 'Crowdsourced',
       description: 'Tagged by a resident through the Green Tag public map.',
@@ -106,11 +112,32 @@ export function sourceTrait(tree) {
   }
   return {
     key: 'field',
+    kind: 'source',
     icon: datagatherIcon,
     label: 'Field-gathered',
     description: 'Recorded on site by a MENRO field officer.',
   };
 }
+
+/**
+ * Is this tree part of the set being picked out on the map?
+ *
+ * A highlight is {kind, value}: the species of the tree whose panel is open, or
+ * the trait behind a badge the visitor pressed. No highlight means every tree
+ * is drawn the same, which is the map at rest.
+ */
+export function matchesHighlight(tree, highlight) {
+  if (!highlight?.kind) return true;
+  const { kind, value } = highlight;
+  if (kind === 'species') return norm(tree?.species) === norm(value);
+  if (kind === 'biodiversity') return biodiversityTrait(tree)?.key === value;
+  if (kind === 'category') return categoryTrait(tree)?.key === value;
+  if (kind === 'source') return sourceTrait(tree)?.key === value;
+  return true;
+}
+
+/** The set a badge stands for, in the shape matchesHighlight expects. */
+export const highlightForTrait = (trait) => ({ kind: trait.kind, value: trait.key });
 
 /** The badges to show, in panel order, skipping the ones the record cannot say. */
 export function traitsOf(tree) {

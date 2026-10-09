@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Info, Loader2, TreePine, X } from 'lucide-react';
-import { traitsOf, biodiversityTrait, categoryTrait } from '../../lib/treeTraits.js';
+import { traitsOf, biodiversityTrait, categoryTrait, highlightForTrait } from '../../lib/treeTraits.js';
 import { DBH_EXPLAINER, dbhOf, heightOf, phenologyOf } from '../../lib/treeDetails.js';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
@@ -66,18 +66,31 @@ function Tooltip({ title, children, open = false }) {
   );
 }
 
-/** One of the three round badges, with its meaning on hover and for readers. */
-function TraitBadge({ trait }) {
+/**
+ * One of the three round badges: what it means on hover, and pressing it picks
+ * every tree sharing that trait out on the map.
+ */
+function TraitBadge({ trait, active = false, onHighlight }) {
   return (
     <span className="relative group">
-      <img
-        src={trait.icon}
-        alt=""
-        aria-hidden="true"
-        className="w-11 h-11 rounded-full object-contain bg-white ring-1 ring-slate-200"
-      />
+      <button
+        type="button"
+        onClick={() => onHighlight?.(highlightForTrait(trait))}
+        aria-pressed={active}
+        aria-label={`Highlight every ${trait.label.toLowerCase()} on the map`}
+        className={`block rounded-full bg-white transition ${
+          active ? 'ring-2 ring-green-600 ring-offset-1' : 'ring-1 ring-slate-200 hover:ring-green-400'
+        }`}
+      >
+        <img src={trait.icon} alt="" aria-hidden="true" className="w-11 h-11 rounded-full object-contain" />
+      </button>
       <span className="sr-only">{`${trait.label}: ${trait.description}`}</span>
-      <Tooltip title={trait.label}>{trait.description}</Tooltip>
+      <Tooltip title={trait.label}>
+        {trait.description}
+        <span className="mt-1 block text-slate-300">
+          {active ? 'Highlighted on the map.' : 'Tap to highlight these on the map.'}
+        </span>
+      </Tooltip>
     </span>
   );
 }
@@ -124,7 +137,7 @@ function Measurement({ icon, measurement, hint }) {
  * The "Tree Details" tab: what was measured and observed for this one tree,
  * plus where else in Laguna the species has been tagged.
  */
-function TreeDetailsTab({ tree, distribution }) {
+function TreeDetailsTab({ tree, distribution, highlight, onHighlight }) {
   const height = heightOf(tree);
   const dbh = dbhOf(tree);
   const phenology = phenologyOf(tree);
@@ -173,17 +186,31 @@ function TreeDetailsTab({ tree, distribution }) {
       {classification.length > 0 && (
         <section className="px-5 py-4" aria-label="Classification">
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-            {classification.map((trait) => (
-              <span key={trait.key} className="flex items-center gap-2">
-                <img
-                  src={trait.icon}
-                  alt=""
-                  aria-hidden="true"
-                  className="h-10 w-10 rounded-full object-contain bg-white ring-1 ring-slate-200"
-                />
-                <span className="text-sm font-medium text-slate-700">{trait.label}</span>
-              </span>
-            ))}
+            {classification.map((trait) => {
+              const active = highlight?.kind === trait.kind && highlight?.value === trait.key;
+              return (
+                <button
+                  key={trait.key}
+                  type="button"
+                  onClick={() => onHighlight?.(highlightForTrait(trait))}
+                  aria-pressed={active}
+                  aria-label={`Highlight every ${trait.label.toLowerCase()} on the map`}
+                  className="flex items-center gap-2 rounded-lg px-1 py-0.5 transition hover:bg-slate-50"
+                >
+                  <img
+                    src={trait.icon}
+                    alt=""
+                    aria-hidden="true"
+                    className={`h-10 w-10 rounded-full object-contain bg-white transition ${
+                      active ? 'ring-2 ring-green-600 ring-offset-1' : 'ring-1 ring-slate-200'
+                    }`}
+                  />
+                  <span className={`text-sm font-medium ${active ? 'text-green-800' : 'text-slate-700'}`}>
+                    {trait.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
@@ -271,6 +298,8 @@ export default function TreeDetailPanel({
   profile = null,
   profileLoading = false,
   distribution = [],
+  highlight = null,
+  onHighlight,
   onClose,
   onCollapsedChange,
 }) {
@@ -377,7 +406,12 @@ export default function TreeDetailPanel({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {traits.map((trait) => (
-                  <TraitBadge key={trait.key} trait={trait} />
+                  <TraitBadge
+                    key={trait.key}
+                    trait={trait}
+                    active={highlight?.kind === trait.kind && highlight?.value === trait.key}
+                    onHighlight={onHighlight}
+                  />
                 ))}
               </div>
             </div>
@@ -407,7 +441,12 @@ export default function TreeDetailPanel({
           {activeTab === 'description' ? (
             <DescriptionTab profile={profile} profileLoading={profileLoading} />
           ) : (
-            <TreeDetailsTab tree={tree} distribution={distribution} />
+            <TreeDetailsTab
+              tree={tree}
+              distribution={distribution}
+              highlight={highlight}
+              onHighlight={onHighlight}
+            />
           )}
         </div>
       </aside>

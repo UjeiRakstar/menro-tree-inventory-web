@@ -5,9 +5,10 @@ import { MemoryRouter } from 'react-router-dom';
 // react-leaflet stand-ins. The map itself is inert; what matters is which layers
 // the page asks for, with which geometry and styling.
 // -----------------------------------------------------------------------------
-const { flyToBoundsSpy, featureHandlers } = vi.hoisted(() => ({
+const { flyToBoundsSpy, featureHandlers, panes } = vi.hoisted(() => ({
   flyToBoundsSpy: vi.fn(),
   featureHandlers: new Map(),
+  panes: new Map(),
 }));
 
 vi.mock('react-leaflet', () => ({
@@ -17,16 +18,17 @@ vi.mock('react-leaflet', () => ({
     </div>
   ),
   TileLayer: ({ url }) => <div data-testid="tile-layer" data-url={url} />,
-  Polygon: ({ positions, pathOptions, interactive }) => (
+  Polygon: ({ positions, pathOptions, interactive, pane }) => (
     <div
       data-testid="mask"
       data-ring-count={String(positions.length)}
       data-outer-ring={JSON.stringify(positions[0])}
       data-fill={pathOptions?.fillColor}
       data-interactive={String(interactive)}
+      data-pane={pane}
     />
   ),
-  GeoJSON: ({ data, onEachFeature }) => {
+  GeoJSON: ({ data, onEachFeature, pane }) => {
     for (const feature of data.features) {
       onEachFeature?.(feature, {
         feature,
@@ -36,13 +38,21 @@ vi.mock('react-leaflet', () => ({
         on: (handlers) => featureHandlers.set(feature.properties.municipality, handlers),
       });
     }
-    return <div data-testid="geojson" data-name={data.name} data-feature-count={String(data.features.length)} />;
+    return (
+      <div
+        data-testid="geojson"
+        data-name={data.name}
+        data-feature-count={String(data.features.length)}
+        data-pane={pane}
+      />
+    );
   },
-  CircleMarker: ({ center, pathOptions, eventHandlers, children }) => (
+  CircleMarker: ({ center, pathOptions, eventHandlers, pane, children }) => (
     <div
-      data-testid="tree-marker"
+      data-testid={pane === 'tree-points' ? 'tree-marker' : 'location-marker'}
       data-center={JSON.stringify(center)}
       data-fill={pathOptions?.fillColor}
+      data-pane={pane}
       onClick={() => eventHandlers?.click?.()}
     >
       {children}
@@ -50,7 +60,16 @@ vi.mock('react-leaflet', () => ({
   ),
   Circle: () => <div data-testid="circle" />,
   Popup: ({ children }) => <div data-testid="popup">{children}</div>,
-  useMap: () => ({ flyToBounds: flyToBoundsSpy, flyTo: vi.fn() }),
+  useMap: () => ({
+    flyToBounds: flyToBoundsSpy,
+    flyTo: vi.fn(),
+    getPane: (name) => panes.get(name),
+    createPane: (name) => {
+      const element = { style: {} };
+      panes.set(name, element);
+      return element;
+    },
+  }),
 }));
 
 vi.mock('../../supabaseClient.js', async () => {
@@ -65,10 +84,10 @@ import PublicMap from './PublicMap.jsx';
 // Two trees in Santa Cruz, one in Pila, so the per-area count has something to
 // be wrong about.
 const TREES = [
-  { id: 1, species: 'Narra', tree_category: 'Timber', latitude: 14.2823, longitude: 121.4163, barangay: 'Poblacion' },
+  { id: 1, species: 'Narra', tree_category: 'Timber', biodiversity_status: 'Endemic', latitude: 14.2823, longitude: 121.4163, barangay: 'Poblacion' },
   // Stored as plain "Fruit", the spelling the category filter used to drop.
-  { id: 2, species: 'Mango', tree_category: 'Fruit', latitude: 14.2795, longitude: 121.4121, barangay: 'Poblacion' },
-  { id: 3, species: 'Acacia', tree_category: 'Ornamental', latitude: 14.2325, longitude: 121.3666, barangay: 'Santa Clara Sur' },
+  { id: 2, species: 'Mango', tree_category: 'Fruit', biodiversity_status: 'Invasive', latitude: 14.2795, longitude: 121.4121, barangay: 'Poblacion' },
+  { id: 3, species: 'Acacia', tree_category: 'Ornamental', biodiversity_status: 'Endemic', latitude: 14.2325, longitude: 121.3666, barangay: 'Santa Clara Sur' },
   // Two more Narra — one in Pila, one back in Santa Cruz — so the distribution
   // list has something to order by.
   { id: 4, species: 'Narra', tree_category: 'Timber', latitude: 14.2330, longitude: 121.3670, barangay: 'Pansol' },
@@ -88,6 +107,7 @@ const markers = () => screen.getAllByTestId('tree-marker');
 beforeEach(() => {
   supabaseMock.reset();
   featureHandlers.clear();
+  panes.clear();
   flyToBoundsSpy.mockClear();
   supabaseMock.setResponse('trees:select', { data: TREES, error: null });
   supabaseMock.setResponse('species_profiles:select', {
@@ -198,20 +218,85 @@ describe('PublicMap', () => {
     expect(await within(panel).findByText('Narra is the national tree.')).toBeInTheDocument();
   });
 
-  it('marks the open tree apart from the rest, and closes again', async () => {
+  it('opening a tree picks out the rest of its species and fades the others', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
     fireEvent.click(markers()[0]);
     await screen.findByRole('complementary');
 
-    const fills = markers().map((m) => m.dataset.fill);
-    expect(fills[0]).toBe('#064e3b');
-    expect(fills.slice(1)).toEqual(['#16a34a', '#16a34a', '#16a34a', '#16a34a']);
+    // The open Narra, then Mango and Acacia faded, then the other two Narra.
+    expect(markers().map((m) => m.dataset.fill)).toEqual([
+      '#064e3b',
+      '#94a3b8',
+      '#94a3b8',
+      '#16a34a',
+      '#16a34a',
+    ]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Close tree details' }));
     await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument());
-    expect(markers().map((m) => m.dataset.fill)).toEqual(['#16a34a', '#16a34a', '#16a34a', '#16a34a', '#16a34a']);
+    expect(markers().map((m) => m.dataset.fill)).toEqual([
+      '#16a34a',
+      '#16a34a',
+      '#16a34a',
+      '#16a34a',
+      '#16a34a',
+    ]);
+  });
+
+  it('a badge in the panel picks out every tree sharing that trait', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(markers()[0]);
+    const panel = await screen.findByRole('complementary');
+
+    const badge = within(panel).getByRole('button', { name: /Highlight every endemic species/i });
+    fireEvent.click(badge);
+
+    // Endemic: the open Narra and the Acacia. The invasive Mango and the two
+    // Narra with no status recorded fade back.
+    expect(markers().map((m) => m.dataset.fill)).toEqual([
+      '#064e3b',
+      '#94a3b8',
+      '#16a34a',
+      '#94a3b8',
+      '#94a3b8',
+    ]);
+    expect(badge).toHaveAttribute('aria-pressed', 'true');
+
+    // Pressing it again returns to the species the panel is showing.
+    fireEvent.click(badge);
+    expect(markers().map((m) => m.dataset.fill)).toEqual([
+      '#064e3b',
+      '#94a3b8',
+      '#94a3b8',
+      '#16a34a',
+      '#16a34a',
+    ]);
+  });
+
+  it('keeps the tree points in a pane above the boundaries, so they stay clickable', async () => {
+    // Selecting a municipality brings its outline to the front; without panes
+    // that outline lands on top of the points and eats their clicks.
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    const z = (name) => Number(panes.get(name).style.zIndex);
+    expect(z('tree-points')).toBeGreaterThan(z('laguna-boundaries'));
+    expect(z('laguna-boundaries')).toBeGreaterThan(z('laguna-mask'));
+
+    expect(markers()[0].dataset.pane).toBe('tree-points');
+    expect(screen.getByTestId('mask').dataset.pane).toBe('laguna-mask');
+    for (const layer of screen.getAllByTestId('geojson')) {
+      expect(layer.dataset.pane).toBe('laguna-boundaries');
+    }
+
+    // And a point still opens its panel after an area has been selected.
+    featureHandlers.get('Santa Cruz').click();
+    fireEvent.click(markers()[0]);
+    expect(await screen.findByRole('complementary')).toBeInTheDocument();
   });
 
   it('says the write-up is unpublished when the species has no row', async () => {
@@ -260,16 +345,42 @@ describe('PublicMap', () => {
     ]);
   });
 
-  it('keeps the category filter working alongside the area selection', async () => {
+  it('offers no category filter buttons', () => {
+    // Fruit/Timber/Ornamental pills were removed: the badges in the panel are
+    // how a visitor narrows the map now.
+    renderMap();
+
+    expect(screen.queryByRole('button', { name: 'Fruit Trees' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Timber Trees' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ornamental Trees' })).not.toBeInTheDocument();
+  });
+
+  it('sends anyone trying to tag a tree to the mobile app', async () => {
+    // The dot only draws once the browser reports a position.
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        watchPosition: (onSuccess) => {
+          onSuccess({ coords: { latitude: 14.2823, longitude: 121.4163, accuracy: 8 } });
+          return 1;
+        },
+        clearWatch: () => {},
+      },
+    });
+
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Fruit Trees' }));
-    await waitFor(() => expect(markers()).toHaveLength(1));
+    // The blue location dot is where tagging used to start.
+    fireEvent.click(screen.getAllByTestId('location-marker')[0]);
 
-    fireEvent.change(screen.getByLabelText('Zoom to a city or municipality'), {
-      target: { value: 'Santa Cruz' },
-    });
-    expect(await screen.findByText('1 tagged tree')).toBeInTheDocument();
+    expect(await screen.findByText(/available in the/i)).toBeInTheDocument();
+    expect(screen.getByText(/Green Tag mobile app/)).toBeInTheDocument();
+    // No tagging form, and nothing is written anywhere.
+    expect(screen.queryByText(/Start Tagging/)).not.toBeInTheDocument();
+    expect(supabaseMock.calls.some((c) => c.op !== 'select')).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(screen.queryByText(/Green Tag mobile app/)).not.toBeInTheDocument());
   });
 });
