@@ -104,6 +104,20 @@ function renderMap() {
 
 const markers = () => screen.getAllByTestId('tree-marker');
 
+/** The blue dot only draws once the browser reports a position. */
+function locateAt(latitude, longitude) {
+  Object.defineProperty(globalThis.navigator, 'geolocation', {
+    configurable: true,
+    value: {
+      watchPosition: (onSuccess) => {
+        onSuccess({ coords: { latitude, longitude, accuracy: 8 } });
+        return 1;
+      },
+      clearWatch: () => {},
+    },
+  });
+}
+
 beforeEach(() => {
   supabaseMock.reset();
   featureHandlers.clear();
@@ -355,32 +369,52 @@ describe('PublicMap', () => {
     expect(screen.queryByRole('button', { name: 'Ornamental Trees' })).not.toBeInTheDocument();
   });
 
-  it('sends anyone trying to tag a tree to the mobile app', async () => {
-    // The dot only draws once the browser reports a position.
-    Object.defineProperty(globalThis.navigator, 'geolocation', {
-      configurable: true,
-      value: {
-        watchPosition: (onSuccess) => {
-          onSuccess({ coords: { latitude: 14.2823, longitude: 121.4163, accuracy: 8 } });
-          return 1;
-        },
-        clearWatch: () => {},
-      },
+  /** Put the page in the phone-sized view, or leave it on a desktop. */
+  function setViewport(isMobile) {
+    globalThis.matchMedia = (query) => ({
+      media: query,
+      matches: isMobile,
+      addEventListener: () => {},
+      removeEventListener: () => {},
     });
+  }
 
+  it('lets a resident in the mobile view tag the tree they are standing at', async () => {
+    locateAt(14.2823, 121.4163);
+    setViewport(true);
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
-    // The blue location dot is where tagging used to start.
     fireEvent.click(screen.getAllByTestId('location-marker')[0]);
 
-    expect(await screen.findByText(/available in the/i)).toBeInTheDocument();
-    expect(screen.getByText(/Green Tag mobile app/)).toBeInTheDocument();
-    // No tagging form, and nothing is written anywhere.
-    expect(screen.queryByText(/Start Tagging/)).not.toBeInTheDocument();
+    // What to know before tagging comes first.
+    expect(await screen.findByText(/standing as close to the tree as possible/)).toBeInTheDocument();
+    const start = screen.getByRole('button', { name: 'Start Tagging' });
+    expect(start).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(start);
+
+    expect(await screen.findByRole('heading', { name: 'Tag a Tree' })).toBeInTheDocument();
+    // The tag goes to pending_trees for the field team to verify; nothing is
+    // written to the trees table from here.
+    expect(supabaseMock.calls.some((c) => c.table === 'trees' && c.op !== 'select')).toBe(false);
+  });
+
+  it('sends a desktop visitor to their phone instead of tagging from a computer', async () => {
+    locateAt(14.2823, 121.4163);
+    setViewport(false);
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(screen.getAllByTestId('location-marker')[0]);
+
+    expect(await screen.findByText(/Open this map on your phone/)).toBeInTheDocument();
+    // No tagging flow on a desktop: the GPS fix would be the computer's.
+    expect(screen.queryByRole('button', { name: 'Start Tagging' })).not.toBeInTheDocument();
     expect(supabaseMock.calls.some((c) => c.op !== 'select')).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
-    await waitFor(() => expect(screen.queryByText(/Green Tag mobile app/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Open this map on your phone/)).not.toBeInTheDocument());
   });
 });

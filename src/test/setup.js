@@ -24,3 +24,21 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = NoopObserver;
 }
+
+/**
+ * jsdom has no matchMedia either. The default answer is "no match", which is
+ * the desktop view; a test that wants the mobile view overrides this with its
+ * own stub.
+ */
+if (typeof globalThis.matchMedia === 'undefined') {
+  globalThis.matchMedia = (query) => ({
+    media: query,
+    matches: false,
+    onchange: null,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => false,
+  });
+}

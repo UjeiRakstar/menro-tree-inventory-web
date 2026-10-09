@@ -16,6 +16,7 @@ import {
 } from '../../lib/lagunaBoundaries.js';
 import { labelOf } from '../../lib/lguOptions.js';
 import { matchesHighlight } from '../../lib/treeTraits.js';
+import TaggingForm from '../../components/public/TaggingForm.jsx';
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
 
 /** Every tagged tree reads as one thing on this map, so they all share one colour. */
@@ -54,6 +55,34 @@ function MapPanes() {
     }
   }
   return null;
+}
+
+/**
+ * Is this the phone-sized view?
+ *
+ * Crowdsourced tagging happens here, in the mobile view: a resident standing at
+ * the tree with their browser open, no app to install. The desktop view cannot
+ * do it honestly — the GPS fix would be the computer's, not the tree's — so it
+ * explains where to go instead. The breakpoint is the one the layout already
+ * uses, and it follows a window being resized.
+ */
+const MOBILE_VIEW_QUERY = '(max-width: 639px)';
+
+function useIsMobileView() {
+  const [isMobileView, setIsMobileView] = useState(
+    () => globalThis.matchMedia?.(MOBILE_VIEW_QUERY).matches ?? false
+  );
+
+  useEffect(() => {
+    const query = globalThis.matchMedia?.(MOBILE_VIEW_QUERY);
+    if (!query) return undefined;
+    const update = (event) => setIsMobileView(event.matches);
+    setIsMobileView(query.matches);
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+
+  return isMobileView;
 }
 
 /** Coerce latitude/longitude to a finite number pair, or null. */
@@ -135,9 +164,7 @@ function MunicipalityLayer({ selected, onSelect }) {
 /**
  * Tracks the visitor's location and draws the blue dot.
  *
- * Tapping it used to start tagging a tree. Tagging belongs to the Green Tag
- * mobile app — it needs the phone standing at the trunk — so here the dot
- * explains where to do it instead.
+ * Tapping it is how a resident starts tagging the tree they are standing at.
  */
 function UserLocationMarker({ onTagAttempt }) {
   const [position, setPosition] = useState(null);
@@ -185,7 +212,7 @@ function UserLocationMarker({ onTagAttempt }) {
           fillColor: '#4285f4',
           fillOpacity: 0.15,
         }}
-        eventHandlers={{ click: onTagAttempt }}
+        eventHandlers={{ click: () => onTagAttempt(position) }}
       />
       {/* Inner blue dot */}
       <CircleMarker
@@ -197,16 +224,17 @@ function UserLocationMarker({ onTagAttempt }) {
           fillColor: '#4285f4',
           fillOpacity: 1,
         }}
-        eventHandlers={{ click: onTagAttempt }}
+        eventHandlers={{ click: () => onTagAttempt(position) }}
       >
         <Popup>
           <div className="text-center p-1">
             <p className="text-sm font-semibold text-gray-800">You are here</p>
+            <p className="text-[11px] text-gray-500 mb-2">Tap below to tag a nearby tree</p>
             <button
-              onClick={onTagAttempt}
-              className="mt-2 w-full rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition"
+              onClick={() => onTagAttempt(position)}
+              className="w-full bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg hover:bg-green-800 transition"
             >
-              🌳 Tag a Tree
+              🌳 Tag a Tree Here
             </button>
           </div>
         </Popup>
@@ -261,6 +289,11 @@ export default function PublicMap() {
   const [highlight, setHighlight] = useState(null);
   const [tileIndex, setTileIndex] = useState(0);
   const [showMobileOnlyNotice, setShowMobileOnlyNotice] = useState(false);
+  const [showEthicsModal, setShowEthicsModal] = useState(false);
+  const [ethicsAgreed, setEthicsAgreed] = useState(false);
+  const [showTaggingForm, setShowTaggingForm] = useState(false);
+  const [userTagPosition, setUserTagPosition] = useState(null);
+  const isMobileView = useIsMobileView();
   const mapRef = useRef(null);
   // One lookup per species, not one per pin the visitor taps.
   const profileCache = useRef(new Map());
@@ -394,6 +427,30 @@ export default function PublicMap() {
     });
   }
 
+  /**
+   * Tapping the blue dot starts a crowdsourced tag — but only from the mobile
+   * view, where the position under the visitor is the position of the tree.
+   */
+  function handleTagAttempt(position) {
+    if (!isMobileView) {
+      setShowMobileOnlyNotice(true);
+      return;
+    }
+    setUserTagPosition(position);
+    setEthicsAgreed(false);
+    setShowEthicsModal(true);
+  }
+
+  function handleEthicsConfirm() {
+    setShowEthicsModal(false);
+    setShowTaggingForm(true);
+  }
+
+  function closeTagging() {
+    setShowTaggingForm(false);
+    setUserTagPosition(null);
+  }
+
   /** Clicking the area already in focus clears the selection. */
   function handleSelectLgu(name) {
     setSelectedLgu((current) => (current === name ? '' : name));
@@ -488,7 +545,7 @@ export default function PublicMap() {
         <FocusController selected={selectedLgu} />
 
         {/* User location blue dot */}
-        <UserLocationMarker onTagAttempt={() => setShowMobileOnlyNotice(true)} />
+        <UserLocationMarker onTagAttempt={handleTagAttempt} />
 
         {/* Tree markers — tapping one opens the side panel */}
         {mapPins.map((pin) => {
@@ -617,7 +674,7 @@ export default function PublicMap() {
         </div>
       </div>
 
-      {/* Tagging lives in the mobile app */}
+      {/* Tagging needs the phone that is standing at the tree */}
       {showMobileOnlyNotice && (
         <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl">
@@ -629,12 +686,12 @@ export default function PublicMap() {
             </div>
             <div className="text-sm text-gray-600 space-y-2 mb-5">
               <p>
-                Tagging a tree is available in the <strong>Green Tag mobile app</strong>, not on this
-                website.
+                Tagging is available on a <strong>phone</strong>. Open this map on your phone, stand
+                beside the tree, and tap the blue dot.
               </p>
               <p>
-                A tag records the tree&apos;s exact GPS position along with photos of its leaves, bark and
-                fruit, which means standing at the trunk with a phone in hand.
+                A tag takes the tree&apos;s position from where you are standing, so it has to be
+                recorded there — a computer would only record where the computer is.
               </p>
             </div>
             <button
@@ -646,6 +703,65 @@ export default function PublicMap() {
           </div>
         </div>
       )}
+
+      {/* What to know before tagging */}
+      {showEthicsModal && (
+        <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Tag a Tree 🌳</h2>
+            <div className="text-sm text-gray-600 space-y-2 mb-4">
+              <p>
+                Your current GPS location will be used as the tree&apos;s coordinates.
+                Please make sure you are <strong>standing as close to the tree as possible</strong> for accurate tagging.
+              </p>
+              <p>Ensure good lighting for clear photos. Take pictures of the full tree, leaves, bark, and fruits if available.</p>
+              <p className="font-medium text-amber-700">
+                Do not harm the tree — do not pick leaves, fruits, or bark without consent from the property owner.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-2 mb-5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ethicsAgreed}
+                onChange={(e) => setEthicsAgreed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-sm text-gray-700">
+                I understand and agree. I am standing near the tree.
+              </span>
+            </label>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowEthicsModal(false); setUserTagPosition(null); }}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEthicsConfirm}
+                disabled={!ethicsAgreed}
+                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-green-700 rounded-lg hover:bg-green-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Start Tagging
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* The tag itself. It lands in pending_trees for the field team to verify
+          through the Green Tag mobile app, which is why nothing here writes to
+          the trees table. */}
+      {showTaggingForm && (
+        <TaggingForm
+          initialPosition={userTagPosition}
+          onClose={closeTagging}
+          onSuccess={closeTagging}
+        />
+      )}
+
     </div>
   );
 }
