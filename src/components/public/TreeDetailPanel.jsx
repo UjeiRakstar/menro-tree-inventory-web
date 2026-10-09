@@ -13,6 +13,9 @@ const DISCLAIMER =
   'Ecosystems Research and Development Bureau through ERDB Services and Knowledge Resources ' +
   'Integrated System which can be accessed through this link:';
 
+/** How long the panel takes to slide, in step with the class below. */
+const SLIDE_MS = 300;
+
 const TABS = [
   { key: 'description', label: 'Description' },
   { key: 'details', label: 'Tree Details' },
@@ -319,6 +322,13 @@ export default function TreeDetailPanel({
   const [collapsed, setCollapsed] = useState(false);
   // Mount off-screen, then slide in on the next frame.
   const [entered, setEntered] = useState(false);
+  // Closing slides the panel out before it goes. Unmounting on the click makes
+  // it vanish, which on a phone — where the panel is the whole screen and
+  // there is no collapse handle — is the only way it ever left.
+  const [leaving, setLeaving] = useState(false);
+  const closeTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setEntered(true));
@@ -333,12 +343,25 @@ export default function TreeDetailPanel({
   useEffect(() => {
     setActiveTab('description');
     setSlide(0);
+    // Tapping a pin during the closing slide means they want this tree, not
+    // the close they just asked for.
+    clearTimeout(closeTimer.current);
+    setLeaving(false);
     if (collapsedRef.current) {
       collapsedRef.current = false;
       setCollapsed(false);
       onCollapsedChange?.(false);
     }
   }, [tree.id]);
+
+  /** Slide out, then tell the map to drop the selection. */
+  function handleClose() {
+    if (leaving) return;
+    setLeaving(true);
+    // The map's zoom control and locate button travel back in step with it.
+    onCollapsedChange?.(true);
+    closeTimer.current = setTimeout(() => onClose?.(), SLIDE_MS);
+  }
 
   function toggleCollapsed() {
     const next = !collapsed;
@@ -351,7 +374,7 @@ export default function TreeDetailPanel({
   const traits = traitsOf(tree);
   const scientificName = (tree.scientific_name || '').trim();
   const hasScientificName = scientificName && !/^unknown$/i.test(scientificName);
-  const showing = entered && !collapsed;
+  const showing = entered && !collapsed && !leaving;
 
   return (
     <>
@@ -404,7 +427,7 @@ export default function TreeDetailPanel({
             )}
 
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="absolute top-2 left-2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60"
               aria-label="Close tree details"
             >

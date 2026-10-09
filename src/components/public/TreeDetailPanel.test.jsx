@@ -180,13 +180,35 @@ describe('TreeDetailPanel', () => {
     expect(panel).toHaveAttribute('aria-hidden', 'false');
   });
 
-  it('closes on request', () => {
+  it('slides out on close, and only then lets the map drop it', async () => {
+    const onClose = vi.fn();
+    const onCollapsedChange = vi.fn();
+    renderPanel({ onClose, onCollapsedChange });
+
+    const panel = screen.getByRole('complementary');
+    await waitFor(() => expect(panel.className).toContain('translate-x-0'));
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close tree details' }));
+
+    // Unmounting on the click is what made it vanish on a phone, where the
+    // panel is the whole screen.
+    expect(onClose).not.toHaveBeenCalled();
+    expect(panel.className).toContain('-translate-x-full');
+    // The map's controls come back as it goes, not after.
+    expect(onCollapsedChange).toHaveBeenCalledWith(true);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a second close while the first is still sliding', async () => {
     const onClose = vi.fn();
     renderPanel({ onClose });
 
-    const panel = screen.getByRole('complementary');
-    fireEvent.click(within(panel).getByRole('button', { name: 'Close tree details' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    const close = screen.getByRole('button', { name: 'Close tree details' });
+    fireEvent.click(close);
+    fireEvent.click(close);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   it('starts the next tree at its first photo and first tab', async () => {

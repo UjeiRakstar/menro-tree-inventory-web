@@ -305,6 +305,22 @@ describe('PublicMap', () => {
     expect(within(panel).getByRole('heading', { level: 2, name: 'Mango' })).toBeInTheDocument();
   });
 
+  it('tapping another pin mid-close keeps the panel, on the new tree', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(markers()[0]);
+    const panel = await screen.findByRole('complementary');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close tree details' }));
+    fireEvent.click(markers()[1]);
+
+    // The close was abandoned, not honoured 300ms later on the wrong tree.
+    expect(within(panel).getByRole('heading', { level: 2, name: 'Mango' })).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByRole('complementary')).toBeInTheDocument();
+  });
+
   it('a badge in the panel picks out every tree sharing that trait', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
