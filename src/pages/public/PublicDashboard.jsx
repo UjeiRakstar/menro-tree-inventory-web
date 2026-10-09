@@ -1,88 +1,46 @@
-import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, CircleMarker, GeoJSON, Polygon, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Loader2 } from 'lucide-react';
+import { Download, Info, Loader2 } from 'lucide-react';
 import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
   Bar,
-  XAxis,
-  YAxis,
+  BarChart,
   CartesianGrid,
-  Tooltip,
   Legend,
   ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
 import { supabase } from '../../supabaseClient.js';
-import santaCruzBoundary from '../../data/Santa-Cruz-Boundary.geojson';
+import {
+  LAGUNA_BOUNDS,
+  LAGUNA_MUNICIPALITIES,
+  LAGUNA_PROVINCE,
+  OUTSIDE_LAGUNA_MASK,
+  boundsOfMunicipality,
+  municipalityAt,
+} from '../../lib/lagunaBoundaries.js';
+import { labelOf } from '../../lib/lguOptions.js';
+import {
+  ALL_METRICS,
+  METRIC_PAIRS,
+  barangayOf,
+  formatFigure,
+  groupBy,
+  summarise,
+} from '../../lib/dashboardMetrics.js';
+import LguStrip from '../../components/public/LguStrip.jsx';
+import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 
-const SANTA_CRUZ_CENTER = [14.2823, 121.4163];
-const SANTA_CRUZ_ZOOM = 13;
+const MARKER_COLOR = '#16a34a';
+const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fillOpacity: 0.75 };
+const PROVINCE_STYLE = { color: '#0f172a', weight: 2.5, opacity: 0.9, fill: false };
+const MUNICIPALITY_STYLE = { color: '#64748b', weight: 1, opacity: 0.85, fillColor: '#16a34a', fillOpacity: 0.04 };
+const SELECTED_STYLE = { color: '#15803d', weight: 3, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.28 };
 
-const BARANGAYS = [
-  'Alipit', 'Bagumbayan', 'Barangay I', 'Barangay II', 'Barangay III',
-  'Barangay IV', 'Barangay V', 'Bubukal', 'Calios', 'Duhat', 'Gatid',
-  'Jasaan', 'Labuin', 'Malinao', 'Oogong', 'Pagsawitan', 'Palasan',
-  'Patimbao', 'San Jose', 'San Juan', 'San Pablo Norte', 'San Pablo Sur',
-  'Santisima Cruz', 'Santo Angel Central', 'Santo Angel Norte', 'Santo Angel Sur',
-];
-
-const ALL_BARANGAYS_LABEL = 'Santa Cruz (All Barangays)';
-
-// Carbon proxy: 2.5 kg CO₂ per cm of DBH
-const CARBON_PER_DBH_CM = 2.5;
-
-const SPECIES_COLORS = [
-  '#16a34a', '#22c55e', '#65a30d', '#84cc16', '#eab308', '#94a3b8',
-  '#0891b2', '#7c3aed', '#dc2626', '#f97316', '#06b6d4', '#ec4899',
-  '#14b8a6', '#a855f7', '#f59e0b', '#6366f1',
-];
-const CATEGORY_COLORS = ['#0f766e', '#dc2626', '#7c3aed', '#0891b2', '#f59e0b'];
-
-// Land area per barangay (hectares) — CDRA 2025
-const BARANGAY_AREA_HECTARES = {
-  'Alipit': 211.59,
-  'Bagumbayan': 266.38,
-  'Bubukal': 278.55,
-  'Calios': 226.14,
-  'Duhat': 387.05,
-  'Gatid': 395.33,
-  'Labuin': 239.02,
-  'Oogong': 184.75,
-  'Pagsawitan': 108.53,
-  'Palasan': 208.63,
-  'Patimbao': 236.16,
-  'Barangay I': 23.51,
-  'Barangay II': 8.86,
-  'Barangay III': 10,
-  'Barangay IV': 6.04,
-  'Barangay V': 9.51,
-  'San Jose': 133.5,
-  'San Pablo Norte': 79.14,
-  'Santisima Cruz': 108.93,
-  'Santo Angel Central': 33.37,
-  'Santo Angel Norte': 104.93,
-  'Santo Angel Sur': 26.6,
-};
-
-/** Compute carbon (kg) for a single tree using DBH proxy. */
-function carbonForTree(tree) {
-  if (tree?.carbon != null) {
-    const direct = parseFloat(tree.carbon);
-    if (Number.isFinite(direct)) return direct;
-  }
-  const dbh = parseFloat(tree?.dbh);
-  if (!Number.isFinite(dbh) || dbh <= 0) return 0;
-  return dbh * CARBON_PER_DBH_CM;
-}
-
-/** Normalize a tree_category value for display. */
-function normalizeCategory(raw) {
-  if (!raw) return null;
-  return String(raw).replace(/\s*Trees$/i, '').trim() || null;
-}
+/** Series colours, matched to how each figure reads: growth green, pressure red. */
+const SERIES_COLOR = { green: '#16a34a', red: '#dc2626', blue: '#0ea5e9' };
 
 /** Coerce latitude/longitude to a finite number pair, or null. */
 function getLatLng(tree) {
@@ -93,540 +51,362 @@ function getLatLng(tree) {
   return [lat, lng];
 }
 
-/** Fly the map viewport to the supplied pins whenever they change. */
-function FitToPins({ pins, allBarangays }) {
+/** Keeps the map over whichever place is selected. */
+function FocusController({ selected }) {
   const map = useMap();
   useEffect(() => {
-    if (allBarangays) {
-      map.flyTo(SANTA_CRUZ_CENTER, SANTA_CRUZ_ZOOM, { duration: 1.2 });
-      return;
-    }
-    if (!pins || pins.length === 0) return;
-    if (pins.length === 1) {
-      map.flyTo(pins[0].position, 17, { duration: 1.2 });
-      return;
-    }
-    const bounds = pins.map((p) => p.position);
-    map.flyToBounds(bounds, { padding: [30, 30], maxZoom: 17, duration: 1.2 });
-  }, [pins, allBarangays, map]);
+    const bounds = (selected && boundsOfMunicipality(selected)) || LAGUNA_BOUNDS;
+    if (!bounds) return;
+    map.flyToBounds(bounds, { padding: [24, 24], maxZoom: selected ? 13 : 11, duration: 1 });
+  }, [selected, map]);
   return null;
 }
 
+/** The ⓘ beside a figure: hover on a mouse, tap on a phone. */
+function InfoHint({ label, text }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex group align-middle">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={label}
+        aria-expanded={open}
+        className="text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 rounded-full"
+      >
+        <Info size={14} />
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-60 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-normal leading-snug text-white shadow-lg ${
+          open ? 'block' : 'hidden group-hover:block group-focus-within:block'
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * One figure.
+ *
+ * The whole card is the button that charts its pair, so the target is the thing
+ * being read rather than a separate control beside it.
+ */
+function StatCard({ metric, value, active, onSelect }) {
+  const unavailable = !metric.available;
+  const tone = metric.tone === 'red' ? 'text-red-700' : 'text-green-800';
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={active}
+        className={`w-full rounded-2xl border bg-white px-5 py-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${
+          active
+            ? 'border-green-600 shadow-md ring-1 ring-green-600'
+            : 'border-slate-200 hover:border-green-400 hover:shadow-sm'
+        }`}
+      >
+        <span
+          className={`block text-[11px] font-bold uppercase tracking-wider sm:text-xs ${
+            metric.tone === 'red' ? 'text-red-700' : 'text-green-800'
+          } ${metric.hint ? 'pr-7' : ''}`}
+        >
+          {metric.label}
+        </span>
+
+        <span className="mt-1 flex items-baseline gap-2">
+          <span className={`text-3xl font-bold sm:text-4xl ${unavailable ? 'text-slate-300' : tone}`}>
+            {unavailable ? '—' : formatFigure(value)}
+          </span>
+          {metric.unit && <span className="text-xs text-slate-400">{metric.unit}</span>}
+        </span>
+
+        {unavailable && (
+          <span className="mt-1 block text-[11px] leading-snug text-slate-500">Not available yet</span>
+        )}
+      </button>
+
+      {metric.hint && (
+        <span className="absolute right-4 top-4">
+          <InfoHint label={`What ${metric.label} means`} text={metric.hint} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The chart under the figures, showing the selected pair place by place. */
+function PairChart({ pair, rows, scopeLabel }) {
+  const charted = pair.metrics.filter((metric) => metric.available);
+
+  if (charted.length === 0) {
+    return (
+      <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 text-center">
+        <p className="max-w-md text-sm text-slate-500">
+          {pair.metrics.map((m) => m.label).join(' and ')} have no source yet, so there is nothing to chart.
+          They arrive with the mapping feature.
+        </p>
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 text-center">
+        <p className="text-sm text-slate-500">No tagged trees in {scopeLabel} yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
+      <ResponsiveContainer width="100%" height={320}>
+        <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 56 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+          <XAxis
+            dataKey="name"
+            angle={-35}
+            textAnchor="end"
+            interval={0}
+            height={70}
+            tick={{ fontSize: 11, fill: '#475569' }}
+          />
+          <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
+          <Tooltip
+            formatter={(value, name) => [formatFigure(value), name]}
+            contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {charted.map((metric) => (
+            <Bar
+              key={metric.key}
+              dataKey={metric.key}
+              name={metric.label}
+              fill={SERIES_COLOR[metric.tone] || SERIES_COLOR.green}
+              radius={[4, 4, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+
+      {charted.length < pair.metrics.length && (
+        <p className="mt-2 text-center text-[11px] text-slate-500">
+          {pair.metrics.filter((m) => !m.available).map((m) => m.label).join(' and ')} is not connected yet, so
+          only what the inventory knows is charted.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function PublicDashboard() {
-  const [location, setLocation] = useState(ALL_BARANGAYS_LABEL);
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
+  /** '' is the whole province; otherwise the bare LGU name. */
+  const [selectedLgu, setSelectedLgu] = useState('');
+  const [activePair, setActivePair] = useState(METRIC_PAIRS[0].id);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const municipalityLayer = useRef(null);
 
-  // Fetch all trees on mount
   useEffect(() => {
     let cancelled = false;
-    async function fetchTrees() {
+    (async () => {
       setLoading(true);
+      setLoadError('');
       const { data, error } = await supabase.from('trees').select('*');
       if (cancelled) return;
-      if (error) {
-        setErrorMessage(error.message ?? 'Failed to load trees');
-        setTrees([]);
-      } else {
-        setTrees(Array.isArray(data) ? data : []);
-        setErrorMessage('');
-      }
+      if (error) setLoadError(error.message || 'The inventory could not be loaded.');
+      else setTrees(Array.isArray(data) ? data : []);
       setLoading(false);
-    }
-    fetchTrees();
+    })();
     return () => { cancelled = true; };
   }, []);
 
-  const isAllBarangays = location === ALL_BARANGAYS_LABEL;
-
-  // Apply location filter
-  const filteredTrees = useMemo(() => {
-    if (isAllBarangays) return trees;
-    return trees.filter((t) => (t?.barangay || '') === location);
-  }, [trees, location, isAllBarangays]);
-
-  // KPI: total tree count
-  const totalTrees = filteredTrees.length;
-
-  // Latest data date
-  const latestDataDate = useMemo(() => {
-    let latest = null;
-    for (const t of filteredTrees) {
-      if (!t?.dateCaptured) continue;
-      const d = new Date(t.dateCaptured);
-      if (Number.isFinite(d.getTime()) && (!latest || d > latest)) latest = d;
+  // Which LGU each tree stands in, worked out once for the whole set.
+  const treeAreas = useMemo(() => {
+    const areas = new Map();
+    for (const tree of trees) {
+      const position = getLatLng(tree);
+      if (!position) continue;
+      const name = municipalityAt(position);
+      if (name) areas.set(tree.id, name);
     }
-    return latest;
-  }, [filteredTrees]);
+    return areas;
+  }, [trees]);
 
-  const formattedLatestDate = latestDataDate
-    ? latestDataDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-    : null;
-
-  // Bar chart: carbon + tree count per barangay
-  const barangayCarbonData = useMemo(() => {
-    const totals = filteredTrees.reduce((acc, tree) => {
-      const brgy = tree?.barangay || 'Unassigned';
-      if (!acc[brgy]) acc[brgy] = { carbon: 0, trees: 0 };
-      acc[brgy].carbon += carbonForTree(tree);
-      acc[brgy].trees += 1;
-      return acc;
-    }, {});
-
-    const rows = BARANGAYS.map((brgy) => ({
-      barangay: brgy,
-      carbon: parseFloat((totals[brgy]?.carbon || 0).toFixed(2)),
-      trees: totals[brgy]?.trees || 0,
-    }));
-
-    Object.keys(totals).forEach((brgy) => {
-      if (!BARANGAYS.includes(brgy)) {
-        rows.push({
-          barangay: brgy,
-          carbon: parseFloat(totals[brgy].carbon.toFixed(2)),
-          trees: totals[brgy].trees,
-        });
-      }
-    });
-
-    return rows;
-  }, [filteredTrees]);
-
-  // KPI: total carbon
-  const totalCarbon = useMemo(
-    () => barangayCarbonData.reduce((sum, d) => sum + d.carbon, 0),
-    [barangayCarbonData],
+  const scopedTrees = useMemo(
+    () => (selectedLgu ? trees.filter((tree) => treeAreas.get(tree.id) === selectedLgu) : trees),
+    [trees, treeAreas, selectedLgu]
   );
 
-  // KPI: invasive species count
-  const invasiveCount = useMemo(
+  const totals = useMemo(() => summarise(scopedTrees), [scopedTrees]);
+
+  // Across the province the bars are LGUs; inside one, they are its barangays.
+  const chartRows = useMemo(
     () =>
-      filteredTrees.filter((t) => {
-        const status = (t?.biodiversity_status || t?.species_type || '').toString().toLowerCase();
-        return status === 'invasive';
-      }).length,
-    [filteredTrees],
+      selectedLgu
+        ? groupBy(scopedTrees, barangayOf)
+        : groupBy(scopedTrees, (tree) => {
+            const name = treeAreas.get(tree.id);
+            return name ? labelOf(name) : null;
+          }),
+    [scopedTrees, selectedLgu, treeAreas]
   );
 
-  // KPI: total land area
-  const totalLandAreaHa = useMemo(() => {
-    if (!isAllBarangays) {
-      return BARANGAY_AREA_HECTARES[location] || 0;
-    }
-    const distinctBarangays = new Set(
-      filteredTrees.map((t) => t?.barangay).filter(Boolean),
-    );
-    let total = 0;
-    distinctBarangays.forEach((brgy) => {
-      total += BARANGAY_AREA_HECTARES[brgy] || 0;
+  const scopeLabel = selectedLgu ? labelOf(selectedLgu) : 'Laguna';
+  const pair = METRIC_PAIRS.find((p) => p.id === activePair) ?? METRIC_PAIRS[0];
+
+  const mapPins = useMemo(
+    () => scopedTrees.map((tree) => getLatLng(tree)).filter(Boolean),
+    [scopedTrees]
+  );
+
+  // Restyle the boundaries in place when the selection changes.
+  useEffect(() => {
+    const group = municipalityLayer.current;
+    if (!group) return;
+    group.eachLayer((layer) => {
+      const name = layer.feature?.properties?.municipality;
+      layer.setStyle(name === selectedLgu ? SELECTED_STYLE : MUNICIPALITY_STYLE);
     });
-    return total;
-  }, [filteredTrees, location, isAllBarangays]);
-
-  // Barangays missing CDRA data
-  const barangaysMissingCdra = useMemo(() => {
-    const distinct = new Set(
-      filteredTrees.map((t) => t?.barangay).filter(Boolean),
-    );
-    return Array.from(distinct).filter(
-      (brgy) => !(brgy in BARANGAY_AREA_HECTARES),
-    );
-  }, [filteredTrees]);
-
-  const isSelectedBarangayMissingCdra =
-    !isAllBarangays && !(location in BARANGAY_AREA_HECTARES);
-
-  // Pie 1: species distribution
-  const speciesData = useMemo(() => {
-    const bySpecies = filteredTrees.reduce((acc, tree) => {
-      const name = (tree?.species || '').trim() || 'Unknown';
-      acc[name] = (acc[name] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(bySpecies)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [filteredTrees]);
-
-  // Pie 2: tree category distribution
-  const categoryData = useMemo(() => {
-    const byCategory = filteredTrees.reduce((acc, tree) => {
-      const name = normalizeCategory(tree?.tree_category);
-      if (!name) return acc;
-      acc[name] = (acc[name] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(byCategory)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [filteredTrees]);
-
-  // Map pins: simple green markers, no hazard info
-  const mapPins = useMemo(() => {
-    return filteredTrees
-      .map((tree) => {
-        const position = getLatLng(tree);
-        if (!position) return null;
-        return {
-          id: tree.id,
-          position,
-          species: tree.species || 'Unknown species',
-          barangay: tree.barangay || '',
-        };
-      })
-      .filter(Boolean);
-  }, [filteredTrees]);
-
-  const formattedTotalTrees = totalTrees.toLocaleString();
-  const formattedTotalCarbon = totalCarbon.toLocaleString(undefined, {
-    maximumFractionDigits: 0,
-  });
-  const formattedLandArea = totalLandAreaHa.toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-  });
-  const formattedInvasive = invasiveCount.toLocaleString();
+  }, [selectedLgu]);
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">
-            Santa Cruz Biodiversity Analytics
+    <div className="bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {/* Who you are looking at */}
+        <LguStrip selected={selectedLgu} onSelect={setSelectedLgu} />
+
+        {/* What you are looking at */}
+        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-3xl font-bold text-green-800 sm:text-4xl">
+            {scopeLabel} Biodiversity Analytics
           </h1>
-          <div className="flex items-center gap-3">
-            <label htmlFor="public-location-select" className="text-sm font-medium text-slate-700">
-              Location:
-            </label>
-            <select
-              id="public-location-select"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+
+          <span className="inline-flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setRequestOpen(true)}
+              className="inline-flex items-center justify-center gap-3 rounded-xl border-2 border-green-700 px-5 py-3 text-sm font-bold text-green-800 transition hover:bg-green-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
             >
-              <option value={ALL_BARANGAYS_LABEL}>{ALL_BARANGAYS_LABEL}</option>
-              {BARANGAYS.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </div>
+              Download Data
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-white">
+                <Download size={16} />
+              </span>
+            </button>
+            <InfoHint
+              label="What can be downloaded"
+              text="Tables, maps and images of this inventory. The exports are still being prepared."
+            />
+          </span>
         </div>
 
-        {!loading && !errorMessage && (
-          <p className="text-xs text-slate-500">
-            Showing {filteredTrees.length.toLocaleString()} of {trees.length.toLocaleString()} trees
+        {loadError && (
+          <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {loadError}
           </p>
         )}
 
-        {/* Loading state */}
-        {loading && (
-          <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-12 text-sm text-slate-600 shadow-sm">
-            <Loader2 size={18} className="animate-spin text-green-700" />
-            Loading biodiversity data…
-          </div>
-        )}
+        {/* The figures, three pairs of them */}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {METRIC_PAIRS.map((group) =>
+            group.metrics.map((metric) => (
+              <StatCard
+                key={metric.key}
+                metric={metric}
+                value={totals[metric.key]}
+                active={activePair === group.id}
+                onSelect={() => setActivePair(group.id)}
+              />
+            ))
+          )}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Pick any figure to chart its pair below, {selectedLgu ? 'barangay by barangay' : 'across the province'}.
+        </p>
 
-        {/* Error state */}
-        {!loading && errorMessage && (
-          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Failed to load analytics: {errorMessage}
-          </div>
-        )}
-
-        {!loading && !errorMessage && (
-          <>
-            {/* Row 1: KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Total Trees */}
-              <div className="rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Total Number of Trees
-                </p>
-                <p className="mt-2 text-3xl sm:text-4xl font-bold text-slate-900">
-                  {formattedTotalTrees}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  {isAllBarangays ? 'Across all barangays' : `In ${location}`}
-                  {formattedLatestDate && (
-                    <span> · Latest data: {formattedLatestDate}</span>
-                  )}
-                </p>
-              </div>
-
-              {/* Total Land Area */}
-              <div className="rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Total Land Area
-                </p>
-                {isSelectedBarangayMissingCdra ? (
-                  <>
-                    <p className="mt-2 text-xl font-bold text-amber-600">No CDRA data</p>
-                    <p className="mt-1 text-[11px] text-amber-600">
-                      {location} is not yet in the CDRA 2025 reference table.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-2 text-3xl sm:text-4xl font-bold text-slate-900">
-                      {formattedLandArea}{' '}
-                      <span className="text-lg font-semibold text-slate-500">ha</span>
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Source: Climate and Disaster Risk Assessment 2025
-                    </p>
-                    {barangaysMissingCdra.length > 0 && isAllBarangays && (
-                      <p className="mt-1 text-[11px] text-amber-600">
-                        ⚠ {barangaysMissingCdra.length} barangay{barangaysMissingCdra.length > 1 ? 's' : ''} flagged as no CDRA data
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Total Carbon */}
-              <div className="rounded-xl border border-green-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Total Estimated Carbon Sequestered
-                </p>
-                <p className="mt-2 text-3xl sm:text-4xl font-bold text-green-700">
-                  {formattedTotalCarbon}{' '}
-                  <span className="text-lg font-semibold text-slate-500">kg CO₂</span>
-                </p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Estimate via DBH proxy ({CARBON_PER_DBH_CM} kg / cm)
-                </p>
-              </div>
-
-              {/* Invasive Trees */}
-              <div className="rounded-xl border border-red-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-medium uppercase tracking-wide text-red-600">
-                  Number of Invasive Trees
-                </p>
-                <p className="mt-2 text-3xl sm:text-4xl font-bold text-red-600">
-                  {formattedInvasive}
-                </p>
-                <p className="mt-1 text-[11px] text-red-500">
-                  Tagged as invasive species
-                </p>
-              </div>
+        {/* Where it is */}
+        <div className="relative mt-6 h-[380px] overflow-hidden rounded-2xl border border-slate-200 sm:h-[460px]">
+          {loading && (
+            <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/80">
+              <span className="flex items-center gap-2 text-sm text-slate-600">
+                <Loader2 size={18} className="animate-spin text-green-700" />
+                Loading the inventory…
+              </span>
             </div>
+          )}
 
-            {/* Row 2: Map + Pie Charts */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Map - spans 2 cols on desktop */}
-              <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden relative">
-                <div className="absolute top-3 left-3 z-[400] rounded-md bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow border border-slate-200">
-                  {mapPins.length.toLocaleString()} tree{mapPins.length === 1 ? '' : 's'} on map
-                </div>
-                <div className="h-[350px] sm:h-[450px] md:h-[500px] w-full">
-                  <MapContainer
-                    center={SANTA_CRUZ_CENTER}
-                    zoom={SANTA_CRUZ_ZOOM}
-                    scrollWheelZoom={true}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution="&copy; OpenStreetMap contributors"
-                    />
-                    <GeoJSON
-                      data={santaCruzBoundary}
-                      style={{
-                        color: '#16a34a',
-                        weight: 2,
-                        fillColor: '#16a34a',
-                        fillOpacity: 0.05,
-                      }}
-                    />
-                    <FitToPins pins={mapPins} allBarangays={isAllBarangays} />
-                    {mapPins.map((pin) => (
-                      <CircleMarker
-                        key={pin.id}
-                        center={pin.position}
-                        radius={6}
-                        pathOptions={{
-                          color: '#ffffff',
-                          weight: 1.5,
-                          fillColor: '#16a34a',
-                          fillOpacity: 0.85,
-                        }}
-                      >
-                        <Popup>
-                          <div className="text-xs">
-                            <div className="font-semibold text-slate-900">
-                              {pin.species}
-                            </div>
-                            {pin.barangay && (
-                              <div className="text-slate-500 mt-0.5">
-                                {pin.barangay}
-                              </div>
-                            )}
-                          </div>
-                        </Popup>
-                      </CircleMarker>
-                    ))}
-                  </MapContainer>
-                </div>
-              </div>
+          {/* A picture, not a tool: the map follows the selection above rather
+              than being panned, zoomed or clicked on its own. */}
+          <MapContainer
+            bounds={LAGUNA_BOUNDS}
+            boundsOptions={{ padding: [24, 24] }}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl={false}
+            dragging={false}
+            scrollWheelZoom={false}
+            doubleClickZoom={false}
+            touchZoom={false}
+            boxZoom={false}
+            keyboard={false}
+            attributionControl={false}
+          >
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <Polygon positions={OUTSIDE_LAGUNA_MASK} pathOptions={MASK_STYLE} interactive={false} />
+            <GeoJSON
+              ref={municipalityLayer}
+              data={LAGUNA_MUNICIPALITIES}
+              style={(feature) =>
+                feature.properties.municipality === selectedLgu ? SELECTED_STYLE : MUNICIPALITY_STYLE
+              }
+              interactive={false}
+            />
+            <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} interactive={false} />
+            <FocusController selected={selectedLgu} />
 
-              {/* Pie Charts - stacked vertically */}
-              <div className="md:col-span-1 flex flex-col gap-4">
-                {/* Species Distribution */}
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-2">Species Distribution</h3>
-                  <div className="flex-1 min-h-[220px]">
-                    {speciesData.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                        No species data
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={240}>
-                        <PieChart>
-                          <Pie
-                            data={speciesData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius="75%"
-                            label={({ name, value }) => `${name}: ${value}`}
-                          >
-                            {speciesData.map((_, i) => (
-                              <Cell key={`species-${i}`} fill={SPECIES_COLORS[i % SPECIES_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
+            {mapPins.map((position, i) => (
+              <CircleMarker
+                key={`${position[0]},${position[1]},${i}`}
+                center={position}
+                radius={5}
+                interactive={false}
+                pathOptions={{ color: '#ffffff', weight: 1.5, fillColor: MARKER_COLOR, fillOpacity: 0.9 }}
+              />
+            ))}
+          </MapContainer>
+        </div>
 
-                {/* Tree Categories */}
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-                  <h3 className="text-sm font-semibold text-slate-700 mb-2">Tree Categories</h3>
-                  <div className="flex-1 min-h-[220px]">
-                    {categoryData.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                        No category data
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={240}>
-                        <PieChart>
-                          <Pie
-                            data={categoryData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius="75%"
-                            label={({ name, value }) => `${name}: ${value}`}
-                          >
-                            {categoryData.map((_, i) => (
-                              <Cell key={`category-${i}`} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend verticalAlign="bottom" height={36} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* How it is distributed */}
+        <h2 className="mt-8 text-sm font-bold uppercase tracking-wider text-slate-600">
+          {pair.title} — {selectedLgu ? `barangays of ${scopeLabel}` : 'cities and municipalities of Laguna'}
+        </h2>
+        <div className="mt-3">
+          <PairChart pair={pair} rows={chartRows} scopeLabel={scopeLabel} />
+        </div>
 
-            {/* Row 3: Bar Chart - only when all barangays selected */}
-            {isAllBarangays && (
-              <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-                <div className="flex items-baseline justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-slate-700">
-                    Sequestration Potential &amp; Tree Count by Barangay
-                  </h3>
-                  <span className="text-xs text-slate-500">
-                    {barangayCarbonData.length} barangays
-                  </span>
-                </div>
-                <div className="w-full overflow-x-auto">
-                  {barangayCarbonData.every((d) => d.trees === 0) ? (
-                    <div className="h-64 flex items-center justify-center text-sm text-slate-400">
-                      No barangay sequestration data available.
-                    </div>
-                  ) : (
-                    <div style={{ width: Math.max(barangayCarbonData.length * 60, 600), height: 400 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={barangayCarbonData}
-                          margin={{ top: 5, right: 30, left: 10, bottom: 80 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis
-                            dataKey="barangay"
-                            angle={-40}
-                            textAnchor="end"
-                            interval={0}
-                            height={80}
-                            tick={{ fontSize: 11, fill: '#475569' }}
-                          />
-                          <YAxis
-                            yAxisId="left"
-                            tick={{ fontSize: 11, fill: '#475569' }}
-                            label={{
-                              value: 'kg CO₂',
-                              angle: -90,
-                              position: 'insideLeft',
-                              style: { fontSize: 11, fill: '#475569' },
-                            }}
-                          />
-                          <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            allowDecimals={false}
-                            tick={{ fontSize: 11, fill: '#475569' }}
-                            label={{
-                              value: 'Trees',
-                              angle: 90,
-                              position: 'insideRight',
-                              style: { fontSize: 11, fill: '#475569' },
-                            }}
-                          />
-                          <Tooltip
-                            formatter={(value, name) => {
-                              if (name === 'Sequestration (kg CO₂)') {
-                                return [
-                                  `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 })} kg`,
-                                  name,
-                                ];
-                              }
-                              return [Number(value).toLocaleString(), name];
-                            }}
-                          />
-                          <Legend wrapperStyle={{ paddingTop: 8 }} />
-                          <Bar
-                            yAxisId="left"
-                            dataKey="carbon"
-                            name="Sequestration (kg CO₂)"
-                            fill="#16a34a"
-                            radius={[4, 4, 0, 0]}
-                          />
-                          <Bar
-                            yAxisId="right"
-                            dataKey="trees"
-                            name="Number of Trees"
-                            fill="#06b6d4"
-                            radius={[4, 4, 0, 0]}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        {/* Where the numbers come from */}
+        <section aria-label="Sources" className="mt-8 border-t border-slate-200 pt-5">
+          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Sources and notes</h2>
+          <ol className="mt-2 space-y-1.5">
+            {ALL_METRICS.map((metric) => (
+              <li key={metric.key} className="text-[11px] leading-relaxed text-slate-500">
+                <span className="font-semibold text-slate-600">{metric.label}.</span> {metric.source}
+              </li>
+            ))}
+            <li className="text-[11px] leading-relaxed text-slate-500">
+              <span className="font-semibold text-slate-600">Boundaries.</span> Cities, municipalities and
+              barangays dissolved from the NAMRIA/PSA administrative boundaries of Laguna.
+            </li>
+          </ol>
+        </section>
       </div>
+
+      <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone, MapPin } from 'lucide-react';
 
-import pglLogo from '../assets/PGL_LGU_logo.png';
-import pgenroLogo from '../assets/PGENRO_LGU_logo.png';
-import lspuLogo from '../assets/LSPU_LGU_logo.png';
+import pglLogo from '../assets/lgu-thumbs/large/PGL_LGU_logo.png';
+import pgenroLogo from '../assets/lgu-thumbs/large/PGENRO_LGU_logo.png';
+import lspuLogo from '../assets/lgu-thumbs/large/LSPU_LGU_logo.png';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 
 export default function PublicFooter() {
