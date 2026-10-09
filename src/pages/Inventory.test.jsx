@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 // -----------------------------------------------------------------------------
 // Hoisted spies so the `vi.mock` factory (itself hoisted above all imports) can
@@ -41,16 +42,25 @@ vi.mock('../supabaseClient.js', () => ({
 // Mock `qrcode.react` so the QRCodeSVG component renders a testable element
 // with the value prop exposed as a data attribute.
 // -----------------------------------------------------------------------------
+// The page builds a real workbook; this test is about the wiring, not exceljs.
+vi.mock('../lib/excelExport.js', () => ({
+  generateMenroExcel: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock('qrcode.react', () => ({
   QRCodeSVG: (props) => <div data-testid="qr-code-svg" data-value={props.value} />,
 }));
 
 // Imports MUST come after the `vi.mock` declarations so they pick up the mocks.
 import InventoryView from './InventoryView.jsx';
+import { generateMenroExcel } from '../lib/excelExport.js';
 
 // -----------------------------------------------------------------------------
 // Resolution helpers — push a single `{ data, error }` payload onto `selectSpy`.
-// Each `render(<InventoryView />)` consumes exactly one enqueued resolution.
+// Each `renderInventory()` consumes exactly one enqueued resolution.
+//
+// The page navigates to a tree's detail view, and useNavigate throws outside a
+// router, so every render needs one.
 // -----------------------------------------------------------------------------
 const resolveOk = (data) =>
   selectSpy.mockResolvedValueOnce({ data, error: null });
@@ -62,8 +72,8 @@ const resolveErr = (error) =>
 //   • Both Hazard_Classifier outputs (Hazard on row 0, Safe on rows 1 & 2)
 //   • Both Permit_Classifier outputs (None on rows 0 & 2, Approved on row 1)
 //   • null tree_id (row 2) and null assigned_to (rows 1 & 2)
-//   • A comma in `species` (row 2: "Mahogany, large") so the CSV RFC 4180
-//     quoting path is exercised through the rendered row.
+//   • A comma in `species` (row 2: "Mahogany, large"), which the export path
+//     has to carry through untouched.
 // -----------------------------------------------------------------------------
 const MOCK_TREES = [
   {
@@ -144,6 +154,7 @@ beforeEach(() => {
   upsertSpy.mockReset();
   deleteSpy.mockReset();
   fromSpy.mockClear();
+  generateMenroExcel.mockClear();
 
   global.URL.createObjectURL = vi.fn(() => 'blob:mock');
   global.URL.revokeObjectURL = vi.fn();
@@ -158,6 +169,13 @@ afterEach(() => {
   consoleLogSpy.mockRestore();
 });
 
+const renderInventory = () =>
+  render(
+    <MemoryRouter>
+      <InventoryView />
+    </MemoryRouter>,
+  );
+
 describe('InventoryView / Central_Inventory', () => {
   // Smoke test — proves the scaffold runs end-to-end: the Supabase mock is
   // consumed, the fetch-on-mount useEffect resolves, and the Loaded_State
@@ -166,7 +184,7 @@ describe('InventoryView / Central_Inventory', () => {
   it('renders the MOCK_TREES fixture after the Inventory_Fetch resolves', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     // Wait for the useEffect-driven fetch to resolve and the Loaded_State to
     // swap in the Master_Data_Table.
@@ -185,7 +203,7 @@ describe('InventoryView / Central_Inventory', () => {
   it('issues the Inventory_Fetch contract: supabase.from("trees").select("*")', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     // Wait for the Loaded_State so the useEffect-driven fetch has run.
     await screen.findByTestId('inventory-table');
@@ -196,52 +214,61 @@ describe('InventoryView / Central_Inventory', () => {
     expect(selectSpy).toHaveBeenCalledWith('*');
   });
 
-  it('renders the six Master_Data_Table column headers in order', async () => {
+  it('renders the Master_Data_Table column headers in order', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     const table = await screen.findByTestId('inventory-table');
     const headerCells = table.querySelectorAll('thead th');
 
-    expect(Array.from(headerCells).map((th) => th.textContent)).toEqual([
-      'Tree ID',
+    // Sortable headers carry an arrow icon beside their label, so compare the
+    // trimmed text.
+    expect(Array.from(headerCells).map((th) => th.textContent.trim())).toEqual([
+      'Photo',
       'Species',
-      'DBH (cm)',
-      'Hazard Status',
-      'Permit Status',
+      'Barangay',
+      'DBH',
+      'Height',
+      'Hazard',
+      'Date Captured',
       'Assigned To',
     ]);
   });
 
-  it('renders one body row per Tree_Record with populated id/species/dbh/assigned_to cells', async () => {
+  it('renders one body row per Tree_Record with its species, barangay, DBH and owner', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     const table = await screen.findByTestId('inventory-table');
     const bodyRows = table.querySelectorAll('tbody tr');
     expect(bodyRows).toHaveLength(MOCK_TREES.length);
 
-    // Cell-by-cell projection check. The Hazard Status (col 3) and Permit
-    // Status (col 4) cells are driven by the classifiers and are pinned by
-    // task 6.3 — this test only asserts the four directly-projected columns
-    // Requirement 9.5 calls out: Tree ID, Species, DBH, Assigned To.
+    // Columns: Photo, Species, Barangay, DBH, Height, Hazard, Date Captured,
+    // Assigned To. The hazard cell has its own tests below.
+    // The table sorts by date captured, newest first, so look each row up by
+    // its species rather than assuming fixture order.
     const DASH = '—';
-    const expectedRows = [
-      { treeId: 'T-001', species: 'Narra', dbh: '42', assignedTo: 'arb-001' },
-      { treeId: 'T-002', species: 'Acacia', dbh: '30', assignedTo: DASH },
-      { treeId: DASH, species: 'Mahogany, large', dbh: '55', assignedTo: DASH },
+    const bySpecies = new Map(
+      Array.from(bodyRows).map((row) => {
+        const cells = row.querySelectorAll('td');
+        return [cells[1].textContent, cells];
+      }),
+    );
+
+    const expected = [
+      { species: 'Narra', dbh: '42 cm', assignedTo: 'arb-001' },
+      { species: 'Acacia', dbh: '30 cm', assignedTo: DASH },
+      { species: 'Mahogany, large', dbh: '55 cm', assignedTo: DASH },
     ];
 
-    bodyRows.forEach((row, i) => {
-      const cells = row.querySelectorAll('td');
-      const expected = expectedRows[i];
-      expect(cells[0].textContent).toBe(expected.treeId);
-      expect(cells[1].textContent).toBe(expected.species);
-      expect(cells[2].textContent).toBe(expected.dbh);
-      expect(cells[5].textContent).toBe(expected.assignedTo);
-    });
+    for (const row of expected) {
+      const cells = bySpecies.get(row.species);
+      expect(cells, `row for ${row.species}`).toBeDefined();
+      expect(cells[3].textContent).toBe(row.dbh);
+      expect(cells[7].textContent).toBe(row.assignedTo);
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -255,37 +282,40 @@ describe('InventoryView / Central_Inventory', () => {
   //   • Row 2 (null):  all flags false,  has_cutting_permit:false → Safe   + None
   // ---------------------------------------------------------------------------
 
-  it('renders the Hazard_Pill with visible text "Hazard" on rows with any Hazard_Flag true', async () => {
+  it('names each hazard on a row that carries one', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     const table = await screen.findByTestId('inventory-table');
     const bodyRows = table.querySelectorAll('tbody tr');
 
-    // Row 0 (T-001) has `is_leaning: true` — Hazard Status cell (col 3) must
-    // render a pill whose visible text is exactly "Hazard" and whose wrapping
-    // span carries the red-palette pill utilities.
-    const hazardCell = bodyRows[0].querySelectorAll('td')[3];
-    const hazardPill = hazardCell.querySelector('span');
-    expect(hazardPill).not.toBeNull();
-    expect(hazardPill.textContent).toBe('Hazard');
-    expect(hazardPill.className).toMatch(/rounded-full/);
-    expect(hazardPill.className).toMatch(/bg-red-/);
+    // T-001 is leaning. The column says which hazard it is rather than a bare
+    // "Hazard", so a reader knows what they are being sent to look at.
+    const narraRow = Array.from(bodyRows).find(
+      (row) => row.querySelectorAll('td')[1].textContent === 'Narra',
+    );
+    const hazardCell = narraRow.querySelectorAll('td')[5];
+    const chip = hazardCell.querySelector('span');
+    expect(chip).not.toBeNull();
+    expect(chip.textContent).toContain('Leaning');
+    expect(chip.className).toMatch(/rounded-full/);
+    expect(chip.className).toMatch(/bg-red-/);
   });
 
-  it('renders the Hazard_Pill with visible text "Safe" on rows with all four Hazard_Flags false', async () => {
+  it('marks a row with no hazard flags as Safe', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     const table = await screen.findByTestId('inventory-table');
     const bodyRows = table.querySelectorAll('tbody tr');
 
-    // Row 1 (T-002) has all four Hazard_Flags set to false — Hazard Status
-    // cell (col 3) must render a pill whose visible text is exactly "Safe"
-    // and whose wrapping span carries the emerald/green-palette pill utilities.
-    const safeCell = bodyRows[1].querySelectorAll('td')[3];
+    // T-002 has all four hazard flags false.
+    const acaciaRow = Array.from(bodyRows).find(
+      (row) => row.querySelectorAll('td')[1].textContent === 'Acacia',
+    );
+    const safeCell = acaciaRow.querySelectorAll('td')[5];
     const safePill = safeCell.querySelector('span');
     expect(safePill).not.toBeNull();
     expect(safePill.textContent).toBe('Safe');
@@ -293,158 +323,60 @@ describe('InventoryView / Central_Inventory', () => {
     expect(safePill.className).toMatch(/bg-emerald-/);
   });
 
-  it('renders the Permit_Pill with visible text "Approved" when has_cutting_permit is true', async () => {
-    resolveOk(MOCK_TREES);
-
-    render(<InventoryView />);
-
-    const table = await screen.findByTestId('inventory-table');
-    const bodyRows = table.querySelectorAll('tbody tr');
-
-    // Row 1 (T-002) has `has_cutting_permit: true` — Permit Status cell
-    // (col 4) must render a pill whose visible text is exactly "Approved"
-    // and whose wrapping span carries the amber/yellow-palette pill utilities.
-    const permitCell = bodyRows[1].querySelectorAll('td')[4];
-    const permitPill = permitCell.querySelector('span');
-    expect(permitPill).not.toBeNull();
-    expect(permitPill.textContent).toBe('Approved');
-    expect(permitPill.className).toMatch(/rounded-full/);
-    expect(permitPill.className).toMatch(/bg-amber-/);
-  });
-
-  it('renders plain text "None" without a pill background when has_cutting_permit is false', async () => {
-    resolveOk(MOCK_TREES);
-
-    render(<InventoryView />);
-
-    const table = await screen.findByTestId('inventory-table');
-    const bodyRows = table.querySelectorAll('tbody tr');
-
-    // Rows 0 (T-001) and 2 (null tree_id) both have `has_cutting_permit: false`
-    // — the Permit Status cell (col 4) must render the plain text "None"
-    // without any pill-like styling. We verify by checking that whatever
-    // wraps the text does NOT carry the `rounded-full` + `bg-amber-*`
-    // Tailwind tokens the Permit_Pill would otherwise apply.
-    for (const rowIndex of [0, 2]) {
-      const noneCell = bodyRows[rowIndex].querySelectorAll('td')[4];
-      expect(noneCell.textContent).toBe('None');
-
-      // If the cell uses an inner <span> for layout/colour, that span must
-      // NOT look like a pill — no rounded-full, no amber background.
-      const inner = noneCell.querySelector('span');
-      const classForPillCheck = inner ? inner.className : noneCell.className;
-      expect(classForPillCheck).not.toMatch(/rounded-full/);
-      expect(classForPillCheck).not.toMatch(/bg-amber-/);
-    }
-  });
+  // The permit column was taken off this table — a cutting permit is the
+  // Action Board's and PermitsLog's business, not the inventory's.
 
   // ---------------------------------------------------------------------------
-  // Task 6.4 — CSV_Export_Button wiring. Pins Requirements 7.2 (full native
-  // Blob → object URL → dynamic <a> → click → revoke sequence) and 7.8
-  // (activation on an empty Tree_Record_List is a no-op).
-  //
-  // `URL.createObjectURL` and `URL.revokeObjectURL` are stubbed in `beforeEach`
-  // because jsdom does not implement them. `HTMLAnchorElement.prototype.click`
-  // is spied *inside* the test so the spy is scoped to the activation and
-  // restored before sibling tests run (a real anchor click would otherwise
-  // attempt a navigation under jsdom).
+  // The export button. It builds the MENRO workbook through
+  // lib/excelExport.js (stubbed above) rather than the old native CSV blob,
+  // and does nothing at all when there is nothing to export.
   // ---------------------------------------------------------------------------
 
-  it('renders the Download CSV button after the Inventory_Fetch resolves', async () => {
+  it('renders the Export to Excel button after the Inventory_Fetch resolves', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
-
-    // Wait for the Loaded_State so the useEffect-driven fetch has run.
+    renderInventory();
     await screen.findByTestId('inventory-table');
 
-    const csvButton = screen.getByRole('button', { name: 'Download CSV' });
-    expect(csvButton).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Export to Excel/ })).toBeInTheDocument();
   });
 
-  it('activates the native CSV_Export sequence: Blob(text/csv) → createObjectURL → anchor click → revokeObjectURL', async () => {
+  it('hands the rows on screen to the workbook builder, and downloads nothing itself', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
-
+    renderInventory();
     await screen.findByTestId('inventory-table');
 
-    // Spy on the anchor prototype's `click` BEFORE activation so we observe
-    // the programmatic click inside `handleExportCsv` without dispatching a
-    // real jsdom navigation. `mockImplementation(() => {})` neutralises the
-    // default click behaviour.
-    const anchorClickSpy = vi
-      .spyOn(HTMLAnchorElement.prototype, 'click')
-      .mockImplementation(() => {});
+    fireEvent.click(screen.getByRole('button', { name: /Export to Excel/ }));
 
-    try {
-      const csvButton = screen.getByRole('button', { name: 'Download CSV' });
-      fireEvent.click(csvButton);
-
-      // `URL.createObjectURL` called exactly once with a Blob whose MIME
-      // type is `text/csv` — pins the `new Blob([csv], { type: 'text/csv' })`
-      // contract from Requirement 7.2.
-      expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
-      const blobArg = global.URL.createObjectURL.mock.calls[0][0];
-      expect(blobArg).toBeInstanceOf(Blob);
-      expect(blobArg.type).toBe('text/csv');
-
-      // The dynamically-created anchor's `.click()` fired exactly once.
-      expect(anchorClickSpy).toHaveBeenCalledTimes(1);
-
-      // And the object URL was released exactly once via revokeObjectURL.
-      expect(global.URL.revokeObjectURL).toHaveBeenCalledTimes(1);
-    } finally {
-      anchorClickSpy.mockRestore();
-    }
+    await waitFor(() => expect(generateMenroExcel).toHaveBeenCalledTimes(1));
+    const [exported] = generateMenroExcel.mock.calls[0];
+    expect(exported.map((t) => t.id).sort()).toEqual(MOCK_TREES.map((t) => t.id).sort());
+    // The workbook builder owns the download; the page must not also wire one.
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it('no-ops the CSV_Export_Button when the Tree_Record_List is empty (Requirement 7.8)', async () => {
-    // Empty Inventory_Fetch resolution → Empty_State. The button itself is
-    // `disabled={trees.length === 0}` in the implementation, so fireEvent.click
-    // generally won't fire onClick on a disabled button. Belt-and-suspenders:
-    // even if the guard on the button ever regresses, the handler's own
-    // `trees.length === 0` early return still ensures no download fires.
+  it('does nothing when there is nothing to export', async () => {
     resolveOk([]);
 
-    render(<InventoryView />);
-
-    // Wait for the Empty_State to resolve so the useEffect-driven fetch has run.
-    await screen.findByTestId('inventory-empty');
-
-    const csvButton = screen.getByRole('button', { name: 'Download CSV' });
-
-    // Belt: the button itself is guarded via the `disabled` attribute.
-    expect(csvButton).toBeDisabled();
-
-    // Suspenders: activating it must not trigger any CSV machinery.
-    fireEvent.click(csvButton);
-
-    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
-    expect(global.URL.revokeObjectURL).not.toHaveBeenCalled();
+    renderInventory();
+    // An empty inventory renders its empty state instead of the table, so wait
+    // on the toolbar rather than on the table.
+    const exportButton = await screen.findByRole('button', { name: /Export to Excel/ });
+    expect(exportButton).toBeDisabled();
+    fireEvent.click(exportButton);
+    expect(generateMenroExcel).not.toHaveBeenCalled();
   });
 
-  // ---------------------------------------------------------------------------
-  // Task 6.5 — Batch_QR_Print_Button console.log stub. Pins Requirements 8.2
-  // (single `console.log` with the exact `Initiating A4 QR Print Layout for
-  // X trees` message) and 8.3 (no file download, no Supabase call, no print
-  // dialog, no navigation in Phase 4).
-  //
-  // `consoleLogSpy` is already wired in the top-level `beforeEach` /
-  // `afterEach` so log assertions never leak across sibling tests.
-  // ---------------------------------------------------------------------------
-
-  it('renders the Print QR Stickers (A4) button after the Inventory_Fetch resolves', async () => {
+  it('renders the Print QR Codes button after the Inventory_Fetch resolves', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     // Wait for the Loaded_State so the useEffect-driven fetch has run.
     await screen.findByTestId('inventory-table');
 
-    const qrButton = screen.getByRole('button', {
-      name: 'Print QR Stickers (A4)',
-    });
+    const qrButton = screen.getByRole('button', { name: 'Print QR Codes' });
     expect(qrButton).toBeInTheDocument();
   });
 
@@ -453,7 +385,7 @@ describe('InventoryView / Central_Inventory', () => {
 
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     await screen.findByTestId('inventory-table');
 
@@ -463,9 +395,7 @@ describe('InventoryView / Central_Inventory', () => {
     expect(fromSpy).toHaveBeenCalledTimes(1);
     expect(fromSpy).toHaveBeenCalledWith('trees');
 
-    const qrButton = screen.getByRole('button', {
-      name: 'Print QR Stickers (A4)',
-    });
+    const qrButton = screen.getByRole('button', { name: 'Print QR Codes' });
     fireEvent.click(qrButton);
 
     // Requirement 2.1 — window.print() is invoked exactly once.
@@ -496,7 +426,7 @@ describe('InventoryView / Central_Inventory', () => {
   it('renders the QR_Sticker_Sheet container with data-testid="qr-sticker-sheet"', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     await screen.findByTestId('inventory-table');
 
@@ -507,7 +437,7 @@ describe('InventoryView / Central_Inventory', () => {
   it('renders one QR_Sticker per Tree_Record in the loaded list', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     await screen.findByTestId('inventory-table');
 
@@ -518,23 +448,23 @@ describe('InventoryView / Central_Inventory', () => {
   it('renders a QRCodeSVG component inside each QR_Sticker (Requirement 9.4)', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     await screen.findByTestId('inventory-table');
 
     const qrCodes = screen.getAllByTestId('qr-code-svg');
     expect(qrCodes).toHaveLength(MOCK_TREES.length);
 
-    // Verify the QR code values match the tree_id fields (empty string for null).
-    expect(qrCodes[0]).toHaveAttribute('data-value', 'T-001');
-    expect(qrCodes[1]).toHaveAttribute('data-value', 'T-002');
-    expect(qrCodes[2]).toHaveAttribute('data-value', '');
+    // A sticker carries the tag number, falling back to the row id when a tree
+    // has not been given one — an empty QR code would be a wasted sticker.
+    const values = qrCodes.map((qr) => qr.getAttribute('data-value')).sort();
+    expect(values).toEqual(['T-001', 'T-002', 't-3']);
   });
 
   it('renders an LGU_Logo_Placeholder inside each QR_Sticker', async () => {
     resolveOk(MOCK_TREES);
 
-    render(<InventoryView />);
+    renderInventory();
 
     await screen.findByTestId('inventory-table');
 
@@ -545,7 +475,7 @@ describe('InventoryView / Central_Inventory', () => {
   it('renders zero QR_Stickers when the tree list is empty', async () => {
     resolveOk([]);
 
-    render(<InventoryView />);
+    renderInventory();
 
     await screen.findByTestId('inventory-empty');
 

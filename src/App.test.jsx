@@ -1,140 +1,163 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import App from './App.jsx';
 
-// Mock Supabase so that pages fetching on mount (CommandCenter, InventoryView,
-// AnalyticsView, AuditLogView) don't trigger unhandled errors in routing tests.
-// CommandCenter chains `.select('*').then(...)` while AuditLogView chains
-// `.select('*').eq(...)`, so the mock must satisfy both patterns.
-vi.mock('./supabaseClient.js', () => {
-  const mockResult = Promise.resolve({ data: [], error: null });
-  const selectFn = vi.fn(() => {
-    // Return a thenable that also has .eq() for chained filters
-    const thenable = mockResult.then.bind(mockResult);
-    return {
-      then: thenable,
-      catch: mockResult.catch.bind(mockResult),
-      eq: vi.fn(() => mockResult),
-    };
-  });
-  const subscribeSpy = vi.fn();
-  const onSpy = vi.fn(() => ({ subscribe: subscribeSpy }));
-  const channelSpy = vi.fn(() => ({ on: onSpy }));
+// -----------------------------------------------------------------------------
+// The map pages are not what these tests are about, so react-leaflet is inert.
+// -----------------------------------------------------------------------------
+vi.mock('react-leaflet', () => {
+  const passthrough = ({ children }) => <div>{children}</div>;
   return {
-    supabase: {
-      from: vi.fn(() => ({ select: selectFn })),
-      channel: channelSpy,
-      removeChannel: vi.fn(),
-    },
+    MapContainer: passthrough,
+    TileLayer: () => null,
+    Marker: passthrough,
+    CircleMarker: passthrough,
+    Circle: () => null,
+    Polygon: () => null,
+    GeoJSON: () => null,
+    Popup: passthrough,
+    useMap: () => ({
+      flyTo: vi.fn(),
+      flyToBounds: vi.fn(),
+      getZoom: () => 15,
+      getPane: () => ({ style: {} }),
+      createPane: () => ({ style: {} }),
+    }),
   };
 });
 
-const ROUTE_CASES = [
-  { path: '/map', heading: 'Command Center' },
-  { path: '/inventory', heading: 'Inventory' },
-  { path: '/action-board', heading: 'Action Board' },
-  { path: '/analytics', heading: 'Analytics' },
-  { path: '/audit-log', heading: 'Audit Log' },
-  { path: '/does-not-exist', heading: 'Page Not Found' },
-];
+vi.mock('./supabaseClient.js', async () => {
+  const { supabaseMock } = await import('./test/supabaseMock.js');
+  return { supabase: supabaseMock.supabase };
+});
+
+import { supabaseMock } from './test/supabaseMock.js';
+import App from './App.jsx';
+
+const SESSION = { user: { id: 'menro-admin', email: 'menro@example.gov.ph' } };
+
+/** Sign in, or stay signed out, before rendering. */
+function signedIn(session = SESSION) {
+  supabaseMock.supabase.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+}
+
+function renderAt(path) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+    </MemoryRouter>
+  );
+}
+
+/** The admin header, which is also the app's navigation. */
+const adminHeader = () => screen.queryByText('Tree Inventory System of MENRO Santa Cruz');
+
+beforeEach(() => {
+  supabaseMock.reset();
+  supabaseMock.supabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+});
+
+afterEach(cleanup);
 
 describe('App shell and routing', () => {
-  describe.each(ROUTE_CASES)(
-    'at path $path',
-    ({ path, heading }) => {
-      it(`renders the Sidebar, Header, and "${heading}" page heading`, () => {
-        render(
-          <MemoryRouter initialEntries={[path]}>
-            <App />
-          </MemoryRouter>
-        );
+  it('waits for the session before deciding what to show', async () => {
+    // A route that resolved before the session was known would flash the login
+    // page at a signed-in admin.
+    supabaseMock.supabase.auth.getSession.mockReturnValue(new Promise(() => {}));
 
-        // Sidebar is a <nav>
-        expect(screen.getByRole('navigation')).toBeInTheDocument();
-        // Header is a <header> with banner role and contains "Mission Control"
-        expect(screen.getByRole('banner')).toBeInTheDocument();
-        expect(screen.getByText('Mission Control')).toBeInTheDocument();
-        // Page heading at level 1
-        expect(
-          screen.getByRole('heading', { level: 1, name: heading })
-        ).toBeInTheDocument();
-      });
-    }
-  );
+    renderAt('/map');
 
-  it('redirects the root path "/" to "/map" so the Command Center heading renders', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App />
-      </MemoryRouter>
-    );
-
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Command Center' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(adminHeader()).not.toBeInTheDocument();
   });
 
-  it('renders the Page Not Found heading for unknown routes while keeping Sidebar and Header', () => {
-    render(
-      <MemoryRouter initialEntries={['/does-not-exist']}>
-        <App />
-      </MemoryRouter>
-    );
+  it('sends a signed-out visitor from a protected route to the login page', async () => {
+    renderAt('/map');
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Page Not Found' })
+      await screen.findByRole('heading', { level: 1, name: 'Tree Inventory & Carbon Dashboard' })
     ).toBeInTheDocument();
-    expect(screen.getByRole('navigation')).toBeInTheDocument();
-    expect(screen.getByRole('banner')).toBeInTheDocument();
+    expect(adminHeader()).not.toBeInTheDocument();
   });
 
-  it('keeps the Sidebar mounted when navigating between routes via NavLink clicks', () => {
-    render(
-      <MemoryRouter initialEntries={['/map']}>
-        <App />
-      </MemoryRouter>
-    );
+  it('opens the public About page at the root, with no admin chrome', async () => {
+    renderAt('/');
 
-    // Confirm we start on the Command Center page
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Command Center' })
-    ).toBeInTheDocument();
-
-    // Capture the Sidebar nav node reference before navigation
-    const sidebarBefore = screen.getByRole('navigation');
-
-    // Click the Inventory NavLink
-    fireEvent.click(screen.getByRole('link', { name: /Inventory/i }));
-
-    // The Inventory page heading should now be present
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Inventory' })
-    ).toBeInTheDocument();
-
-    // The Sidebar reference must be the exact same DOM node (no remount, no full reload)
-    expect(screen.getByRole('navigation')).toBe(sidebarBefore);
+    // The public shell links to About from the navbar, the mobile menu and the
+    // footer, so there is more than one.
+    expect((await screen.findAllByRole('link', { name: 'About Us' })).length).toBeGreaterThan(0);
+    expect(adminHeader()).not.toBeInTheDocument();
   });
 
-  it('renders <main> with the overflow-auto class as a sibling following the <header>', () => {
-    const { container } = render(
-      <MemoryRouter initialEntries={['/map']}>
-        <App />
-      </MemoryRouter>
-    );
+  it('lets a signed-in admin reach the Command Center under the header', async () => {
+    signedIn();
+    renderAt('/map');
 
-    const main = container.querySelector('main');
-    expect(main).not.toBeNull();
-    expect(main.className).toContain('overflow-auto');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Command Center' })).toBeInTheDocument();
+    expect(adminHeader()).toBeInTheDocument();
+  });
 
+  it('gives the map route the full pane, and every other route its padding', async () => {
+    signedIn();
+    const { container, unmount } = renderAt('/map');
+
+    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    const mapMain = container.querySelector('main');
+    expect(mapMain.className).toContain('overflow-auto');
+    expect(mapMain.className).not.toContain('p-6');
+
+    unmount();
+    signedIn();
+    const { container: second } = renderAt('/arborists');
+
+    await screen.findByRole('heading', { level: 1, name: 'Arborists' });
+    expect(second.querySelector('main').className).toContain('p-6');
+  });
+
+  it('puts <main> after the header, inside the same shell', async () => {
+    signedIn();
+    const { container } = renderAt('/map');
+
+    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
     const header = container.querySelector('header');
-    expect(header).not.toBeNull();
-
-    // Header and main must share the same parent element (siblings)
+    const main = container.querySelector('main');
     expect(header.parentElement).toBe(main.parentElement);
-
-    // Header must precede main in the DOM order
-    const parent = main.parentElement;
-    const children = Array.from(parent.children);
+    const children = Array.from(main.parentElement.children);
     expect(children.indexOf(header)).toBeLessThan(children.indexOf(main));
+  });
+
+  it('shows Page Not Found for an unknown route, keeping the admin signed in', async () => {
+    signedIn();
+    renderAt('/does-not-exist');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Page Not Found' })).toBeInTheDocument();
+    expect(adminHeader()).toBeInTheDocument();
+  });
+
+  it('keeps the header mounted when navigating between routes', async () => {
+    signedIn();
+    renderAt('/map');
+
+    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    const headerBefore = adminHeader().closest('header');
+
+    fireEvent.click(within(headerBefore).getByRole('link', { name: 'Arborist' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Arborists' })).toBeInTheDocument();
+    // The same DOM node: a navigation, not a reload.
+    expect(adminHeader().closest('header')).toBe(headerBefore);
+  });
+
+  it('stops listening for auth changes when it unmounts', async () => {
+    const unsubscribe = vi.fn();
+    supabaseMock.supabase.auth.onAuthStateChange.mockReturnValue({
+      data: { subscription: { unsubscribe } },
+    });
+    signedIn();
+    const { unmount } = renderAt('/map');
+
+    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    unmount();
+
+    await waitFor(() => expect(unsubscribe).toHaveBeenCalled());
   });
 });

@@ -119,12 +119,25 @@ describe('supabaseClient.js', () => {
     expect(first.supabase).toBe(second.supabase);
   });
 
-  it('.env.example lists VITE_SUPABASE_URL= and VITE_SUPABASE_ANON_KEY= with empty values', () => {
+  it('.env.example names the Supabase variables, and holds no real credentials', () => {
     const envExamplePath = path.resolve(process.cwd(), '.env.example');
     const contents = fs.readFileSync(envExamplePath, 'utf8');
-    const lines = contents.split(/\r?\n/);
+    const settings = new Map(
+      contents
+        .split(/\r?\n/)
+        .filter((line) => line.includes('='))
+        .map((line) => {
+          const [name, ...rest] = line.split('=');
+          return [name.trim(), rest.join('=').trim()];
+        }),
+    );
 
-    expect(lines).toContain('VITE_SUPABASE_URL=');
-    expect(lines).toContain('VITE_SUPABASE_ANON_KEY=');
+    expect(settings.has('VITE_SUPABASE_URL')).toBe(true);
+    expect(settings.has('VITE_SUPABASE_ANON_KEY')).toBe(true);
+
+    // Placeholders are fine — they show the shape of each value — but a real
+    // project URL or a signed anon key must never be committed here.
+    expect(settings.get('VITE_SUPABASE_URL')).not.toMatch(/^https:\/\/[a-z0-9]{20}\.supabase\.co/);
+    expect(settings.get('VITE_SUPABASE_ANON_KEY')).not.toMatch(/^eyJ/);
   });
 });

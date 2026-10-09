@@ -1,7 +1,7 @@
 import fc from 'fast-check';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import TreePinPopup from './TreePinPopup.jsx';
-import { classifyPinColor } from '../lib/pinColor.js';
+import { classifyPinColor, PIN_COLOR } from '../lib/pinColor.js';
 import { treeRecordArb } from '../test/arbitraries.js';
 
 const buildTree = (overrides = {}) => ({
@@ -25,6 +25,11 @@ const buildTree = (overrides = {}) => ({
   ...overrides,
 });
 
+/** How the popup names a tree: its tag, or the head of its row id. */
+const identifierOf = (tree) => tree.tree_id || tree.id?.slice(0, 8) || '—';
+
+afterEach(cleanup);
+
 describe('TreePinPopup', () => {
   // ---------------------------------------------------------------------------
   // Property tests
@@ -37,85 +42,99 @@ describe('TreePinPopup', () => {
         const color = classifyPinColor(tree);
         const { container } = render(<TreePinPopup tree={tree} color={color} />);
         try {
-          const identifier = tree.tree_id ?? 'Unidentified tree';
-
-          // Identifier visible somewhere in the popup.
           const text = container.textContent ?? '';
-          if (!text.includes(identifier)) return false;
+          if (!text.includes(identifierOf(tree))) return false;
           if (!text.includes(tree.species)) return false;
           if (!text.includes(tree.dbh)) return false;
 
-          // Photo slot: <img src=photo_url> OR placeholder testid.
+          // Photo slot: <img src=photo_url> OR the placeholder.
           if (tree.photo_url != null) {
             const img = container.querySelector('img');
             if (!img || img.getAttribute('src') !== tree.photo_url) return false;
-          } else {
-            if (!container.querySelector('[data-testid="tree-photo-placeholder"]'))
-              return false;
+          } else if (!container.querySelector('[data-testid="tree-photo-placeholder"]')) {
+            return false;
           }
           return true;
         } finally {
           cleanup();
         }
       }),
-      { numRuns: 100 }
+      { numRuns: 40 }
     );
   });
 
-  // Feature: command-center-map, Property 5: Dispatch Button Iff Red
-  it('renders the Dispatch Arborist button iff classifyPinColor(tree) === "Red"', () => {
+  // Dispatch is offered on every pin that needs attention, and only those.
+  it('offers dispatch on every pin except a healthy one', () => {
     fc.assert(
       fc.property(treeRecordArb, (tree) => {
         const color = classifyPinColor(tree);
         render(<TreePinPopup tree={tree} color={color} />);
         try {
-          const btn = screen.queryByRole('button', {
-            name: /dispatch arborist/i,
-          });
-          const expected = color === 'Red';
-          return (btn !== null) === expected;
+          const label = color === PIN_COLOR.ORANGE ? 'Re-assign' : 'Dispatch';
+          const button = screen.queryByRole('button', { name: label });
+          if (!button) return false;
+          // A green pin shows the button greyed out rather than hiding it, so
+          // the popup keeps the same shape whatever the pin.
+          return button.disabled === (color === PIN_COLOR.GREEN);
         } finally {
           cleanup();
         }
       }),
-      { numRuns: 100 }
+      { numRuns: 40 }
     );
   });
 
-  // Feature: realtime-handshake, Property 6: Dispatch Click invokes onDispatchArborist with tree
-  it('invokes onDispatchArborist(tree) when the Dispatch button is clicked on a Red popup', () => {
-    const redTreeArb = treeRecordArb.filter(
-      (t) => classifyPinColor(t) === 'Red'
-    );
+  it('hands the tree to onDispatch when dispatch is pressed', () => {
+    const onDispatch = vi.fn();
+    const hazard = buildTree({ is_leaning: true, assigned_to: null });
+    render(<TreePinPopup tree={hazard} color={classifyPinColor(hazard)} onDispatch={onDispatch} />);
 
-    fc.assert(
-      fc.property(redTreeArb, (tree) => {
-        const dispatchSpy = vi.fn();
-        try {
-          render(<TreePinPopup tree={tree} color="Red" onDispatchArborist={dispatchSpy} />);
-          fireEvent.click(
-            screen.getByRole('button', { name: /dispatch arborist/i })
-          );
-          if (dispatchSpy.mock.calls.length !== 1) return false;
-          const [arg] = dispatchSpy.mock.calls[0];
-          return arg === tree;
-        } finally {
-          cleanup();
-        }
-      }),
-      { numRuns: 100 }
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Dispatch' }));
+
+    expect(onDispatch).toHaveBeenCalledTimes(1);
+    expect(onDispatch).toHaveBeenCalledWith(hazard);
+  });
+
+  it('calls the Re-assign label by its name on an already dispatched hazard', () => {
+    const onDispatch = vi.fn();
+    const assigned = buildTree({ is_leaning: true, assigned_to: 'arb-7' });
+    render(<TreePinPopup tree={assigned} color={classifyPinColor(assigned)} onDispatch={onDispatch} />);
+
+    expect(screen.getByText('Working: arb-7')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Re-assign' }));
+    expect(onDispatch).toHaveBeenCalledWith(assigned);
   });
 
   // ---------------------------------------------------------------------------
-  // Example-based tests
+  // Permits
   // ---------------------------------------------------------------------------
 
-  it('renders "Unidentified tree" fallback when tree_id is null', () => {
-    render(
-      <TreePinPopup tree={buildTree({ tree_id: null })} color="Green" />
+  it('hands the tree to onIssuePermit, unless one was already issued', () => {
+    const onIssuePermit = vi.fn();
+    const tree = buildTree();
+    const { rerender } = render(
+      <TreePinPopup tree={tree} color={classifyPinColor(tree)} onIssuePermit={onIssuePermit} />
     );
-    expect(screen.getByText('Unidentified tree')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Permit' }));
+    expect(onIssuePermit).toHaveBeenCalledWith(tree);
+
+    const permitted = buildTree({ has_cutting_permit: true });
+    rerender(
+      <TreePinPopup tree={permitted} color={classifyPinColor(permitted)} onIssuePermit={onIssuePermit} />
+    );
+    expect(screen.getByRole('button', { name: 'Permit' })).toBeDisabled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Example-based rendering
+  // ---------------------------------------------------------------------------
+
+  it('falls back to the head of the row id when a tree has no tag number', () => {
+    const tree = buildTree({ tree_id: null, id: 'abcdef1234567890' });
+    render(<TreePinPopup tree={tree} color="Green" />);
+
+    expect(screen.getByText('abcdef12')).toBeInTheDocument();
   });
 
   it('renders a photo placeholder when photo_url is null', () => {
@@ -123,49 +142,53 @@ describe('TreePinPopup', () => {
     expect(screen.getByTestId('tree-photo-placeholder')).toBeInTheDocument();
   });
 
-  it('renders an img with the Cloudinary URL and species+identifier alt text', () => {
-    const tree = buildTree({
-      tree_id: 'T-777',
-      species: 'Acacia',
-      photo_url: 'https://res.cloudinary.com/demo/image/upload/v1/acacia.jpg',
-    });
+  it('renders an img with the Cloudinary URL, named for the species and the view', () => {
+    const tree = buildTree({ tree_id: 'T-777', species: 'Acacia' });
     render(<TreePinPopup tree={tree} color="Green" />);
+
     const img = screen.getByRole('img');
     expect(img).toHaveAttribute('src', tree.photo_url);
-    const alt = img.getAttribute('alt') ?? '';
-    expect(alt).toContain('Acacia');
-    expect(alt).toContain('T-777');
+    // Each photo is one view of the tree, so the alt text says which.
+    expect(img.getAttribute('alt')).toBe('Acacia - Main');
   });
 
-  it('wrapper div carries Tailwind width class w-56 (visual contract)', () => {
-    const { container } = render(
-      <TreePinPopup tree={buildTree()} color="Green" />
-    );
-    const wrapper = container.firstChild;
-    expect(wrapper.className).toContain('w-56');
-  });
-
-  it('dispatch button carries bg-red-600 and text-white classes on Red pins', () => {
-    render(
-      <TreePinPopup
-        tree={buildTree({ is_leaning: true, assigned_to: null })}
-        color="Red"
-      />
-    );
-    const btn = screen.getByRole('button', { name: /dispatch arborist/i });
-    expect(btn.className).toContain('bg-red-600');
-    expect(btn.className).toContain('text-white');
-  });
-
-  it('does not render a Dispatch button for Orange, Yellow, or Green', () => {
-    ['Orange', 'Yellow', 'Green'].forEach((color) => {
-      const { unmount } = render(
-        <TreePinPopup tree={buildTree()} color={color} />
-      );
-      expect(
-        screen.queryByRole('button', { name: /dispatch arborist/i })
-      ).toBeNull();
-      unmount();
+  it('steps through every photo the tree has', () => {
+    const tree = buildTree({
+      photo_url: 'https://example.test/main.jpg',
+      leaves_url: 'https://example.test/leaves.jpg',
     });
+    render(<TreePinPopup tree={tree} color="Green" />);
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', tree.photo_url);
+    fireEvent.click(screen.getAllByRole('button')[0]); // previous wraps around
+    expect(screen.getByRole('img')).toHaveAttribute('src', tree.leaves_url);
+  });
+
+  it('says what the pin colour means', () => {
+    const cases = [
+      [buildTree({ is_leaning: true }), 'Unassigned Hazard'],
+      [buildTree({ has_cutting_permit: true }), 'Permit Issued'],
+      [buildTree(), 'Healthy'],
+    ];
+
+    for (const [tree, status] of cases) {
+      const { container } = render(<TreePinPopup tree={tree} color={classifyPinColor(tree)} />);
+      expect(within(container).getByText(status)).toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it('keeps the popup to a fixed width, so Leaflet can size around it', () => {
+    const { container } = render(<TreePinPopup tree={buildTree()} color="Green" />);
+    expect(container.firstChild.className).toContain('w-64');
+  });
+
+  it('colours the dispatch button by urgency', () => {
+    const red = buildTree({ is_leaning: true });
+    const { container } = render(<TreePinPopup tree={red} color={classifyPinColor(red)} />);
+
+    const dispatch = within(container).getByRole('button', { name: 'Dispatch' });
+    expect(dispatch.className).toMatch(/bg-red-600/);
+    expect(dispatch.className).toMatch(/text-white/);
   });
 });

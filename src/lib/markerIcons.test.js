@@ -16,10 +16,12 @@ describe('markerIcons', () => {
     expect(icon).toBeInstanceOf(L.DivIcon);
   });
 
-  it('HEX_FOR_COLOR has four pairwise-distinct hex values', () => {
+  it('gives every pin colour its own hex, with none shared', () => {
+    // Counted from PIN_COLOR rather than hard-coded: a new pin colour should
+    // fail this test for the right reason — a missing or duplicated hex.
     const hexes = Object.values(HEX_FOR_COLOR);
-    expect(hexes).toHaveLength(4);
-    expect(new Set(hexes).size).toBe(4);
+    expect(hexes).toHaveLength(Object.keys(PIN_COLOR).length);
+    expect(new Set(hexes).size).toBe(hexes.length);
   });
 
   it('falls back to the Green icon for an unknown color without throwing', () => {
