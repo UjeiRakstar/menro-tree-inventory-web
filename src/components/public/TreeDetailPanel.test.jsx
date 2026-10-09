@@ -262,6 +262,25 @@ describe('TreeDetailPanel — Tree Details tab', () => {
     expect(within(measurements).getByText('140.2')).toBeInTheDocument();
   });
 
+  it('prefers the field visit over anything stored on the tree row', () => {
+    openDetails({
+      observation: {
+        foliage_status: 'Shedding / Bare',
+        flowering_status: 'None',
+        fruiting_status: 'Ripe / Mature',
+        observed_at: '2026-03-12T01:30:00.000Z',
+      },
+    });
+
+    const phenology = screen.getByRole('region', { name: 'Phenology' });
+    expect(within(phenology).getByText('Shedding')).toBeInTheDocument();
+    expect(within(phenology).getByText('Ripe')).toBeInTheDocument();
+    // 'None' is an observation that the tree carries no flowers — no icon.
+    expect(within(phenology).queryByText('Full Bloom')).not.toBeInTheDocument();
+    // And say when someone last looked, since phenology goes stale.
+    expect(within(phenology).getByText(/Observed .*2026/)).toBeInTheDocument();
+  });
+
   it('shows the leaf, flower and fruit status the officer observed', () => {
     openDetails();
 

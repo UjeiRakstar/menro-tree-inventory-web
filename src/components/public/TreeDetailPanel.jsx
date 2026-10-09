@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Info, Loader2, TreePine, X } from 'lucide-react';
 import { traitsOf, biodiversityTrait, categoryTrait, highlightForTrait } from '../../lib/treeTraits.js';
-import { DBH_EXPLAINER, dbhOf, heightOf, phenologyOf } from '../../lib/treeDetails.js';
+import { DBH_EXPLAINER, dbhOf, heightOf, observedOn, phenologyOf } from '../../lib/treeDetails.js';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
 import dbhIcon from '../../assets/DBH_icon.png';
@@ -137,10 +137,13 @@ function Measurement({ icon, measurement, hint }) {
  * The "Tree Details" tab: what was measured and observed for this one tree,
  * plus where else in Laguna the species has been tagged.
  */
-function TreeDetailsTab({ tree, distribution, highlight, onHighlight }) {
+function TreeDetailsTab({ tree, observation, distribution, highlight, onHighlight }) {
   const height = heightOf(tree);
   const dbh = dbhOf(tree);
-  const phenology = phenologyOf(tree);
+  // The field app's latest observation, falling back to anything recorded on
+  // the tree row itself.
+  const phenology = phenologyOf(observation ?? tree);
+  const observedDate = observedOn(observation);
   const category = categoryTrait(tree);
   const biodiversity = biodiversityTrait(tree);
   const classification = [category, biodiversity].filter(Boolean);
@@ -166,7 +169,8 @@ function TreeDetailsTab({ tree, distribution, highlight, onHighlight }) {
 
       <section className="px-5 py-4" aria-label="Phenology">
         {phenology.length > 0 ? (
-          <div className="flex flex-wrap items-end justify-around gap-4">
+          <>
+            <div className="flex flex-wrap items-end justify-around gap-4">
             {phenology.map((phase) => (
               <span key={`${phase.kind}-${phase.key}`} className="relative group flex w-20 flex-col items-center gap-1">
                 <img src={phase.icon} alt="" aria-hidden="true" className="h-12 w-12 object-contain" />
@@ -174,8 +178,14 @@ function TreeDetailsTab({ tree, distribution, highlight, onHighlight }) {
                 <span className="sr-only">{`${phase.kind} status — ${phase.label}: ${phase.description}`}</span>
                 <Tooltip title={`${phase.kind}: ${phase.label}`}>{phase.description}</Tooltip>
               </span>
-            ))}
-          </div>
+              ))}
+            </div>
+            {observedDate && (
+              <p className="mt-3 text-center text-[11px] text-slate-500">
+                Observed {observedDate}
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-sm text-slate-500">
             No leaf, flower or fruit observation has been recorded for this tree yet.
@@ -297,6 +307,7 @@ export default function TreeDetailPanel({
   municipalityLabel = '',
   profile = null,
   profileLoading = false,
+  observation = null,
   distribution = [],
   highlight = null,
   onHighlight,
@@ -452,6 +463,7 @@ export default function TreeDetailPanel({
           ) : (
             <TreeDetailsTab
               tree={tree}
+              observation={observation}
               distribution={distribution}
               highlight={highlight}
               onHighlight={onHighlight}

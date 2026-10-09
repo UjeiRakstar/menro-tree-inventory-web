@@ -119,11 +119,34 @@ function phase(table, value, kind) {
   return { key: k, kind, ...entry };
 }
 
-export const leafPhase = (tree) => phase(LEAF_PHASES, tree?.leaf_status, 'Leaf');
-export const flowerPhase = (tree) => phase(FLOWER_PHASES, tree?.flower_status, 'Flower');
-export const fruitPhase = (tree) => phase(FRUIT_PHASES, tree?.fruit_status, 'Fruit');
+/**
+ * Phenology comes from the mobile app's own observations.
+ *
+ * The field app writes one row per visit to public.phenology_records —
+ * foliage_status, flowering_status, fruiting_status, with who looked and when —
+ * so a tree keeps a timeline rather than a single current state. Read the
+ * latest row and hand it here.
+ *
+ * The three columns on public.trees are also accepted, so a record carrying
+ * either shape works and nothing breaks if a row is passed instead.
+ */
+export const leafPhase = (source) =>
+  phase(LEAF_PHASES, source?.foliage_status ?? source?.leaf_status, 'Leaf');
+export const flowerPhase = (source) =>
+  phase(FLOWER_PHASES, source?.flowering_status ?? source?.flower_status, 'Flower');
+export const fruitPhase = (source) =>
+  phase(FRUIT_PHASES, source?.fruiting_status ?? source?.fruit_status, 'Fruit');
 
 /** The phases worth drawing, in leaf-flower-fruit order. */
-export function phenologyOf(tree) {
-  return [leafPhase(tree), flowerPhase(tree), fruitPhase(tree)].filter(Boolean);
+export function phenologyOf(source) {
+  return [leafPhase(source), flowerPhase(source), fruitPhase(source)].filter(Boolean);
+}
+
+/** "12 March 2026", or null when the observation has no date on it. */
+export function observedOn(observation) {
+  const raw = observation?.observed_at;
+  if (!raw) return null;
+  const when = new Date(raw);
+  if (Number.isNaN(when.getTime())) return null;
+  return when.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 }

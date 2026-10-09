@@ -1,5 +1,22 @@
 -- Green Tag: what the tree is doing right now — leaves, flowers, fruit.
 --
+-- SUPERSEDED — read this before running it.
+--
+-- The Green Tag mobile app already records phenology, and better: one row per
+-- visit in public.phenology_records (foliage_status, flowering_status,
+-- fruiting_status, observed_at, observed_by), so a tree keeps a timeline
+-- instead of a single current state. That table is live, and the public map's
+-- panel now reads the latest row from it.
+--
+-- The three columns below are not written by anything. They are left in place
+-- because they are already applied and harmless, and the web app still accepts
+-- them if a row happens to carry them. To be rid of them:
+--
+--   alter table public.trees
+--     drop column if exists leaf_status,
+--     drop column if exists flower_status,
+--     drop column if exists fruit_status;
+--
 -- WHAT THIS IS FOR
 -- The public map's "Tree Details" tab shows a tree's phenology beside its
 -- height and DBH. Nothing in public.trees recorded it, so these three columns

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { dbhOf, flowerPhase, fruitPhase, heightOf, leafPhase, phenologyOf } from './treeDetails.js';
+import {
+  dbhOf,
+  flowerPhase,
+  fruitPhase,
+  heightOf,
+  leafPhase,
+  observedOn,
+  phenologyOf,
+} from './treeDetails.js';
 
 describe('treeDetails measurements', () => {
   it('reads the height the mobile app stores as a string of metres', () => {
@@ -78,5 +86,41 @@ describe('treeDetails phenology', () => {
       'Fruit',
     ]);
     expect(phenologyOf({})).toEqual([]);
+  });
+});
+
+describe('treeDetails observations', () => {
+  // What the mobile app writes to phenology_records, verbatim.
+  const VISIT = {
+    tree_id: 'tree-1',
+    foliage_status: 'Peak / Full Canopy',
+    flowering_status: 'Full Bloom',
+    fruiting_status: 'Unripe / Developing',
+    observed_at: '2026-03-12T01:30:00.000Z',
+    observed_by: 'arb@menro.gov.ph',
+  };
+
+  it('reads a field visit, not just the columns on the tree', () => {
+    expect(phenologyOf(VISIT).map((p) => p.label)).toEqual(['Full Canopy', 'Full Bloom', 'Unripe']);
+  });
+
+  it('still understands the same statuses stored on a tree row', () => {
+    expect(leafPhase({ leaf_status: 'peak' }).label).toBe('Full Canopy');
+    expect(flowerPhase({ flower_status: 'full_bloom' }).label).toBe('Full Bloom');
+    expect(fruitPhase({ fruit_status: 'ripe' }).label).toBe('Ripe');
+  });
+
+  it('skips a phase the visit recorded as None', () => {
+    expect(phenologyOf({ ...VISIT, flowering_status: 'None' }).map((p) => p.kind)).toEqual([
+      'Leaf',
+      'Fruit',
+    ]);
+  });
+
+  it('dates an observation, and says nothing when it cannot', () => {
+    expect(observedOn(VISIT)).toMatch(/2026/);
+    expect(observedOn({ observed_at: 'not a date' })).toBeNull();
+    expect(observedOn({})).toBeNull();
+    expect(observedOn(null)).toBeNull();
   });
 });

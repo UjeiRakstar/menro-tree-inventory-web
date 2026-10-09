@@ -297,6 +297,8 @@ export default function PublicMap() {
   const [selectedTree, setSelectedTree] = useState(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [speciesProfile, setSpeciesProfile] = useState(null);
+  // The field app's most recent phenology visit for the open tree.
+  const [observation, setObservation] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
   // Which set of trees stands out: the open tree's species, or whatever trait
   // the visitor picked from the panel's badges.
@@ -370,6 +372,30 @@ export default function PublicMap() {
       profileCache.current.set(species, row);
       setSpeciesProfile(row);
       setProfileLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedTree]);
+
+  // What the tree was doing when someone last looked at it. The mobile app
+  // writes one row per visit to phenology_records, so this takes the newest.
+  useEffect(() => {
+    const treeId = selectedTree?.id;
+    if (!treeId) {
+      setObservation(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('phenology_records')
+        .select('*')
+        .eq('tree_id', treeId)
+        .order('observed_at', { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      const rows = error ? [] : (Array.isArray(data) ? data : [data].filter(Boolean));
+      setObservation(rows[0] ?? null);
     })();
     return () => { cancelled = true; };
   }, [selectedTree]);
@@ -645,6 +671,7 @@ export default function PublicMap() {
           municipalityLabel={selectedTreeMunicipality}
           profile={speciesProfile}
           profileLoading={profileLoading}
+          observation={observation}
           distribution={speciesDistribution}
           highlight={highlight}
           onHighlight={handleHighlight}
