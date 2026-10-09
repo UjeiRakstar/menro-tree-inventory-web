@@ -17,6 +17,25 @@ import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
 import { supabase } from './supabaseClient.js';
 
+/**
+ * Starts every page at the top.
+ *
+ * A router swaps the page without touching the scroll position, so following a
+ * link from the foot of a long page lands on the foot of the next one — which
+ * is how the BioDashboard opened on its own footer with the charts above the
+ * fold.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    globalThis.scrollTo?.({ top: 0, left: 0, behavior: reduceMotion ? 'auto' : 'instant' });
+  }, [pathname]);
+
+  return null;
+}
+
 function Shell() {
   const location = useLocation();
   const isMapRoute = location.pathname === '/map';
@@ -86,7 +105,9 @@ export default function App() {
   }
 
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       {/* Auth routes */}
       <Route path="/login" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Login />} />
       <Route path="/signup" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Signup />} />
@@ -109,6 +130,7 @@ export default function App() {
         <Route path="biodiversity-dashboard" element={<BiodiversityDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   );
 }

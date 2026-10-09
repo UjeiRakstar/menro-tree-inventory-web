@@ -50,7 +50,16 @@ function useFadeIn(threshold = 0.15) {
 }
 
 /** Parallax scroll hook — returns a Y offset for subtle depth effect */
-function useParallax(speed = 0.3) {
+/**
+ * Shifts an element against the scroll.
+ *
+ * [limit] caps the shift in pixels. Whatever is being moved has to be larger
+ * than its frame by at least that much in each direction, or the frame shows
+ * through — which is where the grey line under the navbar came from: at rest
+ * the hero sits below the sticky bar, so rect.top was already 68px and the
+ * image started life pushed down off its own frame.
+ */
+function useParallax(speed = 0.3, limit = 80) {
   const [offset, setOffset] = useState(0);
   const ref = useRef(null);
 
@@ -58,11 +67,17 @@ function useParallax(speed = 0.3) {
     const onScroll = () => {
       if (!ref.current) return;
       const rect = ref.current.getBoundingClientRect();
-      setOffset(rect.top * speed);
+      const shift = rect.top * speed;
+      setOffset(Math.max(-limit, Math.min(limit, shift)));
     };
+    onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [speed]);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [speed, limit]);
 
   return { ref, offset };
 }
@@ -214,12 +229,14 @@ export default function AboutUs() {
           ═══════════════════════════════════════════ */}
       <section className="relative min-h-screen flex flex-col" ref={heroParallax.ref}>
         {/* Background Image — upper ~65% */}
-        <div className="relative flex-1 min-h-[50vh] sm:min-h-[55vh] md:min-h-[62vh] overflow-hidden">
+        <div className="relative flex-1 min-h-[50vh] sm:min-h-[55vh] md:min-h-[62vh] overflow-hidden bg-green-900">
+          {/* Taller than its frame by more than the parallax can shift it, so
+              the frame never shows above or below the canopy. */}
           <img
             src={forestcoverImg}
             alt="Lush forest canopy of Laguna"
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ transform: `translateY(${heroParallax.offset}px)` }}
+            className="absolute inset-x-0 -top-24 w-full h-[calc(100%+12rem)] object-cover"
+            style={{ transform: `translate3d(0, ${heroParallax.offset}px, 0)` }}
           />
           {/* Cinematic gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-green-900/40" />
@@ -261,7 +278,7 @@ export default function AboutUs() {
             <div className="h-[2px] bg-gradient-to-r from-green-300/40 via-green-200/20 to-transparent mt-px" />
           </div>
 
-          <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-12 sm:py-16 md:py-20">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20">
             <div className="flex flex-col lg:flex-row gap-10 lg:gap-20 items-start">
 
               {/* Left: Editorial Typography */}
@@ -353,7 +370,7 @@ export default function AboutUs() {
       {/* ═══════════════════════════════════════════
           SDG SECTION
           ═══════════════════════════════════════════ */}
-      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gray-50">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-6xl mx-auto text-center">
           <FadeIn>
             <div className="flex items-center justify-center gap-3 mb-3">
@@ -406,7 +423,7 @@ export default function AboutUs() {
       {/* ═══════════════════════════════════════════
           CROWDSOURCING — Community Action
           ═══════════════════════════════════════════ */}
-      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-white overflow-hidden">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 overflow-hidden">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 items-center">
             
@@ -517,8 +534,8 @@ export default function AboutUs() {
       {/* ═══════════════════════════════════════════
           DATA & IMPACT — "We Cannot Plan What We Can't Measure"
           ═══════════════════════════════════════════ */}
-      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 overflow-hidden">
-        <div className="max-w-7xl mx-auto">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-white overflow-hidden">
+        <div className="max-w-6xl mx-auto">
           <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 items-center">
             
             {/* Left: Content */}
@@ -604,7 +621,7 @@ export default function AboutUs() {
       {/* ═══════════════════════════════════════════
           COLLECTIVE EFFORT & GLOBAL ALIGNMENT
           ═══════════════════════════════════════════ */}
-      <section className="py-20 sm:py-32 px-4 sm:px-6 lg:px-8 bg-white overflow-hidden relative">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 overflow-hidden relative">
         <div className="max-w-4xl mx-auto text-center z-10 relative">
           
           <FadeIn>
@@ -645,8 +662,8 @@ export default function AboutUs() {
       {/* ═══════════════════════════════════════════
           CONTACT US SECTION
           ═══════════════════════════════════════════ */}
-      <section className="py-20 sm:py-32 px-4 sm:px-6 lg:px-8 bg-white border-t border-gray-100">
-        <div className="max-w-5xl mx-auto">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 bg-white">
+        <div className="max-w-6xl mx-auto">
           {/* Header & Text Block */}
           <FadeIn className="flex flex-col md:flex-row gap-10 md:gap-16 items-center md:items-start mb-16">
             <div className="flex-1 text-center md:text-left">

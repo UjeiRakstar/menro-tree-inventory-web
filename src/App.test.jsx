@@ -88,6 +88,19 @@ describe('App shell and routing', () => {
     expect(adminHeader()).not.toBeInTheDocument();
   });
 
+  it('starts each page at the top', async () => {
+    const scrollTo = vi.fn();
+    vi.stubGlobal('scrollTo', scrollTo);
+
+    renderAt('/about');
+    await screen.findAllByRole('link', { name: 'About Us' });
+
+    // Following a link from the foot of a long page used to land on the foot
+    // of the next one, with the charts above the fold.
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }));
+    vi.unstubAllGlobals();
+  });
+
   it('drops the footer on the map page, and keeps it everywhere else', async () => {
     const { unmount } = renderAt('/about');
     expect(await screen.findByRole('contentinfo')).toBeInTheDocument();

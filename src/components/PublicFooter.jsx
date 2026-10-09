@@ -7,10 +7,13 @@ import lspuLogo from '../assets/LSPU_LGU_logo.png';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 
 export default function PublicFooter() {
+  // The top margin is the room the brand mark needs to lean into. Too little of
+  // it and the mark lands on whatever the page ended with — on the BioDashboard
+  // it sat across the chart.
   return (
-    <footer className="relative bg-[#1A6136] text-white pt-16 pb-12 mt-24">
-      {/* Absolute Overlapping Brand (Top Right) */}
-      <div className="absolute top-0 right-4 sm:right-10 lg:right-20 -translate-y-[75%] flex items-center pointer-events-none z-10">
+    <footer className="relative bg-[#1A6136] text-white pt-16 pb-12 mt-28 sm:mt-32 lg:mt-40">
+      {/* Brand mark, peeking over the top edge into that margin */}
+      <div className="absolute top-0 right-4 sm:right-10 lg:right-20 -translate-y-[45%] flex items-center pointer-events-none z-10">
         <div className="text-[4rem] sm:text-[6rem] lg:text-[8rem] font-black tracking-tighter leading-none flex items-center drop-shadow-[0_4px_4px_rgba(255,255,255,0.5)]">
           <span className="text-[#1A6136]">green</span>
           <span className="text-gray-900">tag</span>
