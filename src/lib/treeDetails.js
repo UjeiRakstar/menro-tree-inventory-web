@@ -35,17 +35,17 @@ function numberIn(value) {
 const format = (n) => String(Math.round(n * 10) / 10);
 
 /**
- * How tall the tree is. Falls back to the height class the app always records
- * when the metre reading is missing, so the row is never blank for no reason.
+ * How tall the tree is, in metres.
+ *
+ * Only the measurement counts. The app also records a height class — Small,
+ * Medium, Large — but showing "Medium" where a number belongs reads as a
+ * measurement that it is not, and anything downstream parsing this would have
+ * to cope with a word where it expects metres.
  */
 export function heightOf(tree) {
   const metres = numberIn(tree?.total_height);
-  if (metres !== null && metres > 0) {
-    return { value: format(metres), unit: 'm', caption: 'height' };
-  }
-  const klass = (tree?.height_class || tree?.heightClass || '').trim();
-  if (klass) return { value: klass, unit: '', caption: 'height class' };
-  return null;
+  if (metres === null || metres <= 0) return null;
+  return { value: format(metres), unit: 'm', caption: 'height' };
 }
 
 /** Diameter at breast height, as recorded in centimetres. */

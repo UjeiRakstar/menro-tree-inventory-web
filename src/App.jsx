@@ -34,13 +34,18 @@ function Shell() {
 }
 
 function PublicShell() {
+  const location = useLocation();
+  // The map fills the screen and carries its own controls down to the bottom
+  // edge; a footer under it only competes for the attention it needs.
+  const hideFooter = location.pathname === '/public-map';
+
   return (
     <div className="min-h-screen flex flex-col">
       <PublicNavbar />
       <main className="flex-1">
         <Outlet />
       </main>
-      <PublicFooter />
+      {!hideFooter && <PublicFooter />}
     </div>
   );
 }

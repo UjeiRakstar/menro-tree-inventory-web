@@ -205,15 +205,46 @@ describe('PublicMap', () => {
     expect(screen.getByText('2 tagged trees')).toBeInTheDocument();
   });
 
-  it('clicking the area already in focus goes back to the whole province', async () => {
+  it('clicking the area already in focus clears it without moving the map', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
     featureHandlers.get('Santa Cruz').click();
     expect(await screen.findByText('In focus')).toBeInTheDocument();
+    const flightsAfterSelecting = flyToBoundsSpy.mock.calls.length;
 
     featureHandlers.get('Santa Cruz').click();
     await waitFor(() => expect(screen.queryByText('In focus')).not.toBeInTheDocument());
+    expect(flyToBoundsSpy.mock.calls).toHaveLength(flightsAfterSelecting);
+  });
+
+  it('dismissing the focus card leaves the view where the visitor put it', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.change(screen.getByLabelText('Zoom to a city or municipality'), {
+      target: { value: 'Santa Cruz' },
+    });
+    await screen.findByText('In focus');
+    const flightsAfterSelecting = flyToBoundsSpy.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selected area' }));
+
+    await waitFor(() => expect(screen.queryByText('In focus')).not.toBeInTheDocument());
+    // Zooming back out to the province is not what dismissing a card asks for.
+    expect(flyToBoundsSpy.mock.calls).toHaveLength(flightsAfterSelecting);
+  });
+
+  it('choosing "All of Laguna" from the selector does fly back out', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    const selector = screen.getByLabelText('Zoom to a city or municipality');
+    fireEvent.change(selector, { target: { value: 'Santa Cruz' } });
+    await screen.findByText('In focus');
+
+    fireEvent.change(selector, { target: { value: '' } });
+
     await waitFor(() =>
       expect(flyToBoundsSpy).toHaveBeenLastCalledWith(LAGUNA_BOUNDS, expect.objectContaining({ maxZoom: 12 }))
     );
@@ -317,6 +348,9 @@ describe('PublicMap', () => {
     expect(z('laguna-boundaries')).toBeGreaterThan(z('laguna-mask'));
 
     expect(markers()[0].dataset.pane).toBe('tree-points');
+    // The blue dot sits higher still: a boundary over it means a resident
+    // cannot tap the thing that starts a tag.
+    expect(z('user-location')).toBeGreaterThan(z('laguna-boundaries'));
     expect(screen.getByTestId('mask').dataset.pane).toBe('laguna-mask');
     for (const layer of screen.getAllByTestId('geojson')) {
       expect(layer.dataset.pane).toBe('laguna-boundaries');

@@ -11,13 +11,10 @@ describe('treeDetails measurements', () => {
     expect(heightOf({ total_height: '5.0' }).value).toBe('5');
   });
 
-  it('falls back to the height class when no metre reading was taken', () => {
-    expect(heightOf({ total_height: null, heightClass: 'Medium' })).toEqual({
-      value: 'Medium',
-      unit: '',
-      caption: 'height class',
-    });
-    expect(heightOf({ total_height: null, height_class: 'Large' }).value).toBe('Large');
+  it('shows no height at all rather than the height class instead of one', () => {
+    // "Medium" in a slot that says metres reads as a measurement it is not.
+    expect(heightOf({ total_height: null, heightClass: 'Medium' })).toBeNull();
+    expect(heightOf({ total_height: null, height_class: 'Large' })).toBeNull();
     expect(heightOf({})).toBeNull();
   });
 

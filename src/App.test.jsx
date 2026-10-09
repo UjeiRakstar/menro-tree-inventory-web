@@ -88,6 +88,18 @@ describe('App shell and routing', () => {
     expect(adminHeader()).not.toBeInTheDocument();
   });
 
+  it('drops the footer on the map page, and keeps it everywhere else', async () => {
+    const { unmount } = renderAt('/about');
+    expect(await screen.findByRole('contentinfo')).toBeInTheDocument();
+
+    unmount();
+    renderAt('/public-map');
+
+    // The map fills the screen; a footer under it only competes with it.
+    await waitFor(() => expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument());
+    expect(screen.getAllByRole('link', { name: 'Map' }).length).toBeGreaterThan(0);
+  });
+
   it('lets a signed-in admin reach the Command Center under the header', async () => {
     signedIn();
     renderAt('/map');

@@ -43,6 +43,9 @@ const PANES = [
   ['laguna-mask', 410],
   ['laguna-boundaries', 420],
   ['tree-points', 450],
+  // Above the points: wherever the visitor is standing, that dot is the one
+  // thing that must stay tappable — it is how tagging starts.
+  ['user-location', 460],
 ];
 
 function MapPanes() {
@@ -101,20 +104,25 @@ const TILE_LAYERS = [
 ];
 
 /**
- * Keeps the viewport on the area in focus: the whole province when nothing is
- * selected, the chosen city or municipality once one is.
+ * Moves the camera when, and only when, something asks it to.
+ *
+ * `target` is a municipality name, the string 'province', or null for "leave
+ * the view where it is". Clearing a selection is not a request to fly: someone
+ * who has zoomed into their barangay and then dismisses the focus card wants
+ * the card gone, not the whole province back.
  */
-function FocusController({ selected }) {
+function FocusController({ target }) {
   const map = useMap();
   useEffect(() => {
-    const bounds = (selected && boundsOfMunicipality(selected)) || LAGUNA_BOUNDS;
+    if (!target) return;
+    const bounds = target === 'province' ? LAGUNA_BOUNDS : boundsOfMunicipality(target);
     if (!bounds) return;
     map.flyToBounds(bounds, {
       padding: [32, 32],
-      maxZoom: selected ? 15 : 12,
+      maxZoom: target === 'province' ? 12 : 15,
       duration: 1.1,
     });
-  }, [selected, map]);
+  }, [target, map]);
   return null;
 }
 
@@ -196,6 +204,7 @@ function UserLocationMarker({ onTagAttempt }) {
       <Circle
         center={position}
         radius={accuracy}
+        pane="user-location"
         pathOptions={{
           color: '#4285f4',
           weight: 1,
@@ -207,6 +216,7 @@ function UserLocationMarker({ onTagAttempt }) {
       <CircleMarker
         center={position}
         radius={16}
+        pane="user-location"
         pathOptions={{
           color: 'transparent',
           fillColor: '#4285f4',
@@ -218,6 +228,7 @@ function UserLocationMarker({ onTagAttempt }) {
       <CircleMarker
         center={position}
         radius={8}
+        pane="user-location"
         pathOptions={{
           color: '#ffffff',
           weight: 3,
@@ -281,6 +292,8 @@ export default function PublicMap() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedLgu, setSelectedLgu] = useState('');
+  // Where the camera was last asked to go; null means "stay put".
+  const [focusTarget, setFocusTarget] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [speciesProfile, setSpeciesProfile] = useState(null);
@@ -466,9 +479,25 @@ export default function PublicMap() {
     setUserTagPosition(null);
   }
 
-  /** Clicking the area already in focus clears the selection. */
+  /** Clicking the area already in focus clears the selection, and stays put. */
   function handleSelectLgu(name) {
-    setSelectedLgu((current) => (current === name ? '' : name));
+    setSelectedLgu((current) => {
+      const next = current === name ? '' : name;
+      setFocusTarget(next || null);
+      return next;
+    });
+  }
+
+  /** The dropdown: picking an area flies to it, picking "All of Laguna" flies out. */
+  function handleLguDropdown(name) {
+    setSelectedLgu(name);
+    setFocusTarget(name || 'province');
+  }
+
+  /** Dismissing the card drops the selection without moving the map. */
+  function clearSelectedLgu() {
+    setSelectedLgu('');
+    setFocusTarget(null);
   }
 
   // The panel covers the left of the map, so the controls over there travel
@@ -504,7 +533,8 @@ export default function PublicMap() {
         }
         .leaflet-top.leaflet-left,
         .map-side-control {
-          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease;
+          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease,
+            visibility 200ms ease;
         }
         @media (min-width: 640px) {
           .panel-open .leaflet-top.leaflet-left,
@@ -513,10 +543,13 @@ export default function PublicMap() {
           }
         }
         @media (max-width: 639px) {
+          /* visibility, not just opacity: Leaflet sets pointer-events on the
+             control itself, so a transparent zoom control still swallowed taps
+             meant for the panel's close button underneath it. */
           .panel-open .leaflet-top.leaflet-left,
           .panel-open .map-side-control {
             opacity: 0;
-            pointer-events: none;
+            visibility: hidden;
           }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -557,7 +590,7 @@ export default function PublicMap() {
         {/* Province outline, drawn over the municipal lines */}
         <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} pane="laguna-boundaries" interactive={false} />
 
-        <FocusController selected={selectedLgu} />
+        <FocusController target={focusTarget} />
 
         {/* User location blue dot */}
         <UserLocationMarker onTagAttempt={handleTagAttempt} />
@@ -627,7 +660,7 @@ export default function PublicMap() {
           <div className="flex items-center gap-2">
             <p className="text-sm font-bold text-slate-900 truncate">{selectedLabel}</p>
             <button
-              onClick={() => setSelectedLgu('')}
+              onClick={clearSelectedLgu}
               className="text-slate-400 hover:text-slate-700 transition"
               aria-label="Clear selected area"
               title="Show all of Laguna"
@@ -646,7 +679,7 @@ export default function PublicMap() {
         {/* City / municipality selector */}
         <select
           value={selectedLgu}
-          onChange={(e) => setSelectedLgu(e.target.value)}
+          onChange={(e) => handleLguDropdown(e.target.value)}
           aria-label="Zoom to a city or municipality"
           className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm focus:outline-none"
         >

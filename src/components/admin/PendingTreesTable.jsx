@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Trash2, CheckCircle2, User, X, MapPin, Calendar, TreePine } from 'lucide-react';
+import { Loader2, Trash2, CheckCircle2, User, X, MapPin, Calendar, TreePine, Upload } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 
 export default function PendingTreesTable({ onCountChange }) {
   const [pendingTrees, setPendingTrees] = useState([]);
+  // Submissions an arborist is out verifying. They used to vanish from this
+  // screen the moment they were dispatched, with nothing to bring them back.
+  const [dispatchedTrees, setDispatchedTrees] = useState([]);
+  const [publishError, setPublishError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dispatchModal, setDispatchModal] = useState(null); // holds the pending tree being dispatched
@@ -26,13 +30,13 @@ export default function PendingTreesTable({ onCountChange }) {
     if (err) {
       setError(err.message);
       setPendingTrees([]);
+      setDispatchedTrees([]);
     } else {
-      // Filter for pending status (case-insensitive) and exclude dispatched
-      const list = (Array.isArray(data) ? data : []).filter((t) => {
-        const s = (t.status || '').toLowerCase();
-        return s === 'pending' || s === '';
-      });
+      const rows = Array.isArray(data) ? data : [];
+      const statusOf = (t) => (t.status || '').toLowerCase();
+      const list = rows.filter((t) => statusOf(t) === 'pending' || statusOf(t) === '');
       setPendingTrees(list);
+      setDispatchedTrees(rows.filter((t) => statusOf(t) === 'dispatched'));
       onCountChange?.(list.length);
     }
     setLoading(false);
@@ -48,6 +52,28 @@ export default function PendingTreesTable({ onCountChange }) {
       onCountChange?.(next.length);
       return next;
     });
+    setActionLoading(null);
+  }
+
+  /**
+   * Publish a verified submission to the map.
+   *
+   * The database does the work in one call — create the tree, mark it
+   * crowdsourced, mark the submission verified and point it at the tree — so a
+   * half-finished publish is not a state this can leave behind. The mobile app
+   * calls the same function when an arborist finishes in the field.
+   */
+  async function handlePublish(tree) {
+    setPublishError('');
+    setActionLoading(tree.id);
+    const { error: rpcError } = await supabase.rpc('promote_pending_tree', {
+      p_pending_id: String(tree.id),
+    });
+    if (rpcError) {
+      setPublishError(rpcError.message || 'The submission could not be published.');
+    } else {
+      setDispatchedTrees((prev) => prev.filter((t) => t.id !== tree.id));
+    }
     setActionLoading(null);
   }
 
@@ -84,6 +110,10 @@ export default function PendingTreesTable({ onCountChange }) {
       onCountChange?.(next.length);
       return next;
     });
+    setDispatchedTrees((prev) => [
+      { ...dispatchModal, status: 'dispatched', assigned_to: arboristEmail },
+      ...prev,
+    ]);
 
     setDispatchModal(null);
     setActionLoading(null);
@@ -106,7 +136,7 @@ export default function PendingTreesTable({ onCountChange }) {
     );
   }
 
-  if (pendingTrees.length === 0) {
+  if (pendingTrees.length === 0 && dispatchedTrees.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
         <CheckCircle2 className="mx-auto text-green-500 mb-3" size={36} />
@@ -117,23 +147,73 @@ export default function PendingTreesTable({ onCountChange }) {
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        {pendingTrees.length} submission{pendingTrees.length > 1 ? 's' : ''} awaiting review
-      </p>
+    <div className="space-y-6">
+      {publishError && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {publishError}
+        </div>
+      )}
 
-      {/* Cards layout — works well on mobile and desktop */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {pendingTrees.map((tree) => (
-          <PendingCard
-            key={tree.id}
-            tree={tree}
-            isLoading={actionLoading === tree.id}
-            onReject={() => handleReject(tree.id)}
-            onVerify={() => handleOpenDispatch(tree)}
-          />
-        ))}
-      </div>
+      {pendingTrees.length > 0 && (
+        <section aria-label="Awaiting review" className="space-y-4">
+          <p className="text-sm text-slate-600">
+            {pendingTrees.length} submission{pendingTrees.length > 1 ? 's' : ''} awaiting review
+          </p>
+
+          {/* Cards layout — works well on mobile and desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {pendingTrees.map((tree) => (
+              <PendingCard
+                key={tree.id}
+                tree={tree}
+                isLoading={actionLoading === tree.id}
+                onReject={() => handleReject(tree.id)}
+                onVerify={() => handleOpenDispatch(tree)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Out with an arborist. Publishing is what finally puts a community tag
+          on the public map, and nothing did it before this. */}
+      {dispatchedTrees.length > 0 && (
+        <section aria-label="Out for verification" className="space-y-4">
+          <p className="text-sm text-slate-600">
+            {dispatchedTrees.length} submission{dispatchedTrees.length > 1 ? 's' : ''} out for verification
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {dispatchedTrees.map((tree) => (
+              <article
+                key={tree.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2"
+              >
+                <p className="text-sm font-semibold text-slate-800">
+                  {tree.species || 'Unidentified'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {tree.barangay || 'Unknown location'}
+                  {tree.assigned_to ? ` — with ${tree.assigned_to}` : ''}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handlePublish(tree)}
+                  disabled={actionLoading === tree.id}
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 transition disabled:opacity-50"
+                >
+                  {actionLoading === tree.id ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Upload size={14} />
+                  )}
+                  Publish to map
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Dispatch Modal */}
       {dispatchModal && (

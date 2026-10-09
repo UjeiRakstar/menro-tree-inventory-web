@@ -247,9 +247,19 @@ describe('TreeDetailPanel — Tree Details tab', () => {
   });
 
   it('says nothing was measured rather than showing an empty row', () => {
-    openDetails({ tree: { ...TREE, total_height: null, heightClass: null, height_class: null, dbh: null } });
+    openDetails({ tree: { ...TREE, total_height: null, dbh: null } });
 
     expect(screen.getByText('No measurements were recorded for this tree.')).toBeInTheDocument();
+  });
+
+  it('leaves the height out when only a height class was recorded', () => {
+    // A class is not a measurement, and the DBH still shows.
+    openDetails({ tree: { ...TREE, total_height: null, heightClass: 'Medium' } });
+
+    const measurements = screen.getByRole('region', { name: 'Measurements' });
+    expect(within(measurements).queryByText('Medium')).not.toBeInTheDocument();
+    expect(within(measurements).queryByText('height')).not.toBeInTheDocument();
+    expect(within(measurements).getByText('140.2')).toBeInTheDocument();
   });
 
   it('shows the leaf, flower and fruit status the officer observed', () => {
