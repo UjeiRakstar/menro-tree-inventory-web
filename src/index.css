@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------- Leaflet ---------- */
+
+/*
+ * No focus ring on a clicked shape.
+ *
+ * Clicking a city or municipality gives its SVG path DOM focus, and the
+ * browser draws the ring around that path's bounding box -- an axis-aligned
+ * rectangle sitting over the map, nothing like the boundary it belongs to, and
+ * it stays behind on the last shape clicked even after another place is
+ * chosen. Nothing is taken away by removing it: these paths carry no tabindex,
+ * so a keyboard never reaches them. The map container keeps its own focus ring
+ * for keyboard panning, and the cities and municipalities are reachable by
+ * keyboard through the selector beside the map and the seals on the dashboard.
+ */
+.leaflet-container path.leaflet-interactive:focus,
+.leaflet-container path.leaflet-interactive:focus-visible {
+  outline: none;
+}
+
 /* ---------- Print rules for QR sticker sheet & Certificate ---------- */
 @media print {
   /* 1. Hide everything by default. */
