@@ -357,7 +357,7 @@ export default function AboutUs() {
           IMPACT STATS BAR — Animated Counters
           ═══════════════════════════════════════════ */}
       <section className="bg-gradient-to-r from-green-800 via-green-700 to-green-800 py-12 sm:py-16">
-        <div className="max-w-5xl mx-auto px-6 sm:px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
             <StatPill icon={TreePine} number={6} suffix="" label="Cities" delay={0} />
             <StatPill icon={BarChart3} number={24} suffix="" label="Municipalities" delay={150} />
@@ -650,11 +650,11 @@ export default function AboutUs() {
 
             {/* Agency Logos (Data Sources) */}
             <div className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 opacity-70 hover:opacity-100 transition-opacity duration-500">
-              <img src={namriaLogo} alt="NAMRIA Logo" className="h-12 sm:h-14 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={bswmLogo} alt="BSWM Logo" className="h-12 sm:h-14 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={noahLogo} alt="UPRI NOAH Logo" className="h-10 sm:h-12 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={copernicusLogo} alt="Copernicus Logo" className="h-10 sm:h-12 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={dostLogo} alt="DOST-PAGASA Logo" className="h-12 sm:h-14 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
+              <img src={namriaLogo} alt="NAMRIA Logo" className="h-14 sm:h-16 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
+              <img src={bswmLogo} alt="BSWM Logo" className="h-14 sm:h-16 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
+              <img src={noahLogo} alt="UPRI NOAH Logo" className="h-8 sm:h-10 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
+              <img src={copernicusLogo} alt="Copernicus Logo" className="h-8 sm:h-10 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
+              <img src={dostLogo} alt="DOST-PAGASA Logo" className="h-14 sm:h-16 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
             </div>
           </FadeIn>
         </div>
