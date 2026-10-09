@@ -14,14 +14,14 @@ export default function PublicFooter() {
     <footer className="relative bg-[#1A6136] text-white pt-16 pb-12 mt-24 sm:mt-28 lg:mt-32">
       {/* Brand mark, peeking over the top edge into that margin */}
       <div className="absolute top-0 right-4 sm:right-10 lg:right-20 -translate-y-[45%] flex items-center pointer-events-none z-10">
-        <div className="text-[4rem] sm:text-[6rem] lg:text-[8rem] font-black tracking-tighter leading-none flex items-center drop-shadow-[0_4px_4px_rgba(255,255,255,0.5)]">
+        <div className="text-[2.75rem] sm:text-[6rem] lg:text-[8rem] font-black tracking-tighter leading-none flex items-center drop-shadow-[0_4px_4px_rgba(255,255,255,0.5)]">
           <span className="text-[#1A6136]">green</span>
           <span className="text-gray-900">tag</span>
         </div>
         <img 
           src={greenTagLogo} 
           alt="" 
-          className="w-20 sm:w-32 lg:w-40 ml-2 drop-shadow-xl -rotate-12"
+          className="w-14 sm:w-32 lg:w-40 ml-2 drop-shadow-xl -rotate-12"
         />
       </div>
 
