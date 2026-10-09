@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, GeoJSON, Polygon, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Download, Info, Loader2 } from 'lucide-react';
@@ -20,6 +21,7 @@ import {
   OUTSIDE_LAGUNA_MASK,
   boundsOfMunicipality,
   municipalityAt,
+  municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
 import { labelOf } from '../../lib/lguOptions.js';
 import {
@@ -212,13 +214,36 @@ export default function PublicDashboard() {
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  /** '' is the whole province; otherwise the bare LGU name. */
-  const [selectedLgu, setSelectedLgu] = useState('');
+  /**
+   * Which place is being read, held in the query string rather than in state.
+   *
+   * That is what makes ?lgu=Santa%20Cruz work — the map's panel links straight
+   * here — and it means the page someone is looking at is the page they can
+   * send to someone else. A name that is not one of Laguna's thirty is ignored
+   * rather than trusted.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedLgu = searchParams.get('lgu') || '';
+  const selectedLgu = municipalityNamed(requestedLgu) ? requestedLgu : '';
+
+  const setSelectedLgu = (name) =>
+    setSearchParams(
+      (params) => {
+        const updated = new URLSearchParams(params);
+        if (name) updated.set('lgu', name);
+        else updated.delete('lgu');
+        return updated;
+      },
+      { replace: true }
+    );
+
   const [activePair, setActivePair] = useState(METRIC_PAIRS[0].id);
   const [requestOpen, setRequestOpen] = useState(false);
   const municipalityLayer = useRef(null);
   const selectedRef = useRef('');
   selectedRef.current = selectedLgu;
+  const toggleRef = useRef(null);
+  toggleRef.current = (name) => setSelectedLgu(name === selectedLgu ? '' : name);
 
   /**
    * Make each city or municipality clickable on the map.
@@ -233,7 +258,7 @@ export default function PublicDashboard() {
     if (!name) return;
     layer.bindTooltip?.(labelOf(name), { sticky: true, direction: 'top', className: 'text-xs' });
     layer.on({
-      click: () => setSelectedLgu((current) => (current === name ? '' : name)),
+      click: () => toggleRef.current?.(name),
       mouseover: () => {
         if (name !== selectedRef.current) layer.setStyle(HOVER_STYLE);
       },

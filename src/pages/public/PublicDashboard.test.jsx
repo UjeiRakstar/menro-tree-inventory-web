@@ -1,4 +1,5 @@
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 // -----------------------------------------------------------------------------
 // The map is a picture here, and recharts needs a width jsdom will not give it.
@@ -79,7 +80,13 @@ const TREES = [
   { id: '4', species: 'Narra', barangay: 'Pansol', dbh: '8 cm', biodiversity_status: 'Endemic', latitude: 14.2330, longitude: 121.3670 },
 ];
 
-const renderDashboard = () => render(<PublicDashboard />);
+// The selection lives in the query string, so the page needs a router around it.
+const renderDashboard = (path = '/biodiversity') =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <PublicDashboard />
+    </MemoryRouter>
+  );
 const chartRows = () => JSON.parse(screen.getByTestId('chart').dataset.rows);
 const seriesKeys = () => screen.getAllByTestId('series').map((s) => s.dataset.key);
 
@@ -238,6 +245,23 @@ describe('PublicDashboard', () => {
       await screen.findByText('Mean Annual Increment of Above Ground Biomass')
     ).toBeInTheDocument();
     expect(screen.queryByText('MAI AGB')).not.toBeInTheDocument();
+  });
+
+  it('opens on the place a link named', async () => {
+    renderDashboard('/biodiversity?lgu=Santa%20Cruz');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Santa Cruz Biodiversity Analytics' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Santa Cruz' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('ignores a place that is not in Laguna', async () => {
+    renderDashboard('/biodiversity?lgu=Atlantis');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Laguna Biodiversity Analytics' })
+    ).toBeInTheDocument();
   });
 
   it('says so when the inventory cannot be read', async () => {

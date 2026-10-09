@@ -176,7 +176,7 @@ describe('PublicMap', () => {
     expect([...colors]).toEqual(['#16a34a']);
   });
 
-  it('zooms to a city or municipality chosen from the selector and counts its trees', async () => {
+  it('zooms to a city or municipality chosen from the selector and opens its panel', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
@@ -184,9 +184,10 @@ describe('PublicMap', () => {
       target: { value: 'Santa Cruz' },
     });
 
-    // The name is also an <option>, so look for the card's own heading.
-    expect(await screen.findByText('Santa Cruz', { selector: 'p' })).toBeInTheDocument();
-    expect(screen.getByText('3 tagged trees')).toBeInTheDocument();
+    const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
+    expect(within(panel).getByRole('heading', { name: 'Santa Cruz' })).toBeInTheDocument();
+    // Three of the five trees stand in Santa Cruz, one of them invasive.
+    expect(within(panel).getByText('3')).toBeInTheDocument();
     await waitFor(() =>
       expect(flyToBoundsSpy).toHaveBeenLastCalledWith(
         boundsOfMunicipality('Santa Cruz'),
@@ -195,14 +196,65 @@ describe('PublicMap', () => {
     );
   });
 
-  it('selects the area that was clicked on the map', async () => {
+  it('selects the area that was clicked on the map, and reports it', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
     featureHandlers.get('Pila').click();
 
-    expect(await screen.findByText('Pila', { selector: 'p' })).toBeInTheDocument();
-    expect(screen.getByText('2 tagged trees')).toBeInTheDocument();
+    const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Pila' });
+    expect(within(panel).getByText('2')).toBeInTheDocument();
+    // The same six figures as the analytics page, including the three that
+    // have no source yet.
+    expect(within(panel).getByText('Total Number of Trees')).toBeInTheDocument();
+    expect(
+      within(panel).getByText('Mean Annual Increment of Above Ground Biomass')
+    ).toBeInTheDocument();
+    expect(within(panel).getAllByText('Not available yet')).toHaveLength(3);
+    // And where they stand inside it.
+    expect(within(panel).getByText('Pansol')).toBeInTheDocument();
+  });
+
+  it('links through to the full analytics for that place', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    featureHandlers.get('Santa Cruz').click();
+    const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
+
+    expect(within(panel).getByRole('link', { name: /View full analytics/ })).toHaveAttribute(
+      'href',
+      '/biodiversity?lgu=Santa%20Cruz'
+    );
+  });
+
+  it('asks who wants the data from the panel', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    featureHandlers.get('Santa Cruz').click();
+    const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
+    fireEvent.click(within(panel).getByRole('button', { name: /Download Data/ }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('puts the area panel away when a tree is opened', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    featureHandlers.get('Santa Cruz').click();
+    await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
+
+    // One panel at a time: the two share the strip down the left of the map.
+    fireEvent.click(markers()[0]);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Biodiversity of Santa Cruz' })
+      ).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole('complementary', { name: /Details for/ })).toBeInTheDocument();
   });
 
   it('clicking the area already in focus clears it without moving the map', async () => {
@@ -210,29 +262,38 @@ describe('PublicMap', () => {
     await waitFor(() => expect(markers()).toHaveLength(5));
 
     featureHandlers.get('Santa Cruz').click();
-    expect(await screen.findByText('In focus')).toBeInTheDocument();
+    await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
     const flightsAfterSelecting = flyToBoundsSpy.mock.calls.length;
 
     featureHandlers.get('Santa Cruz').click();
-    await waitFor(() => expect(screen.queryByText('In focus')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Biodiversity of Santa Cruz' })
+      ).not.toBeInTheDocument()
+    );
     expect(flyToBoundsSpy.mock.calls).toHaveLength(flightsAfterSelecting);
   });
 
-  it('dismissing the focus card leaves the view where the visitor put it', async () => {
+  it('dismissing the area panel leaves the view where the visitor put it', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
     fireEvent.change(screen.getByLabelText('Zoom to a city or municipality'), {
       target: { value: 'Santa Cruz' },
     });
-    await screen.findByText('In focus');
-    const flightsAfterSelecting = flyToBoundsSpy.mock.calls.length;
+    const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear selected area' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close Santa Cruz' }));
 
-    await waitFor(() => expect(screen.queryByText('In focus')).not.toBeInTheDocument());
-    // Zooming back out to the province is not what dismissing a card asks for.
-    expect(flyToBoundsSpy.mock.calls).toHaveLength(flightsAfterSelecting);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Biodiversity of Santa Cruz' })
+      ).not.toBeInTheDocument()
+    );
+    // Zooming back out to the province is not what dismissing a panel asks for:
+    // someone who went down to their barangay wants the panel gone, not the
+    // view thrown away.
+    expect(flyToBoundsSpy).not.toHaveBeenCalledWith(LAGUNA_BOUNDS, expect.anything());
   });
 
   it('choosing "All of Laguna" from the selector does fly back out', async () => {
@@ -241,7 +302,7 @@ describe('PublicMap', () => {
 
     const selector = screen.getByLabelText('Zoom to a city or municipality');
     fireEvent.change(selector, { target: { value: 'Santa Cruz' } });
-    await screen.findByText('In focus');
+    await screen.findByRole('complementary', { name: 'Biodiversity of Santa Cruz' });
 
     fireEvent.change(selector, { target: { value: '' } });
 

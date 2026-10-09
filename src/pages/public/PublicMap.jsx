@@ -15,9 +15,13 @@ import {
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
 import { labelOf } from '../../lib/lguOptions.js';
+import { logoFor } from '../../lib/lguLogos.js';
 import { matchesHighlight } from '../../lib/treeTraits.js';
+import { barangayOf, groupBy, summarise } from '../../lib/dashboardMetrics.js';
 import TaggingForm from '../../components/public/TaggingForm.jsx';
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
+import AreaDetailPanel from '../../components/public/AreaDetailPanel.jsx';
+import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 
 /** Every tagged tree reads as one thing on this map, so they all share one colour. */
 const MARKER_COLOR = '#16a34a';
@@ -296,6 +300,11 @@ export default function PublicMap() {
   const [focusTarget, setFocusTarget] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  // The area panel is shown by picking a place, and hidden by opening a tree:
+  // both live in the same strip down the left of the map.
+  const [areaPanelOpen, setAreaPanelOpen] = useState(false);
+  const [areaPanelCollapsed, setAreaPanelCollapsed] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
   const [speciesProfile, setSpeciesProfile] = useState(null);
   // The field app's most recent phenology visit for the open tree.
   const [observation, setObservation] = useState(null);
@@ -439,6 +448,16 @@ export default function PublicMap() {
     return areas;
   }, [trees]);
 
+  // What the area panel reports. Same module as the BioDashboard, so the two
+  // surfaces cannot drift apart, and the same geometry-derived LGU as the rest
+  // of this page.
+  const areaTrees = useMemo(
+    () => (selectedLgu ? trees.filter((tree) => treeAreas.get(tree.id) === selectedLgu) : []),
+    [trees, treeAreas, selectedLgu]
+  );
+  const areaTotals = useMemo(() => summarise(areaTrees), [areaTrees]);
+  const areaBarangays = useMemo(() => groupBy(areaTrees, barangayOf), [areaTrees]);
+
   const selectedTreeMunicipality = useMemo(() => {
     const name = selectedTree ? treeAreas.get(selectedTree.id) : null;
     return name ? labelOf(name) : '';
@@ -464,6 +483,9 @@ export default function PublicMap() {
   function handleSelectTree(tree) {
     setSelectedTree(tree);
     setHighlight({ kind: 'species', value: (tree.species || '').trim() });
+    // One panel at a time: the tree takes the strip, and the place it stands in
+    // stays highlighted on the map behind it.
+    setAreaPanelOpen(false);
   }
 
   function handleCloseTree() {
@@ -505,11 +527,20 @@ export default function PublicMap() {
     setUserTagPosition(null);
   }
 
-  /** Clicking the area already in focus clears the selection, and stays put. */
+  /**
+   * Picking a city or municipality — on the map or from the dropdown — opens
+   * its panel. Clicking the one already in focus clears it, and stays put.
+   */
   function handleSelectLgu(name) {
     setSelectedLgu((current) => {
       const next = current === name ? '' : name;
       setFocusTarget(next || null);
+      setAreaPanelOpen(Boolean(next));
+      setAreaPanelCollapsed(false);
+      if (next) {
+        setSelectedTree(null);
+        setHighlight(null);
+      }
       return next;
     });
   }
@@ -518,17 +549,27 @@ export default function PublicMap() {
   function handleLguDropdown(name) {
     setSelectedLgu(name);
     setFocusTarget(name || 'province');
+    setAreaPanelOpen(Boolean(name));
+    setAreaPanelCollapsed(false);
+    if (name) {
+      setSelectedTree(null);
+      setHighlight(null);
+    }
   }
 
-  /** Dismissing the card drops the selection without moving the map. */
+  /** Dismissing the area drops the selection without moving the map. */
   function clearSelectedLgu() {
     setSelectedLgu('');
     setFocusTarget(null);
+    setAreaPanelOpen(false);
+    setAreaPanelCollapsed(false);
   }
 
-  // The panel covers the left of the map, so the controls over there travel
-  // with it rather than hiding underneath.
-  const panelShowing = Boolean(selectedTree) && !panelCollapsed;
+  // Either panel covers the left of the map, so the controls over there travel
+  // with whichever is showing rather than hiding underneath.
+  const treePanelShowing = Boolean(selectedTree) && !panelCollapsed;
+  const areaPanelShowing = areaPanelOpen && Boolean(selectedLgu) && !areaPanelCollapsed;
+  const panelShowing = treePanelShowing || areaPanelShowing;
 
   return (
     <div
@@ -680,12 +721,32 @@ export default function PublicMap() {
         />
       )}
 
-      {/* Area in focus */}
-      {selectedLabel && (
+      {/* The place in focus, in full */}
+      {areaPanelOpen && selectedLgu && (
+        <AreaDetailPanel
+          municipality={selectedLgu}
+          label={selectedLabel || labelOf(selectedLgu)}
+          logo={logoFor(selectedLgu)}
+          totals={areaTotals}
+          barangays={areaBarangays}
+          onClose={clearSelectedLgu}
+          onCollapsedChange={setAreaPanelCollapsed}
+          onRequestData={() => setRequestOpen(true)}
+        />
+      )}
+
+      {/* Area in focus — the short badge, for when its panel is out of the way */}
+      {selectedLabel && !areaPanelShowing && (
         <div className="map-side-control absolute top-3 left-14 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2 max-w-[55vw]">
           <p className="text-[10px] uppercase tracking-wide text-slate-500">In focus</p>
           <div className="flex items-center gap-2">
-            <p className="text-sm font-bold text-slate-900 truncate">{selectedLabel}</p>
+            <button
+              onClick={() => { setAreaPanelOpen(true); setAreaPanelCollapsed(false); }}
+              className="truncate text-sm font-bold text-slate-900 hover:text-green-800 transition"
+              title={`Show the figures for ${selectedLabel}`}
+            >
+              {selectedLabel}
+            </button>
             <button
               onClick={clearSelectedLgu}
               className="text-slate-400 hover:text-slate-700 transition"
@@ -853,6 +914,9 @@ export default function PublicMap() {
           onSuccess={closeTagging}
         />
       )}
+
+      {/* Asking for the data behind the place in focus */}
+      <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />
 
     </div>
   );
