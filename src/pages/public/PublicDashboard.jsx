@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, GeoJSON, Polygon, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Download, Info, Loader2 } from 'lucide-react';
@@ -23,7 +23,6 @@ import {
 } from '../../lib/lagunaBoundaries.js';
 import { labelOf } from '../../lib/lguOptions.js';
 import {
-  ALL_METRICS,
   METRIC_PAIRS,
   barangayOf,
   formatFigure,
@@ -38,6 +37,10 @@ const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fill
 const PROVINCE_STYLE = { color: '#0f172a', weight: 2.5, opacity: 0.9, fill: false };
 const MUNICIPALITY_STYLE = { color: '#64748b', weight: 1, opacity: 0.85, fillColor: '#16a34a', fillOpacity: 0.04 };
 const SELECTED_STYLE = { color: '#15803d', weight: 3, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.28 };
+const HOVER_STYLE = { color: '#15803d', weight: 2, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.14 };
+
+/** How a city or municipality should look, given what is selected. */
+const styleFor = (name, selected) => (name === selected ? SELECTED_STYLE : MUNICIPALITY_STYLE);
 
 /** Series colours, matched to how each figure reads: growth green, pressure red. */
 const SERIES_COLOR = { green: '#16a34a', red: '#dc2626', blue: '#0ea5e9' };
@@ -99,35 +102,37 @@ function StatCard({ metric, value, active, onSelect }) {
   const tone = metric.tone === 'red' ? 'text-red-700' : 'text-green-800';
 
   return (
-    <div className="relative">
+    <div className="relative flex-1">
       <button
         type="button"
         onClick={onSelect}
         aria-pressed={active}
-        className={`w-full rounded-2xl border bg-white px-5 py-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${
+        className={`flex h-full w-full flex-col justify-between rounded-2xl border bg-white px-5 py-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${
           active
             ? 'border-green-600 shadow-md ring-1 ring-green-600'
             : 'border-slate-200 hover:border-green-400 hover:shadow-sm'
         }`}
       >
         <span
-          className={`block text-[11px] font-bold uppercase tracking-wider sm:text-xs ${
+          className={`block min-h-[2.25rem] pr-7 text-[11px] font-bold uppercase leading-snug tracking-wider sm:text-xs ${
             metric.tone === 'red' ? 'text-red-700' : 'text-green-800'
-          } ${metric.hint ? 'pr-7' : ''}`}
+          }`}
         >
           {metric.label}
         </span>
 
-        <span className="mt-1 flex items-baseline gap-2">
-          <span className={`text-3xl font-bold sm:text-4xl ${unavailable ? 'text-slate-300' : tone}`}>
-            {unavailable ? '—' : formatFigure(value)}
+        <span className="mt-3 block">
+          <span className="flex items-baseline gap-2">
+            <span className={`text-3xl font-bold sm:text-4xl ${unavailable ? 'text-slate-300' : tone}`}>
+              {unavailable ? '—' : formatFigure(value)}
+            </span>
+            {metric.unit && <span className="text-xs text-slate-400">{metric.unit}</span>}
           </span>
-          {metric.unit && <span className="text-xs text-slate-400">{metric.unit}</span>}
-        </span>
 
-        {unavailable && (
-          <span className="mt-1 block text-[11px] leading-snug text-slate-500">Not available yet</span>
-        )}
+          {unavailable && (
+            <span className="mt-1 block text-[11px] leading-snug text-slate-500">Not available yet</span>
+          )}
+        </span>
       </button>
 
       {metric.hint && (
@@ -212,6 +217,29 @@ export default function PublicDashboard() {
   const [activePair, setActivePair] = useState(METRIC_PAIRS[0].id);
   const [requestOpen, setRequestOpen] = useState(false);
   const municipalityLayer = useRef(null);
+  const selectedRef = useRef('');
+  selectedRef.current = selectedLgu;
+
+  /**
+   * Make each city or municipality clickable on the map.
+   *
+   * Picking one here does exactly what picking its seal does, and clicking the
+   * selected one again goes back to the whole province. The seals above remain
+   * the keyboard route to the same thing, since a Leaflet path cannot be
+   * focused.
+   */
+  const bindMunicipality = useCallback((feature, layer) => {
+    const name = feature?.properties?.municipality;
+    if (!name) return;
+    layer.bindTooltip?.(labelOf(name), { sticky: true, direction: 'top', className: 'text-xs' });
+    layer.on({
+      click: () => setSelectedLgu((current) => (current === name ? '' : name)),
+      mouseover: () => {
+        if (name !== selectedRef.current) layer.setStyle(HOVER_STYLE);
+      },
+      mouseout: () => layer.setStyle(styleFor(name, selectedRef.current)),
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,8 +299,7 @@ export default function PublicDashboard() {
     const group = municipalityLayer.current;
     if (!group) return;
     group.eachLayer((layer) => {
-      const name = layer.feature?.properties?.municipality;
-      layer.setStyle(name === selectedLgu ? SELECTED_STYLE : MUNICIPALITY_STYLE);
+      layer.setStyle(styleFor(layer.feature?.properties?.municipality, selectedLgu));
     });
   }, [selectedLgu]);
 
@@ -312,22 +339,26 @@ export default function PublicDashboard() {
           </p>
         )}
 
-        {/* The figures, three pairs of them */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {METRIC_PAIRS.map((group) =>
-            group.metrics.map((metric) => (
-              <StatCard
-                key={metric.key}
-                metric={metric}
-                value={totals[metric.key]}
-                active={activePair === group.id}
-                onSelect={() => setActivePair(group.id)}
-              />
-            ))
-          )}
+{/* The figures: one column per pair, so the two that belong together are
+            always one above the other. */}
+        <div className="mt-6 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {METRIC_PAIRS.map((group) => (
+            <div key={group.id} className="flex flex-col gap-4">
+              {group.metrics.map((metric) => (
+                <StatCard
+                  key={metric.key}
+                  metric={metric}
+                  value={totals[metric.key]}
+                  active={activePair === group.id}
+                  onSelect={() => setActivePair(group.id)}
+                />
+              ))}
+            </div>
+          ))}
         </div>
         <p className="mt-2 text-xs text-slate-500">
           Pick any figure to chart its pair below, {selectedLgu ? 'barangay by barangay' : 'across the province'}.
+          You can also click a city or municipality on the map to look at it on its own.
         </p>
 
         {/* Where it is */}
@@ -341,8 +372,9 @@ export default function PublicDashboard() {
             </div>
           )}
 
-          {/* A picture, not a tool: the map follows the selection above rather
-              than being panned, zoomed or clicked on its own. */}
+          {/* Not a tool to navigate: it cannot be panned or zoomed, and the pins
+              are not clickable. The one thing it does take is a click on a city
+              or municipality, which selects it. */}
           <MapContainer
             bounds={LAGUNA_BOUNDS}
             boundsOptions={{ padding: [24, 24] }}
@@ -361,10 +393,8 @@ export default function PublicDashboard() {
             <GeoJSON
               ref={municipalityLayer}
               data={LAGUNA_MUNICIPALITIES}
-              style={(feature) =>
-                feature.properties.municipality === selectedLgu ? SELECTED_STYLE : MUNICIPALITY_STYLE
-              }
-              interactive={false}
+              style={(feature) => styleFor(feature.properties.municipality, selectedLgu)}
+              onEachFeature={bindMunicipality}
             />
             <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} interactive={false} />
             <FocusController selected={selectedLgu} />
@@ -388,22 +418,6 @@ export default function PublicDashboard() {
         <div className="mt-3">
           <PairChart pair={pair} rows={chartRows} scopeLabel={scopeLabel} />
         </div>
-
-        {/* Where the numbers come from */}
-        <section aria-label="Sources" className="mt-8 border-t border-slate-200 pt-5">
-          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Sources and notes</h2>
-          <ol className="mt-2 space-y-1.5">
-            {ALL_METRICS.map((metric) => (
-              <li key={metric.key} className="text-[11px] leading-relaxed text-slate-500">
-                <span className="font-semibold text-slate-600">{metric.label}.</span> {metric.source}
-              </li>
-            ))}
-            <li className="text-[11px] leading-relaxed text-slate-500">
-              <span className="font-semibold text-slate-600">Boundaries.</span> Cities, municipalities and
-              barangays dissolved from the NAMRIA/PSA administrative boundaries of Laguna.
-            </li>
-          </ol>
-        </section>
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />

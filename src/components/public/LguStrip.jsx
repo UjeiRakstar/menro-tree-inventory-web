@@ -18,6 +18,10 @@ const CHOICES = [
  * map all follow it — so the seals are buttons in a tablist rather than
  * decoration, and the selected one is marked for a screen reader as well as by
  * its ring.
+ *
+ * A seal grows a little under the pointer. It is a transform rather than a size
+ * change so nothing beside it shifts, and it is dropped for anyone who has
+ * asked for less motion.
  */
 export default function LguStrip({ selected, onSelect }) {
   const railRef = useRef(null);
@@ -43,7 +47,7 @@ export default function LguStrip({ selected, onSelect }) {
         ref={railRef}
         role="tablist"
         aria-label="Cities and municipalities of Laguna"
-        className="flex flex-1 items-center gap-3 overflow-x-auto scroll-smooth px-1 py-2 sm:gap-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden scroll-smooth px-2 py-4 sm:gap-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {CHOICES.map((choice) => {
           const active = choice.name === selected;
@@ -55,7 +59,7 @@ export default function LguStrip({ selected, onSelect }) {
               aria-selected={active}
               onClick={() => onSelect(choice.name)}
               title={choice.label}
-              className={`group shrink-0 rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${
+              className={`group shrink-0 transform-gpu rounded-full transition-transform duration-300 ease-out hover:scale-110 focus-visible:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${
                 active ? 'ring-4 ring-green-600' : 'ring-1 ring-slate-200 hover:ring-green-400'
               }`}
             >
@@ -65,7 +69,7 @@ export default function LguStrip({ selected, onSelect }) {
                   alt=""
                   aria-hidden="true"
                   loading="lazy"
-                  className={`rounded-full object-contain transition-all ${
+                  className={`rounded-full object-contain transition-all duration-300 ease-out motion-reduce:transition-none ${
                     active ? 'h-20 w-20 sm:h-24 sm:w-24' : 'h-14 w-14 opacity-80 group-hover:opacity-100 sm:h-16 sm:w-16'
                   }`}
                 />

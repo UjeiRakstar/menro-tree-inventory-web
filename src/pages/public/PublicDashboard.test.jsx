@@ -20,7 +20,30 @@ vi.mock('react-leaflet', () => ({
   ),
   TileLayer: () => null,
   Polygon: () => <div data-testid="mask" />,
-  GeoJSON: ({ data }) => <div data-testid="geojson" data-name={data.name} />,
+  GeoJSON: ({ data, onEachFeature }) => (
+    <div data-testid="geojson" data-name={data.name}>
+      {onEachFeature &&
+        (data.features || []).map((feature, i) => {
+          const handlers = {};
+          const layer = {
+            feature,
+            setStyle: () => {},
+            bindTooltip: () => {},
+            on: (map) => Object.assign(handlers, map),
+          };
+          onEachFeature(feature, layer);
+          return (
+            <button
+              key={i}
+              type="button"
+              data-testid="place"
+              data-name={feature.properties.municipality}
+              onClick={() => handlers.click?.({ target: layer })}
+            />
+          );
+        })}
+    </div>
+  ),
   CircleMarker: ({ interactive }) => <div data-testid="pin" data-interactive={String(interactive)} />,
   useMap: () => ({ flyToBounds: flyToBoundsSpy }),
 }));
@@ -120,7 +143,8 @@ describe('PublicDashboard', () => {
   it('says a figure has no source rather than showing an invented one', async () => {
     renderDashboard();
 
-    const cover = await screen.findByRole('button', { name: /Forest \/ Tree Cover Area/ });
+    // Anchored: the ⓘ beside it is its own button, named "What …".
+    const cover = await screen.findByRole('button', { name: /^Forest \/ Tree Cover Area/ });
     expect(within(cover).getByText('—')).toBeInTheDocument();
     expect(within(cover).getByText('Not available yet')).toBeInTheDocument();
 
@@ -130,7 +154,26 @@ describe('PublicDashboard', () => {
     expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
   });
 
-  it('draws the map as a picture: no zoom, no panning, nothing to click', async () => {
+  it('selects a city or municipality clicked on the map, and unselects it on a second click', async () => {
+    renderDashboard();
+    await screen.findByRole('heading', { level: 1, name: 'Laguna Biodiversity Analytics' });
+
+    const place = (name) => screen.getAllByTestId('place').find((p) => p.dataset.name === name);
+
+    fireEvent.click(place('Santa Cruz'));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Santa Cruz Biodiversity Analytics' })
+    ).toBeInTheDocument();
+    // The seal above follows the map, not just the other way round.
+    expect(screen.getByRole('tab', { name: 'Santa Cruz' })).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.click(place('Santa Cruz'));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Laguna Biodiversity Analytics' })
+    ).toBeInTheDocument();
+  });
+
+  it('draws the map as a picture: no zoom, no panning, no clickable pins', async () => {
     renderDashboard();
     await screen.findByTestId('map');
 
@@ -175,14 +218,26 @@ describe('PublicDashboard', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('cites every figure at the foot of the page', async () => {
+  it('explains each figure in its own ⓘ rather than in a footnote', async () => {
     renderDashboard();
+    await screen.findByText('Total Number of Trees');
 
-    const sources = await screen.findByRole('region', { name: 'Sources' });
-    expect(within(sources).getByText(/Lasco/)).toBeInTheDocument();
-    expect(within(sources).getByText(/Climate Change Commission \(July 31, 2024\)/)).toBeInTheDocument();
-    expect(within(sources).getByText(/DBH proxy/)).toBeInTheDocument();
-    expect(within(sources).getByText(/NAMRIA/)).toBeInTheDocument();
+    // No sources list at the foot of the page any more.
+    expect(screen.queryByRole('region', { name: 'Sources' })).not.toBeInTheDocument();
+
+    // The citations live in the tooltips instead, one per figure.
+    const tooltips = screen.getAllByRole('tooltip').map((t) => t.textContent);
+    expect(tooltips.some((t) => /Lasco/.test(t))).toBe(true);
+    expect(tooltips.some((t) => /Climate Change Commission \(July 31, 2024\)/.test(t))).toBe(true);
+    expect(tooltips.some((t) => /diameter at breast height/.test(t))).toBe(true);
+  });
+
+  it('spells out the biomass figure instead of abbreviating it', async () => {
+    renderDashboard();
+    expect(
+      await screen.findByText('Mean Annual Increment of Above Ground Biomass')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('MAI AGB')).not.toBeInTheDocument();
   });
 
   it('says so when the inventory cannot be read', async () => {

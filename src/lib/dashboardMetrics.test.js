@@ -100,13 +100,20 @@ describe('dashboardMetrics definitions', () => {
     }
   });
 
-  it('says which figures have a source today, and cites every one', () => {
+  it('says which figures have a source today, and explains every one', () => {
     const available = ALL_METRICS.filter((m) => m.available).map((m) => m.key);
     // Everything else is waiting on the mapping feature or the emissions feed.
     expect(available.sort()).toEqual(['carbonKg', 'invasiveCount', 'treeCount']);
+    // There is no footnote any more, so the hint is the only explanation a
+    // reader gets: every figure needs one.
     for (const metric of ALL_METRICS) {
-      expect(metric.source.length).toBeGreaterThan(0);
+      expect(metric.hint.length).toBeGreaterThan(0);
     }
+  });
+
+  it('spells out Mean Annual Increment of Above Ground Biomass', () => {
+    const mai = ALL_METRICS.find((m) => m.key === 'maiAgb');
+    expect(mai.label).toBe('Mean Annual Increment of Above Ground Biomass');
   });
 
   it('can find the pair a figure belongs to', () => {

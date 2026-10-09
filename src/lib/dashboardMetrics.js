@@ -79,8 +79,13 @@ export function groupBy(trees, keyOf) {
 /**
  * The three pairs, in the order they are shown.
  *
- * `available` says whether a figure has a source today. `source` is the
- * citation shown in the footnotes and in the ⓘ beside the figure.
+ * Each pair is a column on the dashboard: the first metric above, the second
+ * below it, always in this order.
+ *
+ * `available` says whether a figure has a source today. `hint` is the whole of
+ * what the ⓘ beside the figure says — what it measures and where it comes from.
+ * There is no footnote; the ⓘ is the only place this is explained, so it has to
+ * be complete on its own.
  */
 export const METRIC_PAIRS = [
   {
@@ -93,7 +98,7 @@ export const METRIC_PAIRS = [
         unit: '',
         tone: 'green',
         available: true,
-        source: 'Tagged trees in the Green Tag inventory.',
+        hint: 'Every tree tagged in the Green Tag inventory, counted where it stands.',
       },
       {
         key: 'invasiveCount',
@@ -101,7 +106,7 @@ export const METRIC_PAIRS = [
         unit: '',
         tone: 'red',
         available: true,
-        source: 'Tagged trees recorded as invasive by the field team.',
+        hint: 'Tagged trees the field team recorded as invasive — species that spread at the expense of native ones.',
       },
     ],
   },
@@ -115,16 +120,15 @@ export const METRIC_PAIRS = [
         unit: 'ha',
         tone: 'green',
         available: false,
-        source: 'Will come from the mapping feature, once tree cover is delineated.',
+        hint: 'The ground covered by trees, in hectares. It arrives with the mapping feature, once tree cover is delineated.',
       },
       {
         key: 'maiAgb',
-        label: 'MAI AGB',
-        unit: 'Mg AGB yr⁻¹',
+        label: 'Mean Annual Increment of Above Ground Biomass',
+        unit: 'Mg yr⁻¹',
         tone: 'green',
         available: false,
-        hint: 'Mean Annual Increment of Above Ground Biomass (Lasco, et al.)',
-        source: 'Mean Annual Increment of Above Ground Biomass (Lasco, et al.). Awaiting the mapping feature.',
+        hint: 'How much standing biomass the trees add each year, after Lasco, et al. It arrives with the mapping feature.',
       },
     ],
   },
@@ -138,8 +142,7 @@ export const METRIC_PAIRS = [
         unit: 'kg CO₂',
         tone: 'green',
         available: true,
-        hint: `Estimated from each tree's diameter at breast height, at ${CARBON_PER_DBH_CM} kg CO₂ per cm.`,
-        source: `Estimated via DBH proxy (${CARBON_PER_DBH_CM} kg CO₂ per cm of diameter at breast height).`,
+        hint: `Estimated from each tree's diameter at breast height, at ${CARBON_PER_DBH_CM} kg CO₂ per cm — a stand-in until species-specific equations are applied.`,
       },
       {
         key: 'carbonEmissionKg',
@@ -147,15 +150,13 @@ export const METRIC_PAIRS = [
         unit: 'kg CO₂',
         tone: 'red',
         available: false,
-        hint: 'Greenhouse Gases Quantification Sheet, Climate Change Commission (July 31, 2024)',
-        source:
-          'Greenhouse Gases Quantification Sheet, Climate Change Commission (July 31, 2024). Awaiting the emissions feed.',
+        hint: 'From the Greenhouse Gases Quantification Sheet, Climate Change Commission (July 31, 2024). The feed is not connected yet.',
       },
     ],
   },
 ];
 
-/** Every metric, flattened — handy for footnotes and lookups. */
+/** Every metric, flattened — handy for lookups. */
 export const ALL_METRICS = METRIC_PAIRS.flatMap((pair) => pair.metrics);
 
 /** The pair a metric belongs to. */
