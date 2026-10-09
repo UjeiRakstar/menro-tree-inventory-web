@@ -22,6 +22,30 @@ import namriaLogo from '../../assets/NAMRIA_logo.svg';
 import dostLogo from '../../assets/DOST_PAGASA_logo.svg';
 
 /* ══════════════════════════════════════════════════
+   Who is behind this, and where their data comes from
+   ══════════════════════════════════════════════════ */
+
+/** The three institutions that run Green Tag between them. */
+const PARTNERS = [
+  { name: 'Provincial Government of Laguna', href: 'https://laguna.gov.ph/', logo: pglLogo },
+  { name: 'PGENRO', href: 'https://www.facebook.com/enro.laguna', logo: pgenroLogo },
+  { name: 'Laguna State Polytechnic University', href: 'https://lspu.edu.ph/', logo: lspuLogo },
+];
+
+/**
+ * The agencies whose data the platform reads, in the order the paragraph above
+ * them names. `size` is set per logo because a seal and a wordmark do not read
+ * as the same size at the same height.
+ */
+const DATA_SOURCES = [
+  { name: 'NAMRIA', href: 'https://www.namria.gov.ph/', logo: namriaLogo, size: 'h-14 sm:h-16' },
+  { name: 'BSWM', href: 'https://www.bswm.da.gov.ph/', logo: bswmLogo, size: 'h-14 sm:h-16' },
+  { name: 'UPRI NOAH', href: 'https://noah.up.edu.ph/', logo: noahLogo, size: 'h-8 sm:h-10' },
+  { name: 'Copernicus', href: 'https://www.copernicus.eu/en', logo: copernicusLogo, size: 'h-8 sm:h-10' },
+  { name: 'DOST-PAGASA', href: 'https://www.pagasa.dost.gov.ph/', logo: dostLogo, size: 'h-14 sm:h-16' },
+];
+
+/* ══════════════════════════════════════════════════
    Animation Hooks
    ══════════════════════════════════════════════════ */
 
@@ -129,6 +153,27 @@ function ContactField({ id, label, type = 'text', multiline = false, required = 
         />
       )}
     </div>
+  );
+}
+
+/**
+ * A logo that links to the organisation it belongs to.
+ *
+ * Opens in its own tab so a visitor reading the page does not lose their
+ * place, with rel="noreferrer" because these are other people's sites.
+ */
+function LogoLink({ href, name, children }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`${name} — opens in a new tab`}
+      title={name}
+      className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+    >
+      {children}
+    </a>
   );
 }
 
@@ -682,9 +727,15 @@ export default function AboutUs() {
           <FadeIn delay={200}>
             {/* Primary Partner Logos (PGL, PGENRO, LSPU) */}
             <div className="flex flex-wrap justify-center items-center gap-8 sm:gap-16 mb-12">
-              <img src={pglLogo} alt="PGL Logo" className="w-28 sm:w-36 h-28 sm:h-36 object-contain hover:scale-105 transition-transform duration-300 drop-shadow-md" />
-              <img src={pgenroLogo} alt="PGENRO Logo" className="w-28 sm:w-36 h-28 sm:h-36 object-contain hover:scale-105 transition-transform duration-300 drop-shadow-md" />
-              <img src={lspuLogo} alt="LSPU Logo" className="w-28 sm:w-36 h-28 sm:h-36 object-contain hover:scale-105 transition-transform duration-300 drop-shadow-md" />
+              {PARTNERS.map((partner) => (
+                <LogoLink key={partner.name} href={partner.href} name={partner.name}>
+                  <img
+                    src={partner.logo}
+                    alt={`${partner.name} logo`}
+                    className="w-28 sm:w-36 h-28 sm:h-36 object-contain hover:scale-105 transition-transform duration-300 drop-shadow-md"
+                  />
+                </LogoLink>
+              ))}
             </div>
             
             {/* The Text Block */}
@@ -696,11 +747,15 @@ export default function AboutUs() {
 
             {/* Agency Logos (Data Sources) */}
             <div className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 opacity-70 hover:opacity-100 transition-opacity duration-500">
-              <img src={namriaLogo} alt="NAMRIA Logo" className="h-14 sm:h-16 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={bswmLogo} alt="BSWM Logo" className="h-14 sm:h-16 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={noahLogo} alt="UPRI NOAH Logo" className="h-8 sm:h-10 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={copernicusLogo} alt="Copernicus Logo" className="h-8 sm:h-10 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
-              <img src={dostLogo} alt="DOST-PAGASA Logo" className="h-14 sm:h-16 object-contain grayscale hover:grayscale-0 transition-all duration-300" />
+              {DATA_SOURCES.map((agency) => (
+                <LogoLink key={agency.name} href={agency.href} name={agency.name}>
+                  <img
+                    src={agency.logo}
+                    alt={`${agency.name} logo`}
+                    className={`${agency.size} object-contain grayscale hover:grayscale-0 transition-all duration-300`}
+                  />
+                </LogoLink>
+              ))}
             </div>
           </FadeIn>
         </div>

@@ -59,3 +59,34 @@ describe('AboutUs contact form', () => {
     expect(screen.getByText(/Full Name/)).toBeInTheDocument();
   });
 });
+
+describe('AboutUs organisation logos', () => {
+  // Each logo links to whoever it belongs to.
+  const LINKS = [
+    ['Provincial Government of Laguna', 'https://laguna.gov.ph/'],
+    ['PGENRO', 'https://www.facebook.com/enro.laguna'],
+    ['Laguna State Polytechnic University', 'https://lspu.edu.ph/'],
+    ['NAMRIA', 'https://www.namria.gov.ph/'],
+    ['BSWM', 'https://www.bswm.da.gov.ph/'],
+    ['UPRI NOAH', 'https://noah.up.edu.ph/'],
+    ['Copernicus', 'https://www.copernicus.eu/en'],
+    ['DOST-PAGASA', 'https://www.pagasa.dost.gov.ph/'],
+  ];
+
+  it.each(LINKS)('sends %s to its own site', (name, href) => {
+    renderAbout();
+
+    const link = screen.getByRole('link', { name: new RegExp(`^${name} —`) });
+    expect(link).toHaveAttribute('href', href);
+  });
+
+  it('opens them in a new tab without handing over the referrer', () => {
+    renderAbout();
+
+    for (const [name] of LINKS) {
+      const link = screen.getByRole('link', { name: new RegExp(`^${name} —`) });
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
+    }
+  });
+});
