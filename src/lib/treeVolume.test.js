@@ -12,6 +12,10 @@ import {
   measuredCoverage,
   merchantableHeightM,
   volumeOf,
+  diameterClassOf,
+  diameterClassRange,
+  diameterDistribution,
+  readDiameterShape,
 } from './treeVolume.js';
 
 describe('the DENR volume equation', () => {
@@ -146,5 +150,112 @@ describe('measuredCoverage', () => {
   it('survives an empty or missing set', () => {
     expect(measuredCoverage([])).toEqual({ measured: 0, total: 0 });
     expect(measuredCoverage(undefined)).toEqual({ measured: 0, total: 0 });
+  });
+});
+
+describe('diameter classes', () => {
+  const at = (dbh) => diameterClassOf({ dbh });
+
+  it('bands diameters the way the bulletin does', () => {
+    // Page 7: class 10 is 5–14, class 20 is 15–24, class 30 is 25–34.
+    expect(at(5)).toBe(10);
+    expect(at(14)).toBe(10);
+    expect(at(15)).toBe(20);
+    expect(at(24)).toBe(20);
+    expect(at(25)).toBe(30);
+    expect(at(34)).toBe(30);
+    expect(at(115)).toBe(120);
+    expect(at(124)).toBe(120);
+  });
+
+  it('keeps going past the end of the printed table', () => {
+    // The table stops at 120; the bulletin says the classes continue in tens.
+    expect(at(125)).toBe(130);
+    expect(at(210)).toBe(210);
+  });
+
+  it('names the band a class covers', () => {
+    expect(diameterClassRange(10)).toBe('5 to 14 cm');
+    expect(diameterClassRange(30)).toBe('25 to 34 cm');
+  });
+
+  it('has no class for a tree below the smallest one', () => {
+    // Under 5 cm is a seedling, which the bulletin does not inventory.
+    expect(at(4)).toBeNull();
+    expect(at(0)).toBeNull();
+    expect(at(null)).toBeNull();
+  });
+
+  it('uses the floored diameter, as the bulletin records it', () => {
+    // 14.9 is recorded as 14, which is class 10 — not 15, which would be 20.
+    expect(at(14.9)).toBe(10);
+  });
+});
+
+describe('diameterDistribution', () => {
+  const tree = (dbh) => ({ dbh });
+  const many = (n, dbh) => Array.from({ length: n }, () => tree(dbh));
+
+  it('counts the trees in each class', () => {
+    const result = diameterDistribution([...many(3, 10), ...many(2, 20), tree(31)]);
+
+    expect(result.classes.map((c) => [c.class, c.count])).toEqual([
+      [10, 3],
+      [20, 2],
+      [30, 1],
+    ]);
+    expect(result.measured).toBe(6);
+    expect(result.classes[0].share).toBeCloseTo(0.5, 5);
+  });
+
+  it('keeps an empty class in the middle, because the gap is the finding', () => {
+    // Nothing between 15 and 24 cm means a cohort never planted, or lost.
+    const result = diameterDistribution([...many(2, 10), ...many(2, 30)]);
+
+    expect(result.classes.map((c) => [c.class, c.count])).toEqual([
+      [10, 2],
+      [20, 0],
+      [30, 2],
+    ]);
+  });
+
+  it('tells a seedling from a tree nobody measured', () => {
+    const result = diameterDistribution([tree(10), tree(3), tree(null), {}]);
+
+    expect(result.belowSmallest).toBe(1);
+    expect(result.unmeasured).toBe(2);
+    expect(result.measured).toBe(1);
+    expect(result.total).toBe(4);
+  });
+
+  it('survives an empty or missing set', () => {
+    expect(diameterDistribution([]).classes).toEqual([]);
+    expect(diameterDistribution(undefined).total).toBe(0);
+  });
+});
+
+describe('readDiameterShape', () => {
+  const sized = (n, dbh) => Array.from({ length: n }, () => ({ dbh }));
+
+  it('calls a stand of small trees young', () => {
+    const shape = readDiameterShape(diameterDistribution([...sized(8, 12), ...sized(2, 40)]));
+    expect(shape.key).toBe('young');
+    expect(shape.headline).toBe('Mostly young trees');
+  });
+
+  it('calls a stand of big trees mature', () => {
+    const shape = readDiameterShape(diameterDistribution([...sized(6, 70), ...sized(4, 20)]));
+    expect(shape.key).toBe('mature');
+  });
+
+  it('calls a spread a mix', () => {
+    const shape = readDiameterShape(
+      diameterDistribution([...sized(3, 12), ...sized(3, 30), ...sized(2, 45), ...sized(2, 60)])
+    );
+    expect(shape.key).toBe('mixed');
+  });
+
+  it('says nothing about a set nobody measured', () => {
+    expect(readDiameterShape(diameterDistribution([{}, {}]))).toBeNull();
   });
 });

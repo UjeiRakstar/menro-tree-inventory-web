@@ -42,6 +42,7 @@ import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 import SpeciesSection from '../../components/public/SpeciesSection.jsx';
 import CoverageSection from '../../components/public/CoverageSection.jsx';
+import SizeSection from '../../components/public/SizeSection.jsx';
 
 const MARKER_COLOR = '#16a34a';
 const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fillOpacity: 0.75 };
@@ -521,6 +522,9 @@ export default function PublicDashboard() {
           noun={selectedLgu ? 'barangay' : 'city or municipality'}
           nounPlural={selectedLgu ? 'barangays' : 'cities and municipalities'}
         />
+
+        {/* How old it is — the question counting trees cannot answer */}
+        <SizeSection trees={scopedTrees} scopeLabel={scopeLabel} />
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />

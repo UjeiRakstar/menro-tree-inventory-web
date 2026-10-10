@@ -124,7 +124,7 @@ the planting gap the plan described once coverage is reasonably complete.
 
 ---
 
-## 3. How old the forest is
+## 3. How old the forest is — DONE
 
 **Why.** The single most decision-relevant thing in the data, and it is shown
 nowhere. If most trees sit in the smallest diameter class, **there is no
@@ -140,6 +140,14 @@ beside the volume equation it belongs with.
 
 **Done when** the page shows the size structure and says in a line what it
 means — young and establishing, mixed, or mature.
+
+**Built.** The classes live in `src/lib/treeVolume.js` beside the volume
+equation from the same bulletin; the section is
+`src/components/public/SizeSection.jsx`. An empty class between two full ones
+is drawn rather than skipped: a gap in the middle of the range is a cohort
+never planted or since lost, which is the finding. A seedling under 5 cm and a
+tree with no diameter recorded are counted apart, because one was measured and
+the other was not.
 
 ---
 

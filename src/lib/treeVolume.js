@@ -187,3 +187,134 @@ export function measuredCoverage(trees) {
   const measured = rows.filter((tree) => volumeOf(tree) !== null).length;
   return { measured, total: rows.length };
 }
+
+/* ===========================================================================
+ * DIAMETER CLASSES
+ *
+ * FMB Technical Bulletin No. 3 page 7. The standard classes are multiples of
+ * ten, each covering a ten-centimetre band around its name:
+ *
+ *     class 10   5 to 14 cm      class 40   35 to 44 cm
+ *     class 20   15 to 24 cm     class 50   45 to 54 cm
+ *     class 30   25 to 34 cm     ... and so on in tens
+ *
+ * The bulletin's own table stops at 120 but says the classes continue, so the
+ * class is computed rather than looked up.
+ *
+ * WHY THIS IS ON THE DASHBOARD
+ * It is the size structure of the urban forest, and it answers a question
+ * counting trees cannot: whether there is a mature canopy coming. A thousand
+ * trees all in the smallest class is a planting programme that has worked and
+ * a canopy that is still twenty years away. The same thousand spread across
+ * the classes is a forest that replaces itself.
+ * =========================================================================== */
+
+/** The smallest diameter the bulletin inventories. Below this is a seedling. */
+export const SMALLEST_CLASSED_DBH = 5;
+
+/** The class a diameter falls in, in centimetres, or null if it is too small. */
+export function diameterClassOf(tree) {
+  const diameter = dbhCm(tree);
+  if (diameter === null || diameter < SMALLEST_CLASSED_DBH) return null;
+  return Math.round(diameter / 10) * 10;
+}
+
+/** "25 to 34 cm", the band a class covers. */
+export const diameterClassRange = (klass) => `${klass - 5} to ${klass + 4} cm`;
+
+/**
+ * How many trees fall in each class, smallest class first.
+ *
+ * Every class between the smallest and the largest present is included even
+ * when it is empty, because a gap in the middle of the range is itself the
+ * finding — it means a cohort that was never planted, or one that was lost.
+ *
+ * `belowSmallest` and `unmeasured` are kept apart: a seedling under 5 cm is a
+ * tree somebody measured, and a tree with no diameter recorded is not.
+ */
+export function diameterDistribution(trees) {
+  const rows = Array.isArray(trees) ? trees : [];
+  const counts = new Map();
+  let belowSmallest = 0;
+  let unmeasured = 0;
+
+  for (const tree of rows) {
+    const diameter = dbhCm(tree);
+    if (diameter === null) {
+      unmeasured += 1;
+      continue;
+    }
+    if (diameter < SMALLEST_CLASSED_DBH) {
+      belowSmallest += 1;
+      continue;
+    }
+    const klass = Math.round(diameter / 10) * 10;
+    counts.set(klass, (counts.get(klass) ?? 0) + 1);
+  }
+
+  const measured = rows.length - unmeasured - belowSmallest;
+  const present = [...counts.keys()];
+  const classes = [];
+
+  if (present.length > 0) {
+    const largest = Math.max(...present);
+    for (let klass = 10; klass <= largest; klass += 10) {
+      const count = counts.get(klass) ?? 0;
+      classes.push({
+        class: klass,
+        range: diameterClassRange(klass),
+        count,
+        share: measured > 0 ? count / measured : 0,
+      });
+    }
+  }
+
+  return { classes, belowSmallest, unmeasured, measured, total: rows.length };
+}
+
+/**
+ * What the shape of that distribution says, in a sentence.
+ *
+ * Descriptive, not prescriptive: it reports where the weight sits and what
+ * that means for canopy, and stops short of telling an LGU what to plant. The
+ * thresholds are for describing a shape, not a standard anybody set.
+ */
+export function readDiameterShape(distribution) {
+  const { classes, measured } = distribution;
+  if (measured === 0) return null;
+
+  const share = (from, to) =>
+    classes
+      .filter((row) => row.class >= from && (to === undefined || row.class <= to))
+      .reduce((sum, row) => sum + row.share, 0);
+
+  const young = share(10, 20);
+  const large = share(60);
+
+  if (young >= 0.6) {
+    return {
+      key: 'young',
+      headline: 'Mostly young trees',
+      detail:
+        'Most of the trees measured here are under 25 cm across. A canopy takes decades, so most ' +
+        'of the shade and cooling these will give is still ahead of them.',
+    };
+  }
+  if (large >= 0.4) {
+    return {
+      key: 'mature',
+      headline: 'Mostly mature trees',
+      detail:
+        'A large share are 55 cm across or more. These give the most shade and hold the most ' +
+        'carbon, and they are the hardest to replace: when one goes, the canopy it provided ' +
+        'takes decades to grow back.',
+    };
+  }
+  return {
+    key: 'mixed',
+    headline: 'A mix of ages',
+    detail:
+      'The trees measured here are spread across the size classes rather than bunched in one, ' +
+      'which is what lets a forest replace itself as older trees are lost.',
+  };
+}
