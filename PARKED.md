@@ -40,6 +40,13 @@ Last read through: 10 October 2026.
 
 ## Still open here
 
+- **Odd columns in public.trees.** The table has 43 columns and a few look
+  like accidents: one named `trees` that nothing reads, `heightClass`
+  beside `height_class` for one fact, `photo_url` beside `imageUrl` for one
+  photograph, and `is_tagged` which nothing in either repo touches. Query 8
+  of `supabase/data_checks.sql` counts the non-null values in each: empty
+  everywhere is safe to drop, anything else is somebody’s data.
+
 - **Phone-width screenshots.** The About page, the BioDashboard and the map's
   area panel have only ever been seen on a desktop. The area panel is the one
   to check: six figures and a barangay list is more than one tree's details,
