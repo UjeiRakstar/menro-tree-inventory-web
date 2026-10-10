@@ -22,16 +22,23 @@
 -- separate places: the bar chart on the analytics page, the list in the map's
 -- area panel, and anything MENRO exports.
 --
+-- ONLY the abbreviation is removed. An earlier version of this file stripped
+-- the word "Barangay" as well, and that was wrong: "Barangay" is part of the
+-- official name of 63 barangays in Laguna — Santa Cruz's Barangay I to V,
+-- Cabuyao's Barangay Uno, Luisiana's Barangay Zone I, San Pablo's Barangay
+-- I-A. Stripping it left "V" and "Uno", which name nothing. If you ran that
+-- version, supabase/barangay_repair.sql puts them back.
+--
 -- Doubled spaces and stray whitespace go the same way, for the same reason.
 -- ---------------------------------------------------------------------------
 update public.trees
 set barangay = regexp_replace(
-      trim(regexp_replace(barangay, '^(brgy\.?|barangay)\s+', '', 'i')),
+      trim(regexp_replace(barangay, '^brgy\.?\s+', '', 'i')),
       '\s+', ' ', 'g'
     )
 where barangay is not null
   and barangay <> regexp_replace(
-        trim(regexp_replace(barangay, '^(brgy\.?|barangay)\s+', '', 'i')),
+        trim(regexp_replace(barangay, '^brgy\.?\s+', '', 'i')),
         '\s+', ' ', 'g'
       );
 
@@ -61,7 +68,7 @@ select
   coalesce(nullif(trim(t.barangay), ''), '(not recorded)') as barangay,
   count(*) as trees,
   (select count(*) from public.trees
-    where barangay ~* '^(brgy\.?|barangay)\s+') as still_prefixed,
+    where barangay ~* '^brgy\.?\s+') as still_abbreviated,
   (select count(*) from public.trees
     where tree_category = 'Fruit') as still_fruit
 from public.trees t

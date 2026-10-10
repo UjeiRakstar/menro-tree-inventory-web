@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Info, Loader2, TreePine, X } from 'lucide-react';
 import { traitsOf, biodiversityTrait, categoryTrait, highlightForTrait } from '../../lib/treeTraits.js';
 import { DBH_EXPLAINER, dbhOf, heightOf, observedOn, phenologyOf } from '../../lib/treeDetails.js';
+import { barangayLabel } from '../../lib/barangayNames.js';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
 import dbhIcon from '../../assets/DBH_icon.png';
@@ -31,11 +32,17 @@ function imagesOf(tree) {
   ].filter(Boolean);
 }
 
-/** "Brgy. Bubukal, Santa Cruz, Laguna", dropping whatever the record cannot say. */
+/**
+ * "Brgy. Bubukal, Santa Cruz, Laguna", dropping whatever the record cannot say.
+ *
+ * The barangay is named through barangayLabel rather than by trimming a prefix
+ * here: "Barangay V" is a real name in Santa Cruz, and this used to render it
+ * as "Brgy. V".
+ */
 function placeLine(tree, municipalityLabel) {
-  const barangay = (tree.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim();
   const parts = [];
-  if (barangay && !/^unknown/i.test(barangay)) parts.push(`Brgy. ${barangay}`);
+  const barangay = barangayLabel(tree.barangay);
+  if (barangay) parts.push(barangay);
   if (municipalityLabel) parts.push(municipalityLabel);
   if (parts.length === 0) return 'Laguna';
   return `${parts.join(', ')}, Laguna`;

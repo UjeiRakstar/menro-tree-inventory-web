@@ -1,3 +1,5 @@
+import { canonicalBarangay } from './barangayNames.js';
+
 /**
  * The figures behind the public BioDashboard.
  *
@@ -38,11 +40,15 @@ export function isInvasive(tree) {
   return status.trim() === 'invasive';
 }
 
-/** Barangay name as it should be grouped and shown, or null when unrecorded. */
+/**
+ * Barangay name as it should be grouped and shown, or null when unrecorded.
+ *
+ * The naming is not a regular expression here — "Barangay" is part of the real
+ * name of 63 barangays in Laguna, so stripping it turns Barangay V into V.
+ * See src/lib/barangayNames.js.
+ */
 export function barangayOf(tree) {
-  const raw = (tree?.barangay || '').replace(/^(brgy\.?|barangay)\s+/i, '').trim();
-  if (!raw || /^unknown/i.test(raw)) return null;
-  return raw;
+  return canonicalBarangay(tree?.barangay);
 }
 
 /** Totals for a set of trees. */

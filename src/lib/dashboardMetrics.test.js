@@ -59,8 +59,14 @@ describe('dashboardMetrics totals', () => {
 describe('dashboardMetrics grouping', () => {
   it('strips the Brgy. prefix so one place is one bar', () => {
     expect(barangayOf({ barangay: 'Brgy. Bubukal' })).toBe('Bubukal');
-    expect(barangayOf({ barangay: 'Barangay V' })).toBe('V');
     expect(barangayOf({ barangay: 'Bubukal' })).toBe('Bubukal');
+  });
+
+  it('keeps the word Barangay where it is part of the name', () => {
+    // Santa Cruz really has a Barangay I through Barangay V, and an earlier
+    // version of this stripped them down to "I" and "V", which name nothing.
+    expect(barangayOf({ barangay: 'Barangay V' })).toBe('Barangay V');
+    expect(barangayOf({ barangay: 'V' })).toBe('Barangay V');
   });
 
   it('leaves out places the record cannot name', () => {
