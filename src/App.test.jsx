@@ -15,9 +15,11 @@ vi.mock('react-leaflet', () => {
     Polygon: () => null,
     GeoJSON: () => null,
     Popup: passthrough,
+    useMapEvents: () => ({}),
     useMap: () => ({
       flyTo: vi.fn(),
       flyToBounds: vi.fn(),
+      fitBounds: vi.fn(),
       getZoom: () => 15,
       getPane: () => ({ style: {} }),
       createPane: () => ({ style: {} }),

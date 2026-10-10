@@ -1,14 +1,19 @@
-import { render, screen, cleanup, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // -----------------------------------------------------------------------------
 // react-leaflet stand-ins. The map itself is inert; what matters is which layers
 // the page asks for, with which geometry and styling.
 // -----------------------------------------------------------------------------
-const { flyToBoundsSpy, featureHandlers, panes } = vi.hoisted(() => ({
+const { flyToBoundsSpy, fitBoundsSpy, featureHandlers, panes, mapState, mapEventHandlers } = vi.hoisted(() => ({
   flyToBoundsSpy: vi.fn(),
+  fitBoundsSpy: vi.fn(),
   featureHandlers: new Map(),
   panes: new Map(),
+  // Street level by default, where the test trees stand far enough apart to be
+  // drawn one by one. A test that wants them grouped turns this down.
+  mapState: { zoom: 18 },
+  mapEventHandlers: {},
 }));
 
 vi.mock('react-leaflet', () => ({
@@ -60,9 +65,27 @@ vi.mock('react-leaflet', () => ({
   ),
   Circle: () => <div data-testid="circle" />,
   Popup: ({ children }) => <div data-testid="popup">{children}</div>,
+  // A grouped set of trees. The icon is a Leaflet divIcon, so what is asserted
+  // is the count the page asked it to carry, not how it was drawn.
+  Marker: ({ position, title, eventHandlers }) => (
+    <div
+      data-testid="tree-cluster"
+      data-center={JSON.stringify(position)}
+      data-label={title}
+      onClick={() => eventHandlers?.click?.()}
+    />
+  ),
+  // Leaflet tells the page when a zoom settles; the page then re-reads the
+  // zoom and regroups. Holding the handler lets a test do the telling.
+  useMapEvents: (handlers) => {
+    Object.assign(mapEventHandlers, handlers);
+    return {};
+  },
   useMap: () => ({
     flyToBounds: flyToBoundsSpy,
+    fitBounds: fitBoundsSpy,
     flyTo: vi.fn(),
+    getZoom: () => mapState.zoom,
     getPane: (name) => panes.get(name),
     createPane: (name) => {
       const element = { style: {} };
@@ -103,6 +126,20 @@ function renderMap() {
 }
 
 const markers = () => screen.getAllByTestId('tree-marker');
+const clusters = () => screen.queryAllByTestId('tree-cluster');
+
+/**
+ * One tree's pin, found by where it stands.
+ *
+ * Not by its place in the list: the open tree is drawn last so it sits on top
+ * of the others, so an index says nothing about which tree it is.
+ */
+const markerFor = (tree) =>
+  markers().find((m) => m.dataset.center === JSON.stringify([tree.latitude, tree.longitude]));
+
+/** What colour each tree is drawn, keyed by species and position. */
+const fills = () =>
+  Object.fromEntries(TREES.map((tree) => [tree.id, markerFor(tree)?.dataset.fill]));
 
 /** The blue dot only draws once the browser reports a position. */
 function locateAt(latitude, longitude) {
@@ -123,6 +160,8 @@ beforeEach(() => {
   featureHandlers.clear();
   panes.clear();
   flyToBoundsSpy.mockClear();
+  fitBoundsSpy.mockClear();
+  mapState.zoom = 18;
   supabaseMock.setResponse('trees:select', { data: TREES, error: null });
   supabaseMock.setResponse('species_profiles:select', {
     data: { species: 'Narra', description: 'Narra is the national tree.', details: 'Used for furniture.' },
@@ -328,40 +367,34 @@ describe('PublicMap', () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
-    fireEvent.click(markers()[0]);
+    fireEvent.click(markerFor(TREES[0]));
     await screen.findByRole('complementary');
 
-    // The open Narra, then Mango and Acacia faded, then the other two Narra.
-    expect(markers().map((m) => m.dataset.fill)).toEqual([
-      '#064e3b',
-      '#94a3b8',
-      '#94a3b8',
-      '#16a34a',
-      '#16a34a',
-    ]);
+    // The open Narra, the other two Narra picked out, Mango and Acacia faded.
+    expect(fills()).toEqual({
+      1: '#064e3b',
+      2: '#94a3b8',
+      3: '#94a3b8',
+      4: '#16a34a',
+      5: '#16a34a',
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Close tree details' }));
     await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument());
-    expect(markers().map((m) => m.dataset.fill)).toEqual([
-      '#16a34a',
-      '#16a34a',
-      '#16a34a',
-      '#16a34a',
-      '#16a34a',
-    ]);
+    expect(Object.values(fills()).every((fill) => fill === '#16a34a')).toBe(true);
   });
 
   it('brings a collapsed panel back when another tree is tapped', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
-    fireEvent.click(markers()[0]);
+    fireEvent.click(markerFor(TREES[0]));
     const panel = await screen.findByRole('complementary');
     fireEvent.click(screen.getByRole('button', { name: 'Hide tree details' }));
     expect(panel).toHaveAttribute('aria-hidden', 'true');
 
     // Otherwise tapping a pin looks like it does nothing.
-    fireEvent.click(markers()[1]);
+    fireEvent.click(markerFor(TREES[1]));
     await waitFor(() => expect(panel).toHaveAttribute('aria-hidden', 'false'));
     expect(within(panel).getByRole('heading', { level: 2, name: 'Mango' })).toBeInTheDocument();
   });
@@ -370,11 +403,11 @@ describe('PublicMap', () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
-    fireEvent.click(markers()[0]);
+    fireEvent.click(markerFor(TREES[0]));
     const panel = await screen.findByRole('complementary');
 
     fireEvent.click(screen.getByRole('button', { name: 'Close tree details' }));
-    fireEvent.click(markers()[1]);
+    fireEvent.click(markerFor(TREES[1]));
 
     // The close was abandoned, not honoured 300ms later on the wrong tree.
     expect(within(panel).getByRole('heading', { level: 2, name: 'Mango' })).toBeInTheDocument();
@@ -386,7 +419,7 @@ describe('PublicMap', () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
 
-    fireEvent.click(markers()[0]);
+    fireEvent.click(markerFor(TREES[0]));
     const panel = await screen.findByRole('complementary');
 
     const badge = within(panel).getByRole('button', { name: /Highlight every endemic species/i });
@@ -394,24 +427,69 @@ describe('PublicMap', () => {
 
     // Endemic: the open Narra and the Acacia. The invasive Mango and the two
     // Narra with no status recorded fade back.
-    expect(markers().map((m) => m.dataset.fill)).toEqual([
-      '#064e3b',
-      '#94a3b8',
-      '#16a34a',
-      '#94a3b8',
-      '#94a3b8',
-    ]);
+    expect(fills()).toEqual({
+      1: '#064e3b',
+      2: '#94a3b8',
+      3: '#16a34a',
+      4: '#94a3b8',
+      5: '#94a3b8',
+    });
     expect(badge).toHaveAttribute('aria-pressed', 'true');
 
     // Pressing it again returns to the species the panel is showing.
     fireEvent.click(badge);
-    expect(markers().map((m) => m.dataset.fill)).toEqual([
-      '#064e3b',
-      '#94a3b8',
-      '#94a3b8',
-      '#16a34a',
-      '#16a34a',
+    expect(fills()).toEqual({
+      1: '#064e3b',
+      2: '#94a3b8',
+      3: '#94a3b8',
+      4: '#16a34a',
+      5: '#16a34a',
+    });
+  });
+
+  it('groups trees that would be drawn on top of each other, and counts them', async () => {
+    // Seen from across the province rather than from the street.
+    mapState.zoom = 11;
+    renderMap();
+
+    // Three in Santa Cruz, two in Pila: two bubbles, no loose pins.
+    await waitFor(() => expect(clusters()).toHaveLength(2));
+    expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
+    expect(clusters().map((c) => c.dataset.label).sort()).toEqual([
+      '2 tagged trees — zoom in to see them',
+      '3 tagged trees — zoom in to see them',
     ]);
+  });
+
+  it('zooms into a group when it is tapped, rather than opening one of them', async () => {
+    mapState.zoom = 11;
+    renderMap();
+    await waitFor(() => expect(clusters()).toHaveLength(2));
+
+    fireEvent.click(clusters()[0]);
+
+    // The corners of what is inside it, not a tree panel.
+    expect(fitBoundsSpy).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ maxZoom: 18 })
+    );
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  });
+
+  it('never hides the open tree inside a group', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    fireEvent.click(markerFor(TREES[0]));
+    await screen.findByRole('complementary');
+
+    // Zooming out would otherwise fold the open tree under a number, which
+    // looks like the pin you just tapped has gone.
+    mapState.zoom = 11;
+    act(() => mapEventHandlers.zoomend());
+
+    await waitFor(() => expect(clusters().length).toBeGreaterThan(0));
+    expect(markerFor(TREES[0])).toBeDefined();
+    expect(markerFor(TREES[0]).dataset.fill).toBe('#064e3b');
   });
 
   it('keeps the tree points in a pane above the boundaries, so they stay clickable', async () => {

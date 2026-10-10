@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, GeoJSON, Polygon, useMap, Circle } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  CircleMarker,
+  Marker,
+  Popup,
+  GeoJSON,
+  Polygon,
+  useMap,
+  useMapEvents,
+  Circle,
+} from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Loader2, Locate, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
@@ -18,6 +30,7 @@ import { labelOf } from '../../lib/lguOptions.js';
 import { logoFor } from '../../lib/lguLogos.js';
 import { matchesHighlight } from '../../lib/treeTraits.js';
 import { barangayOf, groupBy, summarise } from '../../lib/dashboardMetrics.js';
+import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import TaggingForm from '../../components/public/TaggingForm.jsx';
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
 import AreaDetailPanel from '../../components/public/AreaDetailPanel.jsx';
@@ -47,6 +60,8 @@ const PANES = [
   ['laguna-mask', 410],
   ['laguna-boundaries', 420],
   ['tree-points', 450],
+  // The group bubbles sit over the pins they stand for.
+  ['tree-clusters', 455],
   // Above the points: wherever the visitor is standing, that dot is the one
   // thing that must stay tappable — it is how tagging starts.
   ['user-location', 460],
@@ -254,6 +269,112 @@ function UserLocationMarker({ onTagAttempt }) {
           </div>
         </Popup>
       </CircleMarker>
+    </>
+  );
+}
+
+/** How big a group bubble is, by how many trees it stands for. */
+function bubbleSize(count) {
+  if (count < 10) return 34;
+  if (count < 50) return 42;
+  return 50;
+}
+
+/**
+ * The bubble drawn in place of trees that would otherwise overlap.
+ *
+ * Built as a divIcon rather than a vector circle because the number has to sit
+ * inside it, and Leaflet's SVG renderer has no text of its own.
+ */
+function bubbleIcon(count, color) {
+  const size = bubbleSize(count);
+  return L.divIcon({
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html:
+      `<div style="width:${size}px;height:${size}px;border-radius:9999px;` +
+      `background:${color};border:3px solid #ffffff;` +
+      `box-shadow:0 1px 4px rgba(15,23,42,0.35);color:#ffffff;` +
+      `font:700 ${count > 99 ? 11 : 13}px/1 system-ui,sans-serif;` +
+      `display:flex;align-items:center;justify-content:center;">${count}</div>`,
+  });
+}
+
+/**
+ * The tagged trees, grouped while they would otherwise sit on top of
+ * each other.
+ *
+ * Every tree in the inventory stands in Santa Cruz, so at province scale they
+ * were one green smudge: no way to tell twelve from eighty, and the pin you
+ * tapped was whichever happened to be drawn last. Pins within about 64 screen
+ * pixels become one bubble carrying the count, which comes apart by itself as
+ * the map is zoomed in. Tapping a bubble zooms to what is inside it.
+ *
+ * The open tree is always drawn as itself, never folded into a bubble —
+ * otherwise opening a pin could make it disappear under a number.
+ */
+function TreePins({ pins, openTreeId, highlighting, onSelect }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom?.() ?? 11);
+  useMapEvents({ zoomend: () => setZoom(map.getZoom?.() ?? zoom) });
+
+  const openPin = useMemo(
+    () => (openTreeId ? pins.find((pin) => pin.id === openTreeId) ?? null : null),
+    [pins, openTreeId]
+  );
+  const groupable = useMemo(
+    () => (openPin ? pins.filter((pin) => pin.id !== openPin.id) : pins),
+    [pins, openPin]
+  );
+  const clusters = useMemo(() => clusterPins(groupable, zoom), [groupable, zoom]);
+
+  const drawPin = (pin, isOpen) => {
+    const muted = highlighting && !pin.highlighted;
+    return (
+      <CircleMarker
+        key={pin.id}
+        center={pin.position}
+        radius={isOpen ? 10 : 7}
+        pane="tree-points"
+        pathOptions={{
+          color: '#ffffff',
+          weight: isOpen ? 3 : 2,
+          fillColor: isOpen ? MARKER_SELECTED_COLOR : muted ? MARKER_MUTED_COLOR : MARKER_COLOR,
+          fillOpacity: muted ? 0.55 : 0.95,
+        }}
+        eventHandlers={{ click: () => onSelect(pin.tree) }}
+      />
+    );
+  };
+
+  return (
+    <>
+      {clusters.map((cluster) => {
+        if (cluster.count === 1) return drawPin(cluster.pins[0], false);
+
+        // A group is only faded when nothing inside it is picked out.
+        const muted = highlighting && !cluster.pins.some((pin) => pin.highlighted);
+        const label = `${cluster.count} tagged trees — zoom in to see them`;
+        return (
+          <Marker
+            key={cluster.key}
+            position={cluster.position}
+            pane="tree-clusters"
+            icon={bubbleIcon(cluster.count, muted ? MARKER_MUTED_COLOR : MARKER_COLOR)}
+            title={label}
+            alt={label}
+            eventHandlers={{
+              click: () => {
+                const bounds = boundsOfCluster(cluster);
+                if (bounds) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 18 });
+              },
+            }}
+          />
+        );
+      })}
+
+      {openPin && drawPin(openPin, true)}
     </>
   );
 }
@@ -662,26 +783,14 @@ export default function PublicMap() {
         {/* User location blue dot */}
         <UserLocationMarker onTagAttempt={handleTagAttempt} />
 
-        {/* Tree markers — tapping one opens the side panel */}
-        {mapPins.map((pin) => {
-          const isOpen = pin.id === selectedTree?.id;
-          const muted = Boolean(highlight) && !pin.highlighted;
-          return (
-            <CircleMarker
-              key={pin.id}
-              center={pin.position}
-              radius={isOpen ? 10 : 7}
-              pane="tree-points"
-              pathOptions={{
-                color: '#ffffff',
-                weight: isOpen ? 3 : 2,
-                fillColor: isOpen ? MARKER_SELECTED_COLOR : muted ? MARKER_MUTED_COLOR : MARKER_COLOR,
-                fillOpacity: muted ? 0.55 : 0.95,
-              }}
-              eventHandlers={{ click: () => handleSelectTree(pin.tree) }}
-            />
-          );
-        })}
+        {/* Tagged trees — tapping one opens the side panel, and the ones that
+            would overlap are grouped into a bubble until the map zooms in */}
+        <TreePins
+          pins={mapPins}
+          openTreeId={selectedTree?.id}
+          highlighting={Boolean(highlight)}
+          onSelect={handleSelectTree}
+        />
       </MapContainer>
 
       {/* A map with no pins because the read failed, saying so */}
@@ -802,6 +911,15 @@ export default function PublicMap() {
             <span className="text-[10px] text-slate-600">
               {highlight ? `Highlighted (${highlightedCount})` : 'Tagged tree'}
             </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 border-white text-[7px] font-bold text-white shadow-sm"
+              style={{ backgroundColor: MARKER_COLOR }}
+            >
+              9
+            </span>
+            <span className="text-[10px] text-slate-600">Several — tap to zoom in</span>
           </div>
           {highlight && (
             <div className="flex items-center gap-2">
