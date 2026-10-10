@@ -79,6 +79,16 @@ describe('the measurements the equation needs', () => {
     expect(merchantableHeightM({ merchantableHeight: 9 })).toBe(9);
   });
 
+  it('refuses a height too short to be a merchantable bole', () => {
+    // A real record: a 17 cm Mahogany carrying 0.61. The bole is measured from
+    // a stump about 0.5 m up, so 0.61 would be a trunk shorter than the stump
+    // it starts from. Rounding it to 1 would quietly turn it into a volume.
+    expect(merchantableHeightM({ merchantable_height: 0.61 })).toBeNull();
+    expect(volumeOf({ species: 'Mahogany', dbh: '17 cm', merchantable_height: 0.61 })).toBeNull();
+    // A metre is the shortest thing the bulletin can be recording.
+    expect(merchantableHeightM({ merchantable_height: 1 })).toBe(1);
+  });
+
   it('refuses a measurement that is not one', () => {
     expect(dbhCm({ dbh: 'not measured' })).toBeNull();
     expect(dbhCm({ dbh: 0 })).toBeNull();

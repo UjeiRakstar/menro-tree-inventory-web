@@ -113,3 +113,44 @@ select
                      and (merchantable_height is null
                           or merchantable_height::text !~ '[1-9]')) as total_height_only
 from public.trees;
+
+-- ---------------------------------------------------------------------------
+-- 7. Is merchantable_height actually a merchantable height?
+--
+-- One row holds 0.61 against a 17 cm diameter. The DENR measures the bole from
+-- a stump about 0.5 m above the ground to the first major branch and records
+-- it to the nearest metre, so 0.61 is not a short bole — it is not a bole.
+--
+-- This asks whether that is one bad row or the whole column. Read `band`:
+--
+--   under 1 m          not a merchantable height. Something else is being
+--                      written into the column.
+--   1 to 30 m          plausible.
+--   over 30 m          taller than almost any tree in Laguna; likely a total
+--                      height, or a reading in the wrong unit.
+--
+-- If most rows are under a metre, the carbon figure on the dashboard is
+-- resting on nothing and the column needs fixing before the figure means
+-- anything. The dashboard already leaves those trees out and says so.
+-- ---------------------------------------------------------------------------
+select
+  case
+    when merchantable_height is null then 'not recorded'
+    when merchantable_height::numeric < 1  then 'under 1 m — not a bole'
+    when merchantable_height::numeric <= 30 then '1 to 30 m — plausible'
+    else 'over 30 m — suspect'
+  end as band,
+  count(*) as trees,
+  round(min(merchantable_height::numeric), 2) as smallest,
+  round(max(merchantable_height::numeric), 2) as largest
+from public.trees
+group by 1
+order by 2 desc;
+
+-- Side by side with total height, for the rows that have both. If
+-- merchantable_height tracks total_height closely, the app is recording the
+-- whole tree rather than the bole, and the volumes would be overstated.
+-- select id, species, dbh, merchantable_height, total_height
+-- from public.trees
+-- where merchantable_height is not null and total_height is not null
+-- order by species limit 50;

@@ -81,6 +81,20 @@ export function dbhCm(tree) {
 }
 
 /**
+ * The shortest merchantable height that can be a merchantable height.
+ *
+ * The bulletin measures the bole from a stump about 0.5 m above the ground to
+ * the first major branch, and records it to the nearest metre. A value below a
+ * metre is therefore not a short tree — it is not a merchantable height at
+ * all. One record in the inventory holds 0.61 against a 17 cm diameter, which
+ * would be a trunk shorter than the stump it is measured from.
+ *
+ * Rounding such a value to 1 would quietly turn it into a volume, so it is
+ * refused instead and the tree counts as unmeasured.
+ */
+export const MIN_MERCHANTABLE_HEIGHT_M = 1;
+
+/**
  * Merchantable height in metres, recorded to the nearest metre.
  *
  * Only merchantable_height is used. Total height is the whole tree including
@@ -90,7 +104,8 @@ export function dbhCm(tree) {
  */
 export function merchantableHeightM(tree) {
   const raw = measure(tree?.merchantable_height ?? tree?.merchantableHeight);
-  return raw === null ? null : Math.round(raw);
+  if (raw === null || raw < MIN_MERCHANTABLE_HEIGHT_M) return null;
+  return Math.round(raw);
 }
 
 /**
