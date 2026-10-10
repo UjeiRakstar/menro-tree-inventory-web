@@ -36,6 +36,7 @@ import {
   loadBarangayIndex,
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
+import { PUBLIC_DASHBOARD_COLUMNS } from '../../lib/treeColumns.js';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 
@@ -281,7 +282,7 @@ export default function PublicDashboard() {
     (async () => {
       setLoading(true);
       setLoadError('');
-      const { data, error } = await supabase.from('trees').select('*');
+      const { data, error } = await supabase.from('trees').select(PUBLIC_DASHBOARD_COLUMNS);
       if (cancelled) return;
       if (error) setLoadError(error.message || 'The inventory could not be loaded.');
       else setTrees(Array.isArray(data) ? data : []);

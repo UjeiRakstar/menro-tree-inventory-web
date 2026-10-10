@@ -37,6 +37,7 @@ import {
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
+import { PUBLIC_MAP_COLUMNS } from '../../lib/treeColumns.js';
 /**
  * The tagging form carries a confetti animation for its success screen, which
  * is a quarter of a megabyte a visitor should not download for a button they
@@ -468,7 +469,7 @@ export default function PublicMap() {
       setLoading(true);
       setLoadError('');
       try {
-        const { data, error } = await supabase.from('trees').select('*');
+        const { data, error } = await supabase.from('trees').select(PUBLIC_MAP_COLUMNS);
         if (cancelled) return;
         if (error) {
           setLoadError(error.message || 'The tree data could not be loaded.');
