@@ -46,8 +46,22 @@ function InfoHint({ label, text }) {
   );
 }
 
+/**
+ * Which part of the place's trees the carbon figure speaks for.
+ *
+ * The DENR equation needs a merchantable height, and not every record has one.
+ * A total from some of the trees is worth showing, but only if it says so.
+ */
+function carbonNote(totals) {
+  const measured = totals?.carbonMeasured ?? 0;
+  const total = totals?.treeCount ?? 0;
+  if (total === 0 || measured === total) return '';
+  if (measured === 0) return 'none measured yet';
+  return `from ${formatFigure(measured)} of ${formatFigure(total)}`;
+}
+
 /** One figure: its name on the left, the number on the right. */
-function FigureRow({ metric, value }) {
+function FigureRow({ metric, value, note = '' }) {
   const unavailable = !metric.available;
   const tone = metric.tone === 'red' ? 'text-red-700' : 'text-green-800';
 
@@ -65,6 +79,9 @@ function FigureRow({ metric, value }) {
           <span className="ml-1 text-[10px] text-slate-400">{metric.unit}</span>
         )}
         {unavailable && <span className="block text-[10px] text-slate-400">Not available yet</span>}
+        {!unavailable && note && (
+          <span className="mt-0.5 block text-[10px] leading-tight text-slate-400">{note}</span>
+        )}
       </dd>
     </div>
   );
@@ -229,7 +246,12 @@ export default function AreaDetailPanel({
                 </h3>
                 <dl className="mt-1.5 divide-y divide-slate-100 rounded-xl border border-slate-200">
                   {pair.metrics.map((metric) => (
-                    <FigureRow key={metric.key} metric={metric} value={totals?.[metric.key]} />
+                    <FigureRow
+                      key={metric.key}
+                      metric={metric}
+                      value={totals?.[metric.key]}
+                      note={metric.key === 'carbonKg' ? carbonNote(totals) : ''}
+                    />
                   ))}
                 </dl>
               </section>

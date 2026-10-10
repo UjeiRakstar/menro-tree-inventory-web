@@ -11,7 +11,7 @@ export default function PublicFooter() {
   // it and the mark lands on whatever the page ended with — on the BioDashboard
   // it sat across the chart.
   return (
-    <footer className="relative bg-[#1A6136] text-white pt-16 pb-12 mt-24 sm:mt-28 lg:mt-32">
+    <footer className="relative bg-[#1A6136] text-white pt-16 pb-20 sm:pb-12 mt-24 sm:mt-28 lg:mt-32">
       {/* Brand mark, peeking over the top edge into that margin */}
       <div className="absolute top-0 right-4 sm:right-10 lg:right-20 -translate-y-[45%] flex items-center pointer-events-none z-10">
         <div className="text-[2.75rem] sm:text-[6rem] lg:text-[8rem] font-black tracking-tighter leading-none flex items-center drop-shadow-[0_4px_4px_rgba(255,255,255,0.5)]">
@@ -35,7 +35,7 @@ export default function PublicFooter() {
               <img src={pgenroLogo} alt="PGENRO Logo" className="w-14 sm:w-16 h-14 sm:h-16 object-contain" />
               <img src={lspuLogo} alt="LSPU Logo" className="w-14 sm:w-16 h-14 sm:h-16 object-contain" />
             </div>
-            <p className="text-sm leading-relaxed text-green-50/90 text-justify">
+            <p className="text-sm leading-relaxed text-green-50/90 text-left sm:text-justify">
               Shaping climate-resilient landscapes through data-driven environmental solutions for a sustainable tomorrow. A collaborative effort from the Laguna State Polytechnic University, Provincial Government of Laguna, and PGENRO - Climate Change Adaptation and Mitigation Division.
             </p>
           </div>

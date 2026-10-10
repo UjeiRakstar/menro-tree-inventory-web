@@ -87,3 +87,29 @@ order by count(*) desc;
 -- update public.trees
 -- set barangay = trim(regexp_replace(barangay, '^(brgy\.?|barangay)\s+', '', 'i'))
 -- where barangay ~* '^(brgy\.?|barangay)\s+';
+
+-- ---------------------------------------------------------------------------
+-- 6. How much of the inventory the carbon figure can speak for.
+--
+-- The DENR volume equation (FMB Technical Bulletin No. 3) needs a diameter at
+-- breast height AND a merchantable height. A tree missing either is counted on
+-- the map and left out of the carbon total, and the dashboard says so beside
+-- the figure.
+--
+-- If `both` is a small share of `trees`, that is a field-work finding rather
+-- than a software one: merchantable height is the measurement to push on.
+-- ---------------------------------------------------------------------------
+select
+  count(*)                                                     as trees,
+  count(*) filter (where nullif(trim(dbh::text), '') is not null
+                     and (dbh::text) ~ '[1-9]')                as has_dbh,
+  count(*) filter (where merchantable_height is not null
+                     and merchantable_height::text ~ '[1-9]')  as has_merchantable_height,
+  count(*) filter (where (dbh::text) ~ '[1-9]'
+                     and merchantable_height is not null
+                     and merchantable_height::text ~ '[1-9]')  as both,
+  count(*) filter (where total_height is not null
+                     and total_height::text ~ '[1-9]'
+                     and (merchantable_height is null
+                          or merchantable_height::text !~ '[1-9]')) as total_height_only
+from public.trees;

@@ -104,7 +104,7 @@ function InfoHint({ label, text }) {
  * The whole card is the button that charts its pair, so the target is the thing
  * being read rather than a separate control beside it.
  */
-function StatCard({ metric, value, active, onSelect }) {
+function StatCard({ metric, value, note = '', active, onSelect }) {
   const unavailable = !metric.available;
   const tone = metric.tone === 'red' ? 'text-red-700' : 'text-green-800';
 
@@ -138,6 +138,11 @@ function StatCard({ metric, value, active, onSelect }) {
 
           {unavailable && (
             <span className="mt-1 block text-[11px] leading-snug text-slate-500">Not available yet</span>
+          )}
+
+          {/* A total built from part of the inventory says which part. */}
+          {!unavailable && note && (
+            <span className="mt-1 block text-[11px] leading-snug text-slate-500">{note}</span>
           )}
         </span>
       </button>
@@ -304,6 +309,21 @@ export default function PublicDashboard() {
 
   const totals = useMemo(() => summarise(scopedTrees), [scopedTrees]);
 
+  /**
+   * Which part of the inventory the carbon figure speaks for.
+   *
+   * The DENR equation needs a merchantable height, and not every tree has one
+   * recorded. A total from some of the trees is still worth showing — but only
+   * if it says so.
+   */
+  const carbonCoverage = useMemo(() => {
+    const { carbonMeasured, treeCount } = totals;
+    if (treeCount === 0) return '';
+    if (carbonMeasured === 0) return 'No tree here has a merchantable height recorded yet';
+    if (carbonMeasured === treeCount) return '';
+    return `From ${formatFigure(carbonMeasured)} of ${formatFigure(treeCount)} trees measured`;
+  }, [totals]);
+
   // The barangay of a tree is worked out from where it stands, not from the
   // name someone typed — so the index has to arrive before the bars are right.
   const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
@@ -397,6 +417,7 @@ export default function PublicDashboard() {
                   key={metric.key}
                   metric={metric}
                   value={totals[metric.key]}
+                  note={metric.key === 'carbonKg' ? carbonCoverage : ''}
                   active={activePair === group.id}
                   onSelect={() => setActivePair(group.id)}
                 />

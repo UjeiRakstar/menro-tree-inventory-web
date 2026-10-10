@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   ALL_METRICS,
-  CARBON_PER_DBH_CM,
   METRIC_PAIRS,
   barangayOf,
   carbonForTree,
@@ -11,36 +10,43 @@ import {
   pairOfMetric,
   summarise,
 } from './dashboardMetrics.js';
+import { carbonDioxideKg } from './treeVolume.js';
 
 const tree = (over = {}) => ({ id: 't', dbh: '10 cm', barangay: 'Bubukal', ...over });
 
 describe('dashboardMetrics carbon', () => {
-  it('estimates carbon from the diameter at breast height', () => {
-    expect(carbonForTree({ dbh: '10 cm' })).toBe(10 * CARBON_PER_DBH_CM);
-    expect(carbonForTree({ dbh: 40 })).toBe(40 * CARBON_PER_DBH_CM);
+  it('comes from the DENR volume equation, not a proxy', () => {
+    const tree = { species: 'Narra', dbh: '37 cm', merchantable_height: 9 };
+    expect(carbonForTree(tree)).toBe(carbonDioxideKg(tree));
+    expect(carbonForTree(tree)).toBeGreaterThan(0);
   });
 
-  it('prefers a measured carbon figure over the proxy', () => {
-    expect(carbonForTree({ dbh: '10 cm', carbon: '999' })).toBe(999);
-  });
-
-  it('counts a tree with no usable diameter as nothing, not as a guess', () => {
-    expect(carbonForTree({ dbh: null })).toBe(0);
-    expect(carbonForTree({ dbh: '0 cm' })).toBe(0);
-    expect(carbonForTree({ dbh: 'not measured' })).toBe(0);
-    expect(carbonForTree({})).toBe(0);
+  it('says nothing for a tree it cannot measure, rather than zero', () => {
+    // Zero would be added into a total as though the tree were measured and
+    // found to hold no carbon.
+    expect(carbonForTree({ dbh: '10 cm' })).toBeNull();
+    expect(carbonForTree({ merchantable_height: 9 })).toBeNull();
+    expect(carbonForTree({ dbh: 'not measured', merchantable_height: 9 })).toBeNull();
+    expect(carbonForTree({})).toBeNull();
   });
 });
 
 describe('dashboardMetrics totals', () => {
   it('counts trees, invasives and carbon together', () => {
     const rows = [
-      tree({ id: '1', biodiversity_status: 'Endemic', dbh: '10 cm' }),
-      tree({ id: '2', biodiversity_status: 'Invasive', dbh: '20 cm' }),
-      tree({ id: '3', species_type: 'Invasive', dbh: '2 cm' }),
+      tree({ id: '1', species: 'Narra', biodiversity_status: 'Endemic', dbh: '37 cm', merchantable_height: 9 }),
+      tree({ id: '2', species: 'Mango', biodiversity_status: 'Invasive', dbh: '20 cm', merchantable_height: 5 }),
+      // No merchantable height: counted as a tree, left out of the carbon.
+      tree({ id: '3', species: 'Acacia', species_type: 'Invasive', dbh: '2 cm' }),
     ];
 
-    expect(summarise(rows)).toEqual({ treeCount: 3, invasiveCount: 2, carbonKg: 80 });
+    const totals = summarise(rows);
+    expect(totals.treeCount).toBe(3);
+    expect(totals.invasiveCount).toBe(2);
+    expect(totals.carbonMeasured).toBe(2);
+    expect(totals.carbonKg).toBe(
+      Math.round(carbonDioxideKg(rows[0]) + carbonDioxideKg(rows[1]))
+    );
   });
 
   it('reads invasive from either column, and nothing else as invasive', () => {
@@ -51,8 +57,9 @@ describe('dashboardMetrics totals', () => {
   });
 
   it('survives an empty or missing set', () => {
-    expect(summarise([])).toEqual({ treeCount: 0, invasiveCount: 0, carbonKg: 0 });
-    expect(summarise(undefined)).toEqual({ treeCount: 0, invasiveCount: 0, carbonKg: 0 });
+    const empty = { treeCount: 0, invasiveCount: 0, carbonKg: 0, carbonMeasured: 0 };
+    expect(summarise([])).toEqual(empty);
+    expect(summarise(undefined)).toEqual(empty);
   });
 });
 

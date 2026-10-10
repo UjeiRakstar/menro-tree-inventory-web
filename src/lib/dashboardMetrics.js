@@ -1,4 +1,5 @@
 import { canonicalBarangay } from './barangayNames.js';
+import { carbonDioxideKg } from './treeVolume.js';
 
 /**
  * The figures behind the public BioDashboard.
@@ -15,23 +16,24 @@ import { canonicalBarangay } from './barangayNames.js';
  */
 
 /**
- * Carbon proxy: 2.5 kg CO₂ per centimetre of diameter at breast height.
+ * Carbon comes from src/lib/treeVolume.js now: the DENR's own volume equation
+ * for Southern Luzon, from FMB Technical Bulletin No. 3, applied to the
+ * diameter and merchantable height the field team already records.
  *
- * A stand-in for a species-specific allometric equation, carried over from the
- * first version of this dashboard. Every figure derived from it is labelled an
- * estimate for that reason.
+ * It used to be a flat 2.5 kg of CO₂ per centimetre of diameter, which had no
+ * source at all.
  */
-export const CARBON_PER_DBH_CM = 2.5;
 
-/** Carbon held by one tree, in kg CO₂. Zero when it has no usable DBH. */
+/**
+ * Carbon held by one tree, in kg CO₂, or null when it has not been measured
+ * well enough to say.
+ *
+ * Null rather than zero: a tree nobody recorded a merchantable height for has
+ * an unknown carbon figure, not a carbon figure of nothing, and adding those
+ * two together would understate the province.
+ */
 export function carbonForTree(tree) {
-  if (tree?.carbon != null) {
-    const direct = parseFloat(tree.carbon);
-    if (Number.isFinite(direct)) return direct;
-  }
-  const dbh = parseFloat(tree?.dbh);
-  if (!Number.isFinite(dbh) || dbh <= 0) return 0;
-  return dbh * CARBON_PER_DBH_CM;
+  return carbonDioxideKg(tree);
 }
 
 /** Does the record call this tree invasive? */
@@ -51,13 +53,30 @@ export function barangayOf(tree) {
   return canonicalBarangay(tree?.barangay);
 }
 
-/** Totals for a set of trees. */
+/**
+ * Totals for a set of trees.
+ *
+ * `carbonMeasured` and `treeCount` together say how much of the set the carbon
+ * figure speaks for. A total built from a third of the inventory is not wrong,
+ * but showing it without saying so would be, so every screen that shows the
+ * figure shows the coverage beside it.
+ */
 export function summarise(trees) {
   const rows = Array.isArray(trees) ? trees : [];
+  let carbon = 0;
+  let measured = 0;
+  for (const tree of rows) {
+    const co2 = carbonForTree(tree);
+    if (co2 === null) continue;
+    carbon += co2;
+    measured += 1;
+  }
+
   return {
     treeCount: rows.length,
     invasiveCount: rows.filter(isInvasive).length,
-    carbonKg: Math.round(rows.reduce((sum, tree) => sum + carbonForTree(tree), 0)),
+    carbonKg: Math.round(carbon),
+    carbonMeasured: measured,
   };
 }
 
@@ -148,7 +167,11 @@ export const METRIC_PAIRS = [
         unit: 'kg CO₂',
         tone: 'green',
         available: true,
-        hint: `Estimated from each tree's diameter at breast height, at ${CARBON_PER_DBH_CM} kg CO₂ per cm — a stand-in until species-specific equations are applied.`,
+        hint:
+          'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
+          'using each tree’s diameter at breast height and merchantable height, then wood ' +
+          'density, biomass expansion and the IPCC carbon fraction. Trees with no recorded ' +
+          'merchantable height are left out rather than guessed at.',
       },
       {
         key: 'carbonEmissionKg',

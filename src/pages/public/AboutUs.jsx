@@ -419,7 +419,7 @@ export default function AboutUs() {
                   <Leaf className="text-green-500" size={16} />
                 </div>
 
-                <p className="text-gray-700 text-[15px] sm:text-base md:text-lg leading-relaxed text-justify mb-6">
+                <p className="text-gray-700 text-[15px] sm:text-base md:text-lg leading-relaxed text-left sm:text-justify mb-6">
                   The Green Tag Tree Inventory System gives the people of Laguna a
                   fighting chance to address climate change through localized mitigation
                   specifically by protecting our trees and biodiversity. Serving as
@@ -740,7 +740,7 @@ export default function AboutUs() {
             
             {/* The Text Block */}
             <div className="bg-gray-50 rounded-3xl p-8 sm:p-10 shadow-sm border border-gray-100 mb-12">
-              <p className="text-gray-700 leading-relaxed text-base sm:text-lg text-justify">
+              <p className="text-gray-700 leading-relaxed text-base sm:text-lg text-left sm:text-justify">
                 Greenhouse gas emissions are no longer just abstract numbers—we can now track and manage them. As a robust Decision Support System, Green Tag empowers LGUs to shape their Forest Land Use Plans (FLUP), Urban Biodiversity Index, and Local Climate Change Action Plans by calculating carbon stock and sequestration potential. The platform identifies verified planting sites approved by the PGENRO Forestry Division and integrates essential data from top agencies: administrative maps from NAMRIA, soil and elevation data from BSWM, climate-adjusted hazard maps from UPRI NOAH, satellite imagery from Copernicus, and CLIRAM data from DOST-PAGASA. This wealth of information ensures our leaders make resilient decisions that strictly comply with the City Biodiversity Index.
               </p>
             </div>
@@ -774,7 +774,7 @@ export default function AboutUs() {
               </h2>
             </div>
             <div className="flex-1">
-              <p className="text-gray-700 leading-relaxed text-base sm:text-lg text-justify md:text-left">
+              <p className="text-gray-700 leading-relaxed text-base sm:text-lg text-left sm:text-justify md:text-left">
                 Have questions or want to get involved with the Green Tag system? We would love to hear from you. Connect with us across our social platforms or send a direct message right here on the site, and our team will reach out to you via email. Let&apos;s grow a greener Laguna together!
               </p>
             </div>
