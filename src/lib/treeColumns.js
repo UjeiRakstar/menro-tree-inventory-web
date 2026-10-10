@@ -81,6 +81,8 @@ export const PUBLIC_DASHBOARD_COLUMNS = [
   // what the trees are grown for comes from the category.
   'scientific_name',
   'tree_category',
+  // When it was tagged: the 'as of' line and the growth of the inventory.
+  'dateCaptured',
 ].join(',');
 
 /** PostgreSQL's code for "there is no column by that name". */

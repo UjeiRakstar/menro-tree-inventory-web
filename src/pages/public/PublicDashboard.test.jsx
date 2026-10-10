@@ -74,10 +74,10 @@ import PublicDashboard from './PublicDashboard.jsx';
 
 // Santa Cruz holds three, one of them invasive; Pila holds one.
 const TREES = [
-  { id: '1', species: 'Narra', barangay: 'Bubukal', dbh: '10 cm', biodiversity_status: 'Endemic', latitude: 14.2823, longitude: 121.4163 },
-  { id: '2', species: 'Mango', barangay: 'Bubukal', dbh: '20 cm', biodiversity_status: 'Invasive', latitude: 14.2795, longitude: 121.4121 },
-  { id: '3', species: 'Acacia', barangay: 'Pagsawitan', dbh: '4 cm', biodiversity_status: 'Endemic', latitude: 14.2840, longitude: 121.4180 },
-  { id: '4', species: 'Narra', barangay: 'Pansol', dbh: '8 cm', biodiversity_status: 'Endemic', latitude: 14.2330, longitude: 121.3670 },
+  { id: '1', dateCaptured: '2026-08-01T09:00:00', species: 'Narra', barangay: 'Bubukal', dbh: '10 cm', biodiversity_status: 'Endemic', latitude: 14.2823, longitude: 121.4163 },
+  { id: '2', dateCaptured: '2026-09-02T09:00:00', species: 'Mango', barangay: 'Bubukal', dbh: '20 cm', biodiversity_status: 'Invasive', latitude: 14.2795, longitude: 121.4121 },
+  { id: '3', dateCaptured: '2026-07-15T09:00:00', species: 'Acacia', barangay: 'Pagsawitan', dbh: '4 cm', biodiversity_status: 'Endemic', latitude: 14.2840, longitude: 121.4180 },
+  { id: '4', dateCaptured: '2026-07-20T09:00:00', species: 'Narra', barangay: 'Pansol', dbh: '8 cm', biodiversity_status: 'Endemic', latitude: 14.2330, longitude: 121.3670 },
 ];
 
 // The selection lives in the query string, so the page needs a router around it.
@@ -275,6 +275,25 @@ describe('PublicDashboard', () => {
     ).toBeInTheDocument();
   });
 
+
+  it('says when the inventory was last added to', async () => {
+    renderDashboard();
+
+    // Every figure on the page was true at some moment; this says which.
+    expect(await screen.findByText(/Newest tag 2 September 2026/)).toBeInTheDocument();
+  });
+
+  it('admits when nothing records a date at all', async () => {
+    supabaseMock.setResponse('trees:select', {
+      data: TREES.map(({ dateCaptured, ...rest }) => rest),
+      error: null,
+    });
+    renderDashboard();
+
+    expect(
+      await screen.findByText('No tree here records when it was tagged.')
+    ).toBeInTheDocument();
+  });
   it('says so when the inventory cannot be read', async () => {
     supabaseMock.setResponse('trees:select', { data: null, error: { message: 'connection refused' } });
     renderDashboard();

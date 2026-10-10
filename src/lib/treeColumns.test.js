@@ -31,6 +31,8 @@ const READ_BY_THE_DASHBOARD = [
   'dbh', 'merchantable_height', 'biodiversity_status', 'species_type',
   // The species layer
   'scientific_name', 'tree_category',
+  // Freshness
+  'dateCaptured',
 ];
 
 /**

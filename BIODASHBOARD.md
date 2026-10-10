@@ -151,7 +151,7 @@ the other was not.
 
 ---
 
-## 4. Freshness
+## 4. Freshness — DONE
 
 **Why.** Quality #6 asks for "appropriately timely" and nothing on the page
 says when any of it was true.
@@ -165,6 +165,11 @@ says when any of it was true.
 **Data.** `dateCaptured`, which needs adding to the dashboard's column list.
 
 **Done when** no figure on the page is undated.
+
+**Built.** `src/lib/inventoryFreshness.js`, with the growth curve as
+`src/components/public/GrowthStrip.jsx`. The wording avoids calling an old
+survey stale: a newest tag six weeks back means nobody has been out in six
+weeks, which is a fact about the survey rather than a fault in the data.
 
 ---
 

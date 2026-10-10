@@ -43,6 +43,16 @@ import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 import SpeciesSection from '../../components/public/SpeciesSection.jsx';
 import CoverageSection from '../../components/public/CoverageSection.jsx';
 import SizeSection from '../../components/public/SizeSection.jsx';
+import GrowthStrip from '../../components/public/GrowthStrip.jsx';
+import {
+  RECENT_DAYS,
+  formatDate,
+  lastTagged,
+  taggedRecently,
+  taggingTimeline,
+  timeAgo,
+  undated,
+} from '../../lib/inventoryFreshness.js';
 
 const MARKER_COLOR = '#16a34a';
 const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fillOpacity: 0.75 };
@@ -321,6 +331,31 @@ export default function PublicDashboard() {
    * recorded. A total from some of the trees is still worth showing — but only
    * if it says so.
    */
+  /**
+   * When this place was last added to.
+   *
+   * A survey whose newest tree was tagged six weeks ago is not out of date —
+   * it means nobody has been out in six weeks, which is a fact about the
+   * survey rather than a fault in the data. The page reports it and leaves the
+   * judgement to the reader.
+   */
+  const freshness = useMemo(
+    () => ({
+      lastTagged: lastTagged(scopedTrees),
+      recent: taggedRecently(scopedTrees),
+      undated: undated(scopedTrees),
+      timeline: taggingTimeline(scopedTrees),
+    }),
+    [scopedTrees]
+  );
+
+  /** "+6 in the last 30 days", or that nobody has been out. */
+  const recentLine = useMemo(() => {
+    if (!freshness.lastTagged) return '';
+    if (freshness.recent === 0) return `None tagged in the last ${RECENT_DAYS} days`;
+    return `+${formatFigure(freshness.recent)} in the last ${RECENT_DAYS} days`;
+  }, [freshness]);
+
   const carbonCoverage = useMemo(() => {
     const { carbonMeasured, treeCount } = totals;
     if (treeCount === 0) return '';
@@ -403,6 +438,22 @@ export default function PublicDashboard() {
             {scopeLabel} Biodiversity Analytics
           </h1>
 
+          {/* Every figure below was true at some moment; this says which. */}
+          {freshness.lastTagged ? (
+            <p className="-mt-2 text-xs text-slate-500 sm:order-last sm:mt-0 sm:w-full">
+              Newest tag {formatDate(freshness.lastTagged)}{' '}
+              <span className="text-slate-400">({timeAgo(freshness.lastTagged)})</span>
+              {freshness.undated > 0 &&
+                `. ${formatFigure(freshness.undated)} ${
+                  freshness.undated === 1 ? 'tree is' : 'trees are'
+                } undated`}
+            </p>
+          ) : (
+            <p className="-mt-2 text-xs text-slate-500 sm:order-last sm:mt-0 sm:w-full">
+              No tree here records when it was tagged.
+            </p>
+          )}
+
           <span className="inline-flex items-center gap-2 self-start sm:self-auto">
             <button
               type="button"
@@ -437,7 +488,13 @@ export default function PublicDashboard() {
                   key={metric.key}
                   metric={metric}
                   value={totals[metric.key]}
-                  note={metric.key === 'carbonKg' ? carbonCoverage : ''}
+                  note={
+                    metric.key === 'carbonKg'
+                      ? carbonCoverage
+                      : metric.key === 'treeCount'
+                        ? recentLine
+                        : ''
+                  }
                   active={activePair === group.id}
                   onSelect={() => setActivePair(group.id)}
                 />
@@ -525,6 +582,9 @@ export default function PublicDashboard() {
 
         {/* How old it is — the question counting trees cannot answer */}
         <SizeSection trees={scopedTrees} scopeLabel={scopeLabel} />
+
+        {/* How far the survey has got */}
+        <GrowthStrip timeline={freshness.timeline} scopeLabel={scopeLabel} />
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />
