@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Monitor, ChevronDown, Compass, Send } from 'lucide-react';
 
-import forestcoverImg from '../../assets/forestcover.avif';
+import forestcoverImg from '../../assets/optimised/forestcover.avif';
 import greenTagLogo from '../../assets/GreenTag_Logo.png';
 import mobileImg from '../../assets/Mobile.jpg';
 import mobileview_mapImg from '../../assets/mobileview_map.jpg';
 import desktopImg from '../../assets/desktop.PNG';
-import mappingFeatureImg from '../../assets/Mapping Feature SS.png';
+import mappingFeatureImg from '../../assets/optimised/Mapping-Feature.webp';
 import sdg9Img from '../../assets/SDG9.png';
 import sdg11Img from '../../assets/SDG11.png';
 import sdg13Img from '../../assets/SDG13.png';
@@ -16,9 +16,9 @@ import pglLogo from '../../assets/lgu-thumbs/large/PGL_LGU_logo.png';
 import pgenroLogo from '../../assets/lgu-thumbs/large/PGENRO_LGU_logo.png';
 import lspuLogo from '../../assets/lgu-thumbs/large/LSPU_LGU_logo.png';
 import noahLogo from '../../assets/noah_logo.png';
-import bswmLogo from '../../assets/BSWM_logo.png';
+import bswmLogo from '../../assets/optimised/BSWM_logo.png';
 import copernicusLogo from '../../assets/Copernicus_logo.png';
-import namriaLogo from '../../assets/NAMRIA_logo.svg';
+import namriaLogo from '../../assets/optimised/NAMRIA_logo.png';
 import dostLogo from '../../assets/DOST_PAGASA_logo.svg';
 
 /* ══════════════════════════════════════════════════

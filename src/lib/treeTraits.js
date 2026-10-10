@@ -1,10 +1,10 @@
-import endemicIcon from '../assets/endemic_icon.png';
-import invasiveIcon from '../assets/invasive_icon.png';
-import fruitIcon from '../assets/fruit_tree.png';
-import ornamentalIcon from '../assets/ornamental_tree.png';
-import timberIcon from '../assets/timber_tree.png';
-import crowdsourceIcon from '../assets/crowdsource_icon.png';
-import datagatherIcon from '../assets/datagather_icon.png';
+import endemicIcon from '../assets/optimised/endemic_icon.png';
+import invasiveIcon from '../assets/optimised/invasive_icon.png';
+import fruitIcon from '../assets/optimised/fruit_tree.png';
+import ornamentalIcon from '../assets/optimised/ornamental_tree.png';
+import timberIcon from '../assets/optimised/timber_tree.png';
+import crowdsourceIcon from '../assets/optimised/crowdsource_icon.png';
+import datagatherIcon from '../assets/optimised/datagather_icon.png';
 
 /**
  * The three badges the public map's side panel shows for a tree: what it is to

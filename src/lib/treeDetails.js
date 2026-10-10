@@ -1,13 +1,13 @@
-import leafPeakIcon from '../assets/Leaf_Peak.png';
-import leafColorChangeIcon from '../assets/Leaf_ColorChange.png';
-import leafSheddingIcon from '../assets/Leaf_Shedding.png';
-import leafBuddingIcon from '../assets/Leaf_Budding.png';
+import leafPeakIcon from '../assets/optimised/Leaf_Peak.png';
+import leafColorChangeIcon from '../assets/optimised/Leaf_ColorChange.png';
+import leafSheddingIcon from '../assets/optimised/Leaf_Shedding.png';
+import leafBuddingIcon from '../assets/optimised/Leaf_Budding.png';
 import flowerBuddingIcon from '../assets/Flower_Budding.svg';
 import flowerFullBloomIcon from '../assets/Flower_FullBloom.svg';
 import flowerFadingIcon from '../assets/Flower_Fading.svg';
-import fruitUnripeIcon from '../assets/Fruiting_Unripe.png';
-import fruitRipeIcon from '../assets/Fruiting_Ripe.png';
-import fruitSplittingIcon from '../assets/Fruiting_Splitting.png';
+import fruitUnripeIcon from '../assets/optimised/Fruiting_Unripe.png';
+import fruitRipeIcon from '../assets/optimised/Fruiting_Ripe.png';
+import fruitSplittingIcon from '../assets/optimised/Fruiting_Splitting.png';
 
 /**
  * What the public map's "Tree Details" tab reads off one tree record.
