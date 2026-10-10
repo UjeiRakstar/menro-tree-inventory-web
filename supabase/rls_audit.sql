@@ -15,8 +15,13 @@
 --                            GPS fix and photos, is not another's to read.
 --   public.species_profiles  anon SELECT (the Description tab).
 --   public.phenology_records anon SELECT (the Tree Details tab).
+--   public.barangays         anon SELECT (the tagging form's barangay list).
 --   everything else          nothing. profiles, arborists, permits and the
 --                            audit trail are staff tables.
+--
+-- A table reading 'RLS OFF' is the finding that matters most. Policies on a
+-- table with RLS off are not enforced at all, so a table can have a careful
+-- policy and still be wide open — which is exactly what this found.
 
 with
 -- 1. Is the fence up on each table, and does it have anything written on it?
@@ -55,7 +60,10 @@ policies as (
         then 'look_at — the public can ' || cmd || ' this'
       when ('anon' = any (roles) or 'public' = any (roles))
            and cmd = 'SELECT'
-           and tablename not in ('trees', 'species_profiles', 'phenology_records')
+           -- The public side reads these four and nothing else. barangays is
+           -- on the list because the tagging form needs it to offer a barangay
+           -- to pick from; it is a published PSA list, not staff data.
+           and tablename not in ('trees', 'species_profiles', 'phenology_records', 'barangays')
         then 'look_at — the public can read a staff table'
       else 'ok'
     end as verdict

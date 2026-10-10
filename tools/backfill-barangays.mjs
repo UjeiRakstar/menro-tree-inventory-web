@@ -86,7 +86,7 @@ function barangayAt(lat, lng) {
 
 // Read the inventory. Only the four columns this needs.
 const response = await fetch(
-  `${url}/rest/v1/trees?select=id,barangay,latitude,longitude&limit=10000`,
+  `${url}/rest/v1/trees?select=id,barangay,barangay_psgc,latitude,longitude&limit=10000`,
   { headers: { apikey: key, Authorization: `Bearer ${key}` } }
 );
 if (!response.ok) {
@@ -113,7 +113,12 @@ for (const tree of trees) {
     unplaceable.push({ ...tree, why: 'falls outside every barangay in Laguna' });
     continue;
   }
-  if ((tree.barangay || '').trim() === found.n) {
+  // What settles a row is the CODE, not the text. An earlier version skipped
+  // a tree whose written name already matched, which left its barangay_psgc
+  // null — so 32 trees reading "Bubukal" or "San Jose" stayed unlinked, which
+  // is exactly the ambiguous set this tool exists to settle: those names
+  // belong to several towns at once and only a coordinate says which.
+  if (tree.barangay_psgc === found.p) {
     unchanged += 1;
     continue;
   }

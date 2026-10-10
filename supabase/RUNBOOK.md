@@ -96,7 +96,13 @@ At the bottom it lists any tree coordinates cannot place — the Mahogany at
 0,0 is one. Those need a field visit, not a query.
 
 **Look for:** the final report, one row per barangay with its municipality.
-Every tree should now be under a name the PSA recognises.
+Every tree should now be under a name the PSA recognises, and the
+`municipality` column should say a real town — not `(unplaced)`.
+
+A row reading `(unplaced)` means that tree still has no `barangay_psgc`. Only
+two things cause it: coordinates that fall outside every barangay in Laguna,
+or no usable coordinates at all. The tool prints both lists when it runs, so
+check its terminal output against the report.
 
 ---
 
@@ -106,13 +112,24 @@ Read-only. **Do this before launch.** It was five queries and you only saw the
 last one; it is one query now.
 
 **Look for:** the `verdict` column. Rows reading `look_at` sort to the top.
-Send me the output and we can read it together — in particular:
 
-- any table with **RLS OFF** that the anon key can reach
-- any policy granted to `anon` or `public` that is not a plain SELECT
-- any `SECURITY DEFINER` function **anon may execute**
-- who may write to the `tree_images` bucket (it is public, which is right for
-  photos on a public map — what matters is who can put files in it)
+## 7b. `rls_fix.sql` — closes what the audit found
+
+**This is the most important file here, and the one most able to break
+things.** Read its header before running it.
+
+A table with RLS **off** ignores its policies completely. `public.trees` has a
+policy and is still wide open, so the anon key that ships inside the website
+can change and delete the inventory. Turning RLS on fixes that — but the only
+policy on `trees` today is "authenticated users full access", so turning it on
+*by itself* would take the public map dark. Each section of the file therefore
+creates the read policy in the same transaction that enables RLS.
+
+Run it **section by section**, not all at once, and check the site still loads
+the map after section 1.
+
+**Afterwards, re-run `rls_audit.sql`.** Every `look_at` should be gone except
+the two `profiles` policies, which the file explains rather than changes.
 
 ---
 
