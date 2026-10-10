@@ -42,3 +42,13 @@ if (typeof globalThis.matchMedia === 'undefined') {
     dispatchEvent: () => false,
   });
 }
+
+/**
+ * jsdom has no window.scrollTo.
+ *
+ * The router scrolls each new page to the top, so every routing test printed a
+ * "Not implemented: window.scrollTo" stack — pages of noise that real failures
+ * then had to be found among. A no-op is enough; the test that cares about the
+ * scrolling stubs its own and asserts against that.
+ */
+globalThis.scrollTo = () => {};
