@@ -46,6 +46,37 @@ Last read through: 10 October 2026.
 
 ## Still open here
 
+### Waiting on the PGENRO account
+
+The map now draws land cover and tree planting sites, and the panel reads every
+one of them out of `src/data/mockMapSites.js` — real polygons in real barangays,
+placeholder figures, with a "Sample data" badge saying so on the panel's face.
+These are what turns it real. None of them is web work alone; each needs the
+PGENRO account that can upload a layer.
+
+- **The uploads themselves.** `loadMapSites()` in `src/lib/mapSites.js` is the
+  one seam. When the layers land it fetches them and `mockMapSites.js` is
+  deleted; no component changes, because the components only ever see the
+  feature shape documented at the top of that file.
+  - elevation — Copernicus DEM
+  - soil series — the BSWM shapefile
+  - rainfall and temperature — the DOST-PAGASA CLIRAM table, per LGU
+  - flood and landslide extents — the UPRI NOAH GeoJSON, which will supply
+    `hazards.{kind}.areaM2` outright; the sample records carry a `share` of the
+    polygon instead, and `hazardAreaM2` already reads either.
+- **Unlocking the rest of the land cover table.** All 29 published rows are in
+  `src/lib/landCover.js`; four are marked `publicVisible` because they are what
+  grows in Laguna. The other 25 are species plantations and should become a
+  PGENRO toggle rather than a second table — one table cannot drift from itself.
+- **Encoding the species recommendations.** The sample sites carry a hand-written
+  `recommended` list. The real one comes from DENR RISE, matched against the
+  site's elevation, soil, rainfall and hazard exposure.
+- **Soil series names.** The sample ones are plausible for lowland Laguna, not
+  verified against the BSWM sheet. They go when the shapefile lands; until then
+  the badge is what stops anyone quoting them.
+
+### Elsewhere
+
 - **Odd columns in public.trees.** The table has 43 columns and a few look
   like accidents: one named `trees` that nothing reads, `heightClass`
   beside `height_class` for one fact, `photo_url` beside `imageUrl` for one
@@ -71,7 +102,10 @@ Last read through: 10 October 2026.
   `tools/make-logo-thumbnails.mjs` and `tools/optimise-images.mjs` regenerate
   them; no image in the build is over half a megabyte.
 - ~~Marker clustering.~~ Pins within about 64 screen pixels group into a bubble
-  with a count, which comes apart as the map zooms in.
+  with a count, which comes apart as the map zooms in. No bubble survives the
+  furthest zoom any more: up there the pins are grouped by how far apart they
+  are actually drawn rather than by grid cell, and anything still on top of
+  itself fans out into a ring on legs.
 - ~~Barangay names.~~ 111 of 112 trees linked to a real PSA barangay, the field
   app no longer asks OpenStreetMap, and `public.barangays` is the list to check
   against. The web app only downloads the boundary index if some tree still

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react';
+import { Fragment, useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -7,6 +7,7 @@ import {
   Popup,
   GeoJSON,
   Polygon,
+  Polyline,
   useMap,
   useMapEvents,
   Circle,
@@ -36,7 +37,14 @@ import {
   loadBarangayIndex,
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
-import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
+import {
+  boundsOfCluster,
+  clusterPins,
+  crowdGroups,
+  spiderPositions,
+} from '../../lib/clusterPins.js';
+import { landCoverById } from '../../lib/landCover.js';
+import { MAP_SITES, siteById, siteTitle } from '../../lib/mapSites.js';
 import { PUBLIC_MAP_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js';
 /**
  * The tagging form carries a confetti animation for its success screen, which
@@ -46,6 +54,7 @@ import { PUBLIC_MAP_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js'
 const TaggingForm = lazy(() => import('../../components/public/TaggingForm.jsx'));
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
 import AreaDetailPanel from '../../components/public/AreaDetailPanel.jsx';
+import SitePanel from '../../components/public/SitePanel.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 
 /** Every tagged tree reads as one thing on this map, so they all share one colour. */
@@ -62,6 +71,34 @@ const HOVER_STYLE = { color: '#15803d', weight: 2, opacity: 1, fillColor: '#22c5
 const SELECTED_STYLE = { color: '#15803d', weight: 3, opacity: 1, fillColor: '#22c55e', fillOpacity: 0.28 };
 
 /**
+ * How far in the map will go, and how far the tiles actually exist.
+ *
+ * OpenStreetMap stops drawing at zoom 19 and Esri at 19 too; past that
+ * `maxNativeZoom` keeps the last real tile and scales it up. The picture gets
+ * soft, but the PINS keep separating, which is the point — at zoom 19 two trees
+ * four metres apart are 20 px apart and still one bubble, and at 21 they are
+ * 80 px apart and two trees.
+ */
+const MAX_MAP_ZOOM = 21;
+const MAX_NATIVE_ZOOM = 19;
+
+/**
+ * Spaces, as against points.
+ *
+ * Land cover is drawn in the green of the thing it describes; a planting site
+ * in the yellow of the mockup's hatching, because it is a place to DO something
+ * rather than a report of what is there. Neither is colour alone: both carry a
+ * tooltip naming what they are, and the panel says it again in words.
+ */
+const LAND_COVER_STYLE = { color: '#15803d', weight: 2, opacity: 0.9, fillColor: '#22c55e', fillOpacity: 0.22 };
+const PLANTING_SITE_STYLE = { color: '#ca8a04', weight: 2, opacity: 0.95, fillColor: '#facc15', fillOpacity: 0.3 };
+const SITE_HOVER_STYLE = { weight: 3, fillOpacity: 0.42 };
+const SITE_SELECTED_STYLE = { weight: 4, fillOpacity: 0.5 };
+
+const styleForSite = (feature) =>
+  feature?.properties?.kind === 'planting-site' ? PLANTING_SITE_STYLE : LAND_COVER_STYLE;
+
+/**
  * Leaflet draws everything vector into one layer unless told otherwise, and
  * within it the last layer added wins — which is how selecting a municipality
  * used to bury the tree points: bringing the chosen boundary to the front put
@@ -71,6 +108,9 @@ const SELECTED_STYLE = { color: '#15803d', weight: 3, opacity: 1, fillColor: '#2
 const PANES = [
   ['laguna-mask', 410],
   ['laguna-boundaries', 420],
+  // Areas sit over the municipal outlines and under the trees: a forest should
+  // never swallow a click meant for a tree standing in it.
+  ['map-sites', 430],
   ['tree-points', 450],
   // The group bubbles sit over the pins they stand for.
   ['tree-clusters', 455],
@@ -155,6 +195,70 @@ function FocusController({ target }) {
     });
   }, [target, map]);
   return null;
+}
+
+/**
+ * The spaces on the map: what is growing somewhere, and where to plant.
+ *
+ * Drawn under the trees so a pin standing inside a forest still takes the tap,
+ * and with bubbling turned off so opening a forest does not also re-focus the
+ * city it sits in.
+ */
+function SiteLayer({ sites, selectedId, onSelect }) {
+  const groupRef = useRef(null);
+  const selectedRef = useRef(selectedId);
+  const onSelectRef = useRef(onSelect);
+  selectedRef.current = selectedId;
+  onSelectRef.current = onSelect;
+
+  const styleFor = (feature) => {
+    const base = styleForSite(feature);
+    return feature?.properties?.id === selectedRef.current
+      ? { ...base, ...SITE_SELECTED_STYLE }
+      : base;
+  };
+
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    group.eachLayer((layer) => {
+      layer.setStyle(styleFor(layer.feature));
+      if (layer.feature?.properties?.id === selectedId) layer.bringToFront();
+    });
+    // styleFor reads a ref, so it does not need to be a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  return (
+    <GeoJSON
+      ref={groupRef}
+      data={sites}
+      pane="map-sites"
+      style={styleFor}
+      bubblingMouseEvents={false}
+      onEachFeature={(feature, layer) => {
+        const { id, kind, coverId } = feature.properties;
+        const what =
+          kind === 'planting-site'
+            ? 'Tree planting site'
+            : landCoverById(coverId)?.label ?? 'Land cover';
+        layer.bindTooltip(`${siteTitle(feature)} — ${what}`, {
+          sticky: true,
+          direction: 'top',
+          opacity: 0.95,
+        });
+        layer.on({
+          click: () => onSelectRef.current(id),
+          mouseover: (e) => {
+            if (selectedRef.current !== id) {
+              e.target.setStyle({ ...styleForSite(feature), ...SITE_HOVER_STYLE });
+            }
+          },
+          mouseout: (e) => e.target.setStyle(styleFor(feature)),
+        });
+      }}
+    />
+  );
 }
 
 /** The city and municipality outlines inside Laguna; click one to focus it. */
@@ -301,7 +405,7 @@ function bubbleSize(count) {
 function bubbleIcon(count, color) {
   const size = bubbleSize(count);
   return L.divIcon({
-    className: '',
+    className: 'tree-bubble',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     html:
@@ -323,6 +427,13 @@ function bubbleIcon(count, color) {
  * pixels become one bubble carrying the count, which comes apart by itself as
  * the map is zoomed in. Tapping a bubble zooms to what is inside it.
  *
+ * Zooming was not always enough. Two trees tagged three metres apart sit inside
+ * one grid cell at EVERY zoom this map has, so the bubble used to stay put
+ * however far in the visitor went — which read as the map being broken, and
+ * fairly. No bubble survives the furthest zoom now: the pins inside it are
+ * drawn as themselves, and the ones that would land on top of each other fan
+ * out into a ring, each on a leg back to where the group stood.
+ *
  * The open tree is always drawn as itself, never folded into a bubble —
  * otherwise opening a pin could make it disappear under a number.
  */
@@ -330,6 +441,8 @@ function TreePins({ pins, openTreeId, highlighting, onSelect }) {
   const map = useMap();
   const [zoom, setZoom] = useState(() => map.getZoom?.() ?? 11);
   useMapEvents({ zoomend: () => setZoom(map.getZoom?.() ?? zoom) });
+
+  const maxZoom = map.getMaxZoom?.() ?? MAX_MAP_ZOOM;
 
   const openPin = useMemo(
     () => (openTreeId ? pins.find((pin) => pin.id === openTreeId) ?? null : null),
@@ -339,17 +452,32 @@ function TreePins({ pins, openTreeId, highlighting, onSelect }) {
     () => (openPin ? pins.filter((pin) => pin.id !== openPin.id) : pins),
     [pins, openPin]
   );
-  const clusters = useMemo(() => clusterPins(groupable, zoom), [groupable, zoom]);
+  /**
+   * At the furthest zoom the grid stops being the right question.
+   *
+   * It cuts at fixed lines, so two pins twenty pixels apart end up in separate
+   * cells whenever a boundary falls between them — drawn one on top of the
+   * other, with nothing done about it. Grouping by how far apart they are
+   * actually drawn catches those, and leaves alone the pins that share a cell
+   * but have plenty of room.
+   */
+  const clusters = useMemo(
+    () => (zoom >= maxZoom ? crowdGroups(groupable, zoom) : clusterPins(groupable, zoom)),
+    [groupable, zoom, maxZoom]
+  );
 
-  const drawPin = (pin, isOpen) => {
+  const drawPin = (pin, isOpen, position = pin.position) => {
     const muted = highlighting && !pin.highlighted;
     return (
       <CircleMarker
         key={pin.id}
-        center={pin.position}
+        center={position}
         radius={isOpen ? 10 : 7}
         pane="tree-points"
         pathOptions={{
+          // A pin that has just come out of a bubble is a new element, so this
+          // plays once, there, and not on pins that were already standing alone.
+          className: 'tree-pin',
           color: '#ffffff',
           weight: isOpen ? 3 : 2,
           fillColor: isOpen ? MARKER_SELECTED_COLOR : muted ? MARKER_MUTED_COLOR : MARKER_COLOR,
@@ -365,6 +493,34 @@ function TreePins({ pins, openTreeId, highlighting, onSelect }) {
       {clusters.map((cluster) => {
         if (cluster.count === 1) return drawPin(cluster.pins[0], false);
 
+        // At the furthest zoom there is nothing left to zoom into, so a bubble
+        // here is a dead end — the visitor has done everything the map asked of
+        // them and is still looking at a number. Every group comes apart.
+        if (zoom >= maxZoom) {
+          // Grouped by distance up there, so anything still together is
+          // genuinely on top of itself and every one of them gets fanned.
+          return (
+            <Fragment key={cluster.key}>
+              {spiderPositions(cluster, zoom).map(({ pin, position, anchor }) => (
+                <Fragment key={pin.id}>
+                  <Polyline
+                    positions={[anchor, position]}
+                    pane="tree-points"
+                    interactive={false}
+                    pathOptions={{
+                      className: 'tree-spider-leg',
+                      color: MARKER_COLOR,
+                      weight: 1.5,
+                      opacity: 0.55,
+                    }}
+                  />
+                  {drawPin(pin, pin.id === openTreeId, position)}
+                </Fragment>
+              ))}
+            </Fragment>
+          );
+        }
+
         // A group is only faded when nothing inside it is picked out.
         const muted = highlighting && !cluster.pins.some((pin) => pin.highlighted);
         const label = `${cluster.count} tagged trees — zoom in to see them`;
@@ -379,7 +535,12 @@ function TreePins({ pins, openTreeId, highlighting, onSelect }) {
             eventHandlers={{
               click: () => {
                 const bounds = boundsOfCluster(cluster);
-                if (bounds) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 18 });
+                if (!bounds) return;
+                // Trees tagged on the same spot give a bounds with no size at
+                // all, and Leaflet answers that by going as far in as it is
+                // allowed — which is exactly right, because the furthest zoom
+                // is where the group fans itself out.
+                map.fitBounds(bounds, { padding: [48, 48], maxZoom });
               },
             }}
           />
@@ -437,6 +598,10 @@ export default function PublicMap() {
   // both live in the same strip down the left of the map.
   const [areaPanelOpen, setAreaPanelOpen] = useState(false);
   const [areaPanelCollapsed, setAreaPanelCollapsed] = useState(false);
+  // Drawn areas open on the RIGHT, so a visitor can hold a tree and the forest
+  // it stands in on screen at once instead of watching one replace the other.
+  const [selectedSiteId, setSelectedSiteId] = useState(null);
+  const [sitePanelCollapsed, setSitePanelCollapsed] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   const [speciesProfile, setSpeciesProfile] = useState(null);
   // The field app's most recent phenology visit for the open tree.
@@ -712,6 +877,20 @@ export default function PublicMap() {
     }
   }
 
+  /**
+   * Opening a drawn area. Tapping the one already open closes it, which is how
+   * every other selection on this map behaves.
+   */
+  function handleSelectSite(id) {
+    setSelectedSiteId((current) => (current === id ? null : id));
+    setSitePanelCollapsed(false);
+  }
+
+  function clearSelectedSite() {
+    setSelectedSiteId(null);
+    setSitePanelCollapsed(false);
+  }
+
   /** Dismissing the area drops the selection without moving the map. */
   function clearSelectedLgu() {
     setSelectedLgu('');
@@ -726,11 +905,14 @@ export default function PublicMap() {
   const areaPanelShowing = areaPanelOpen && Boolean(selectedLgu) && !areaPanelCollapsed;
   const panelShowing = treePanelShowing || areaPanelShowing;
 
+  const selectedSite = useMemo(() => siteById(selectedSiteId), [selectedSiteId]);
+  const sitePanelShowing = Boolean(selectedSite) && !sitePanelCollapsed;
+
   return (
     <div
       className={`relative w-full h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] ${
         panelShowing ? 'panel-open' : ''
-      }`}
+      } ${sitePanelShowing ? 'site-panel-open' : ''}`}
     >
       {/* Loading overlay */}
       {loading && (
@@ -774,10 +956,59 @@ export default function PublicMap() {
             visibility: hidden;
           }
         }
+        /* The right-hand controls do the same for the area panel, which opens
+           on the other side. The legend and the two selectors would otherwise
+           sit underneath it. */
+        .map-right-control {
+          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease,
+            visibility 200ms ease;
+        }
+        @media (min-width: 640px) {
+          .site-panel-open .map-right-control {
+            transform: translateX(-380px);
+          }
+        }
+        @media (max-width: 639px) {
+          .site-panel-open .map-right-control {
+            opacity: 0;
+            visibility: hidden;
+          }
+        }
+
+        /* A pin that has just come out of a group is a brand new element, so
+           this plays exactly when something de-clusters — on the pins that
+           appeared, and not on the ones that were already standing alone. */
+        @keyframes tree-pin-in {
+          from { opacity: 0; transform: scale(0.3); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        .tree-pin {
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: tree-pin-in 260ms cubic-bezier(0.2, 0, 0, 1) both;
+        }
+        .tree-bubble {
+          animation: tree-pin-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
+        }
+        /* The legs draw themselves outward from the point the group stood at. */
+        @keyframes spider-leg-in {
+          from { opacity: 0; stroke-dasharray: 0 120; }
+          to   { opacity: 0.55; stroke-dasharray: 120 0; }
+        }
+        .tree-spider-leg {
+          animation: spider-leg-in 300ms cubic-bezier(0.2, 0, 0, 1) both;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .leaflet-top.leaflet-left,
-          .map-side-control {
+          .map-side-control,
+          .map-right-control {
             transition: none;
+          }
+          .tree-pin,
+          .tree-bubble,
+          .tree-spider-leg {
+            animation: none;
           }
         }
       `}</style>
@@ -789,6 +1020,7 @@ export default function PublicMap() {
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
         zoomControl={true}
+        maxZoom={MAX_MAP_ZOOM}
         ref={mapRef}
       >
         <MapPanes />
@@ -796,6 +1028,8 @@ export default function PublicMap() {
         <TileLayer
           url={TILE_LAYERS[tileIndex].url}
           attribution="&copy; OpenStreetMap contributors"
+          maxZoom={MAX_MAP_ZOOM}
+          maxNativeZoom={MAX_NATIVE_ZOOM}
         />
 
         {/* Everything outside Laguna is covered over, not detailed */}
@@ -808,6 +1042,9 @@ export default function PublicMap() {
 
         {/* Cities and municipalities inside Laguna */}
         <MunicipalityLayer selected={selectedLgu} onSelect={handleSelectLgu} />
+
+        {/* Land cover and tree planting sites — the spaces, as against the points */}
+        <SiteLayer sites={MAP_SITES} selectedId={selectedSiteId} onSelect={handleSelectSite} />
 
         {/* Province outline, drawn over the municipal lines */}
         <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} pane="laguna-boundaries" interactive={false} />
@@ -878,6 +1115,15 @@ export default function PublicMap() {
         />
       )}
 
+      {/* The drawn area in focus: land cover, or somewhere to plant */}
+      {selectedSite && (
+        <SitePanel
+          feature={selectedSite}
+          onClose={clearSelectedSite}
+          onCollapsedChange={setSitePanelCollapsed}
+        />
+      )}
+
       {/* Area in focus — the short badge, for when its panel is out of the way */}
       {selectedLabel && !areaPanelShowing && (
         <div className="map-side-control absolute top-3 left-14 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2 max-w-[55vw]">
@@ -906,7 +1152,7 @@ export default function PublicMap() {
       )}
 
       {/* Top-right controls */}
-      <div className="absolute top-3 right-3 z-[400] flex flex-col gap-2 items-end">
+      <div className="map-right-control absolute top-3 right-3 z-[400] flex flex-col gap-2 items-end">
         {/* City / municipality selector */}
         <select
           value={selectedLgu}
@@ -934,7 +1180,7 @@ export default function PublicMap() {
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-24 right-3 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2">
+      <div className="map-right-control absolute bottom-24 right-3 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2">
         <p className="text-[10px] font-semibold text-slate-700 mb-1">Legend</p>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -964,6 +1210,20 @@ export default function PublicMap() {
               <span className="text-[10px] text-slate-600">Other trees</span>
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <span
+              className="w-3 h-3 rounded-sm flex-shrink-0 border-2"
+              style={{ borderColor: LAND_COVER_STYLE.color, backgroundColor: 'rgba(34,197,94,0.22)' }}
+            />
+            <span className="text-[10px] text-slate-600">Land cover — tap for details</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="w-3 h-3 rounded-sm flex-shrink-0 border-2"
+              style={{ borderColor: PLANTING_SITE_STYLE.color, backgroundColor: 'rgba(250,204,21,0.3)' }}
+            />
+            <span className="text-[10px] text-slate-600">Tree planting site</span>
+          </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-sm flex-shrink-0 border border-green-700 bg-green-500/30" />
             <span className="text-[10px] text-slate-600">Area in focus</span>

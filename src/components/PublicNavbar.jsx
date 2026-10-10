@@ -3,10 +3,16 @@ import { Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 
+/**
+ * The order a visitor meets the site in: who we are, then the thing they came
+ * for, then the figures behind it. The map earns second place because it is
+ * what a resident opens — the dashboard is where they go once the map has made
+ * them curious.
+ */
 const navLinks = [
   { to: '/about', label: 'About Us' },
-  { to: '/biodiversity', label: 'BioDashboard' },
   { to: '/public-map', label: 'Map' },
+  { to: '/biodiversity', label: 'BioDashboard' },
 ];
 
 export default function PublicNavbar() {
@@ -76,15 +82,17 @@ export default function PublicNavbar() {
             })}
           </div>
 
-          {/* Desktop: Log In Button */}
+          {/* Desktop: Log In Button. It says sign up too, because an officer
+              arriving for the first time has no account yet and would otherwise
+              have to guess that one is made behind a button marked Log In. */}
           <div className="hidden lg:flex items-center ml-6">
             <Link
               to="/login"
-              className="px-6 py-2 text-sm font-semibold text-white border border-white/70 rounded-lg
+              className="whitespace-nowrap px-5 py-2 text-sm font-semibold text-white border border-white/70 rounded-lg
                          hover:bg-white hover:text-green-800 transition-all duration-300
                          hover:shadow-lg hover:shadow-white/10 active:scale-95"
             >
-              Log In
+              Log In / Sign Up
             </Link>
           </div>
 
@@ -126,7 +134,7 @@ export default function PublicNavbar() {
               onClick={() => setMobileOpen(false)}
               className="block px-4 py-2.5 rounded-lg text-base font-semibold text-white border border-white/60 text-center hover:bg-white hover:text-green-800 transition-all duration-200"
             >
-              Log In
+              Log In / Sign Up
             </Link>
           </div>
         </div>

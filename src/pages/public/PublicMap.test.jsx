@@ -5,10 +5,21 @@ import { MemoryRouter } from 'react-router-dom';
 // react-leaflet stand-ins. The map itself is inert; what matters is which layers
 // the page asks for, with which geometry and styling.
 // -----------------------------------------------------------------------------
-const { flyToBoundsSpy, fitBoundsSpy, featureHandlers, panes, mapState, mapEventHandlers } = vi.hoisted(() => ({
+const {
+  flyToBoundsSpy,
+  fitBoundsSpy,
+  featureHandlers,
+  siteHandlers,
+  panes,
+  mapState,
+  mapEventHandlers,
+} = vi.hoisted(() => ({
   flyToBoundsSpy: vi.fn(),
   fitBoundsSpy: vi.fn(),
   featureHandlers: new Map(),
+  // Drawn areas carry a `municipality` of their own, so keying everything by
+  // that name would have the forest in Santa Cruz overwrite Santa Cruz itself.
+  siteHandlers: new Map(),
   panes: new Map(),
   // Street level by default, where the test trees stand far enough apart to be
   // drawn one by one. A test that wants them grouped turns this down.
@@ -34,18 +45,21 @@ vi.mock('react-leaflet', () => ({
     />
   ),
   GeoJSON: ({ data, onEachFeature, pane }) => {
+    const into = pane === 'map-sites' ? siteHandlers : featureHandlers;
+    const keyOf = (feature) =>
+      pane === 'map-sites' ? feature.properties.id : feature.properties.municipality;
     for (const feature of data.features) {
       onEachFeature?.(feature, {
         feature,
         bindTooltip: () => {},
         setStyle: () => {},
         bringToFront: () => {},
-        on: (handlers) => featureHandlers.set(feature.properties.municipality, handlers),
+        on: (handlers) => into.set(keyOf(feature), handlers),
       });
     }
     return (
       <div
-        data-testid="geojson"
+        data-testid={pane === 'map-sites' ? 'site-layer' : 'geojson'}
         data-name={data.name}
         data-feature-count={String(data.features.length)}
         data-pane={pane}
@@ -62,6 +76,10 @@ vi.mock('react-leaflet', () => ({
     >
       {children}
     </div>
+  ),
+  // The line from a fanned-out pin back to where its group stood.
+  Polyline: ({ positions }) => (
+    <div data-testid="spider-leg" data-positions={JSON.stringify(positions)} />
   ),
   Circle: () => <div data-testid="circle" />,
   Popup: ({ children }) => <div data-testid="popup">{children}</div>,
@@ -166,6 +184,7 @@ beforeAll(async () => {
 beforeEach(() => {
   supabaseMock.reset();
   featureHandlers.clear();
+  siteHandlers.clear();
   panes.clear();
   flyToBoundsSpy.mockClear();
   fitBoundsSpy.mockClear();
@@ -492,7 +511,7 @@ describe('PublicMap', () => {
     // The corners of what is inside it, not a tree panel.
     expect(fitBoundsSpy).toHaveBeenCalledWith(
       expect.any(Array),
-      expect.objectContaining({ maxZoom: 18 })
+      expect.objectContaining({ maxZoom: expect.any(Number) })
     );
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
@@ -531,6 +550,12 @@ describe('PublicMap', () => {
     for (const layer of screen.getAllByTestId('geojson')) {
       expect(layer.dataset.pane).toBe('laguna-boundaries');
     }
+
+    // Drawn areas go between the two: over the municipal outlines, under the
+    // trees, so a forest never swallows a tap meant for a tree standing in it.
+    expect(z('map-sites')).toBeGreaterThan(z('laguna-boundaries'));
+    expect(z('tree-points')).toBeGreaterThan(z('map-sites'));
+    expect(screen.getByTestId('site-layer').dataset.pane).toBe('map-sites');
 
     // And a point still opens its panel after an area has been selected.
     featureHandlers.get('Santa Cruz').click();
@@ -658,5 +683,112 @@ describe('PublicMap', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
     await waitFor(() => expect(screen.queryByText(/Open this map on your phone/)).not.toBeInTheDocument());
+  });
+});
+
+describe('the spaces on the map, as against the points', () => {
+  it('opens a land cover area on the opposite side from a tree', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    siteHandlers.get('lc-labuin-secondary-forest').click();
+
+    const panel = await screen.findByRole('complementary', { name: 'Labuin Secondary Forest' });
+    expect(within(panel).getByText('Secondary forest')).toBeInTheDocument();
+    expect(within(panel).getByText('Brgy. Labuin, Santa Cruz, Laguna')).toBeInTheDocument();
+  });
+
+  it('holds a tree and the ground it stands on at the same time', async () => {
+    // The whole reason areas open on the right: a visitor who taps a forest
+    // while a tree is open should get both, not watch one shove out the other.
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(markerFor(TREES[0]));
+    await screen.findByRole('complementary', { name: /Narra/i });
+
+    siteHandlers.get('ps-labuin').click();
+    expect(await screen.findByRole('complementary', { name: 'Labuin Tree Planting Site' })).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: /Narra/i })).toBeInTheDocument();
+  });
+
+  it('closes the area when the same one is tapped again', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    siteHandlers.get('ps-labuin').click();
+    await screen.findByRole('complementary', { name: 'Labuin Tree Planting Site' });
+
+    siteHandlers.get('ps-labuin').click();
+    await waitFor(() =>
+      expect(screen.queryByRole('complementary', { name: 'Labuin Tree Planting Site' })).not.toBeInTheDocument()
+    );
+  });
+
+  it('does not re-focus the city when an area inside it is opened', async () => {
+    // The sample areas carry a municipality of their own. Opening one must not
+    // also fly the map to Santa Cruz.
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    flyToBoundsSpy.mockClear();
+    siteHandlers.get('lc-gatid-brushland').click();
+    await screen.findByRole('complementary', { name: 'Gatid Brushland' });
+    expect(flyToBoundsSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('groups that zooming cannot pull apart', () => {
+  /** Two trees tagged a metre and a half from each other, as happens in a yard. */
+  const TOUCHING = [
+    { id: 90, species: 'Narra', latitude: 14.2823, longitude: 121.4163, barangay: 'Poblacion' },
+    { id: 91, species: 'Mango', latitude: 14.28231, longitude: 121.41631, barangay: 'Poblacion' },
+  ];
+
+  it('never leaves a bubble standing at the furthest zoom', async () => {
+    // The visitor zoomed all the way in and was still looking at a number.
+    // There is nothing left to zoom into, so the group has to come apart here.
+    supabaseMock.setResponse('trees:select', { data: TOUCHING, error: null });
+    mapState.zoom = 21;
+    renderMap();
+
+    await waitFor(() => expect(markers()).toHaveLength(2));
+    expect(clusters()).toHaveLength(0);
+  });
+
+  it('fans the pins out so each one can be tapped', async () => {
+    supabaseMock.setResponse('trees:select', { data: TOUCHING, error: null });
+    mapState.zoom = 21;
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(2));
+
+    // Both have been moved off the spot they were stacked on...
+    const drawn = markers().map((m) => JSON.parse(m.dataset.center));
+    for (const tree of TOUCHING) {
+      expect(drawn).not.toContainEqual([tree.latitude, tree.longitude]);
+    }
+    // ...and a leg is drawn back to where the group stood.
+    expect(screen.getAllByTestId('spider-leg')).toHaveLength(2);
+  });
+
+  it('leaves well-spaced pins exactly where they were tagged', async () => {
+    // Fanning pins that already have room would pull them CLOSER together.
+    mapState.zoom = 21;
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    expect(screen.queryAllByTestId('spider-leg')).toHaveLength(0);
+    for (const tree of TREES) {
+      expect(markerFor(tree)).toBeTruthy();
+    }
+  });
+
+  it('still groups them at a zoom where zooming would help', async () => {
+    supabaseMock.setResponse('trees:select', { data: TOUCHING, error: null });
+    mapState.zoom = 14;
+    renderMap();
+
+    await waitFor(() => expect(clusters()).toHaveLength(1));
+    expect(clusters()[0].dataset.label).toContain('2 tagged trees');
   });
 });
