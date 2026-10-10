@@ -5,12 +5,23 @@ section first within each heading.
 
 ## Needs you to run it
 
-- **`supabase/crowdsource_promotion.sql`** — the step that publishes a verified
-  community tag to the map. Nothing in the chain works end to end until this is
-  applied.
-- **`supabase/tree_phenology.sql`** — now a cleanup migration. It drops
-  `trees.leaf_status`, `trees.flower_status` and `trees.fruit_status`, which
-  nothing writes; the real observations live in `phenology_records`.
+In this order. All four are idempotent — running one twice changes nothing the
+second time.
+
+1. **`supabase/crowdsource_promotion.sql`** — the step that publishes a verified
+   community tag to the map. Nothing in the chain works end to end until this is
+   applied. It now checks the columns it depends on before creating anything and
+   says plainly what is missing, including "run species_profiles.sql first".
+2. **`supabase/tree_phenology.sql`** — a cleanup migration. It drops
+   `trees.leaf_status`, `trees.flower_status` and `trees.fruit_status`, which
+   nothing writes; the real observations live in `phenology_records`.
+3. **`supabase/data_fixes.sql`** — one name per barangay, one spelling for the
+   fruit trees. Reports what it did at the end. Not in it: the tree at 0,0,
+   because coordinates cannot be invented, only re-surveyed.
+4. **`supabase/rls_audit.sql`** — read-only. It reports what the public key can
+   reach; the policies that match what the public side actually needs are at the
+   bottom, commented out. **Do this before launch.** Paste the output back and
+   the gaps can be read together.
 
 ## Waiting on another system
 
@@ -37,20 +48,24 @@ on a device**, alongside other in-flight work in that repo.
 - `flutter test` could not run in the environment it was written in (no CMake
   for native assets).
 
-## Still open from the review
+## Still open
 
-- **Image weight.** Down from ~160 MB to 17 MB of built assets. What is left:
-  `NAMRIA_logo.svg` (3.4 MB, a traced bitmap in an SVG wrapper),
-  `Mapping Feature SS.png` (2.7 MB) and `forestcover.avif` (2 MB). The seals are
-  handled by `tools/make-logo-thumbnails.mjs`; these three need format decisions
-  rather than a resize.
 - **One tree at 0,0.** A Mahogany with no usable coordinates, invisible on every
-  map and uncounted in every area. `supabase/data_checks.sql` finds it.
-- **RLS audit before launch.** The anon key can read `trees` (intended) and the
-  public form inserts into `pending_trees`. Confirm anon cannot update or delete
-  either table.
-- **Marker clustering.** 112 pins all sit in Santa Cruz; at province scale they
-  overlap into one blob. Worth doing before the inventory covers more LGUs.
-- **Barangay names.** Eight rows are written "Brgy. X" beside the same barangay
-  written plain, and seven have no barangay at all. The dashboard and the panel
-  both strip the prefix, but any grouping by the raw column counts them twice.
+  map and uncounted in every area. `supabase/data_checks.sql` finds it; it needs
+  a field visit, not a query.
+- **The JavaScript bundle, 2.5 MB.** Now the largest single thing in the build,
+  larger than every image put together. It is one chunk because nothing is split
+  by route: a visitor who only wants the map still downloads the whole admin
+  console. Worth a look if the first paint ever feels slow.
+- **Phone-width screenshots.** The About page, the new dashboard and the map's
+  area panel have only ever been seen on a desktop here. The panel is the one to
+  check: six figures and a barangay list is more than one tree's details.
+
+## Done since this list was written
+
+- ~~Image weight.~~ 160 MB → 6.7 MB of built assets, across
+  `tools/make-logo-thumbnails.mjs` and `tools/optimise-images.mjs`. No image in
+  the build is over half a megabyte.
+- ~~Marker clustering.~~ Pins within about 64 screen pixels group into a bubble
+  with a count, which comes apart as the map zooms in.
+- ~~Barangay names.~~ Fixed by `supabase/data_fixes.sql`, once it is run.
