@@ -18,12 +18,13 @@ import {
   LAGUNA_BOUNDS,
   LAGUNA_MUNICIPALITIES,
   LAGUNA_PROVINCE,
+  MUNICIPALITY_LIST,
   OUTSIDE_LAGUNA_MASK,
   boundsOfMunicipality,
   municipalityAt,
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
-import { labelOf } from '../../lib/lguOptions.js';
+import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
 import {
   METRIC_PAIRS,
   formatFigure,
@@ -40,6 +41,7 @@ import { PUBLIC_DASHBOARD_COLUMNS, selectPublicTrees } from '../../lib/treeColum
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 import SpeciesSection from '../../components/public/SpeciesSection.jsx';
+import CoverageSection from '../../components/public/CoverageSection.jsx';
 
 const MARKER_COLOR = '#16a34a';
 const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fillOpacity: 0.75 };
@@ -357,6 +359,21 @@ export default function PublicDashboard() {
   );
 
   const scopeLabel = selectedLgu ? labelOf(selectedLgu) : 'Laguna';
+
+  /**
+   * Every place in scope, including the ones with no trees in them.
+   *
+   * This is what lets the page name a barangay nobody has surveyed. It cannot
+   * come from the inventory — an empty barangay puts no row in it — so it
+   * comes from the PSA list the boundaries were built from.
+   */
+  const places = useMemo(
+    () =>
+      selectedLgu
+        ? barangaysOf(selectedLgu).map((name) => ({ name, label: name }))
+        : MUNICIPALITY_LIST.map((lgu) => ({ name: lgu.name, label: lgu.label })),
+    [selectedLgu]
+  );
   const pair = METRIC_PAIRS.find((p) => p.id === activePair) ?? METRIC_PAIRS[0];
 
   const mapPins = useMemo(
@@ -492,6 +509,18 @@ export default function PublicDashboard() {
 
         {/* What is actually growing — the diversity the page is named after */}
         <SpeciesSection trees={scopedTrees} scopeLabel={scopeLabel} />
+
+        {/* Where it has reached, and where it has not. Inside a city or
+            municipality that is its barangays; across the province it is the
+            thirty cities and municipalities themselves. */}
+        <CoverageSection
+          trees={scopedTrees}
+          keyOf={selectedLgu ? barangayForTree : (tree) => treeAreas.get(tree.id) ?? null}
+          allPlaces={places}
+          scopeLabel={scopeLabel}
+          noun={selectedLgu ? 'barangay' : 'city or municipality'}
+          nounPlural={selectedLgu ? 'barangays' : 'cities and municipalities'}
+        />
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />

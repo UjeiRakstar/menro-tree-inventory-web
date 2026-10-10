@@ -94,7 +94,7 @@ the three honestly. The page says so.
 
 ---
 
-## 2. Where the trees are, and where they are not
+## 2. Where the trees are, and where they are not — DONE
 
 **Why.** "Which barangay has the most trees" is worth answering. **Which has
 the fewest is worth more** — that is where the next planting should go.
@@ -111,6 +111,16 @@ join against `public.barangays`, which exists now.
 
 **Done when** a reader can see both the best-covered and the least-covered
 barangays, and the least-covered list includes the ones with nothing.
+
+**Built.** `src/lib/placeCoverage.js` and
+`src/components/public/CoverageSection.jsx`. It did not need
+`public.barangays` after all — the PSA list is already bundled in
+`Laguna-LGUs.json`, so the places with nothing in them cost no query.
+
+One thing changed on the way: this is a SURVEY gap, not a planting gap. With
+112 trees across two municipalities, a barangay with no tagged trees has not
+been visited — it is not bare. The page says so in as many words. It becomes
+the planting gap the plan described once coverage is reasonably complete.
 
 ---
 
@@ -206,6 +216,18 @@ than a quarter of the headline.
 assumptions stated, and only two cards remain pending.
 
 ---
+
+## Parked, to do after the five
+
+- **Check the species bars against the real inventory.** With 112 trees the
+  scaling is a guess: ~25 species makes the top-ten list meaningful and at
+  least one species probably sits over 10%; 60 species makes every bar short
+  and pushes the guideline line far right. Look at it and tune the track.
+- **Revamp the layout.** The arrangement of the page is not appealing yet,
+  and that is a separate job from having the right numbers on it. Finish all
+  five items first, then redo the layout — which should start with reading
+  what good analytical dashboards actually look like rather than guessing.
+  **Needs web research**, so it wants a session with search available.
 
 ## Rules for all five
 
