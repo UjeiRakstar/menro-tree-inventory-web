@@ -260,7 +260,9 @@ describe('PublicMap', () => {
     expect(
       within(panel).getByText('Mean Annual Increment of Above Ground Biomass')
     ).toBeInTheDocument();
-    expect(within(panel).getAllByText('Not available yet')).toHaveLength(3);
+    // All six figures are real now: the growth ones stopped waiting on an
+    // area to divide by once they were computed per tree.
+    expect(within(panel).queryByText('Not available yet')).not.toBeInTheDocument();
     // And where they stand inside it — the barangay their coordinates fall in,
     // not the one typed into the record. Both Pila trees were recorded under
     // different names; they are both in Bulilan Sur.

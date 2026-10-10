@@ -1,5 +1,10 @@
 import { canonicalBarangay } from './barangayNames.js';
-import { carbonDioxideKg } from './treeVolume.js';
+import {
+  annualBiomassKg,
+  annualCo2Kg,
+  carbonDioxideKg,
+  volumeOf,
+} from './treeVolume.js';
 
 /**
  * The figures behind the public BioDashboard.
@@ -64,11 +69,21 @@ export function barangayOf(tree) {
 export function summarise(trees) {
   const rows = Array.isArray(trees) ? trees : [];
   let carbon = 0;
+  let carbonPerYear = 0;
+  let volume = 0;
+  let biomassPerYear = 0;
   let measured = 0;
+
   for (const tree of rows) {
-    const co2 = carbonForTree(tree);
-    if (co2 === null) continue;
-    carbon += co2;
+    // One measurement test for all four: they come from the same equation, so
+    // a tree is either measured well enough for all of them or for none.
+    const cubicMetres = volumeOf(tree);
+    if (cubicMetres === null) continue;
+
+    volume += cubicMetres;
+    carbon += carbonDioxideKg(tree) ?? 0;
+    carbonPerYear += annualCo2Kg(tree) ?? 0;
+    biomassPerYear += annualBiomassKg(tree) ?? 0;
     measured += 1;
   }
 
@@ -76,6 +91,10 @@ export function summarise(trees) {
     treeCount: rows.length,
     invasiveCount: rows.filter(isInvasive).length,
     carbonKg: Math.round(carbon),
+    carbonPerYearKg: Math.round(carbonPerYear),
+    timberVolumeM3: Math.round(volume * 100) / 100,
+    // Kilograms to megagrams: a tonne of biomass is the unit MAI is written in.
+    maiAgbMg: Math.round((biomassPerYear / 1000) * 1000) / 1000,
     carbonMeasured: measured,
   };
 }
@@ -136,24 +155,32 @@ export const METRIC_PAIRS = [
     ],
   },
   {
-    id: 'cover',
-    title: 'Cover and growth',
+    id: 'wood',
+    title: 'Wood and growth',
     metrics: [
       {
-        key: 'forestCoverHa',
-        label: 'Forest / Tree Cover Area',
-        unit: 'ha',
+        key: 'timberVolumeM3',
+        label: 'Standing Timber Volume',
+        unit: 'm³',
         tone: 'green',
-        available: false,
-        hint: 'The ground covered by trees, in hectares. It arrives with the mapping feature, once tree cover is delineated.',
+        available: true,
+        hint:
+          'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
+          'using each tree’s diameter at breast height and merchantable height. Trees with no ' +
+          'recorded merchantable height are left out rather than guessed at.' +
+          ' Nothing is assumed beyond the equation itself.',
       },
       {
-        key: 'maiAgb',
+        key: 'maiAgbMg',
         label: 'Mean Annual Increment of Above Ground Biomass',
-        unit: 'Mg yr⁻¹',
+        unit: 'Mg per year',
         tone: 'green',
-        available: false,
-        hint: 'How much standing biomass the trees add each year, after Lasco, et al. It arrives with the mapping feature.',
+        available: true,
+        hint:
+          'How much biomass the tagged trees add in a year: the same volume equation applied ' +
+          'twice, to each tree as it is and after a year of growth. For the TAGGED TREES, not ' +
+          'per hectare — hectares need the mapping feature. Growth is assumed at ' +
+          '0.5 cm of diameter a year, which is deliberately conservative.',
       },
     ],
   },
@@ -163,25 +190,58 @@ export const METRIC_PAIRS = [
     metrics: [
       {
         key: 'carbonKg',
-        label: 'Total Estimated Carbon Sequestered',
+        label: 'Total Estimated Carbon Stored',
         unit: 'kg CO₂',
         tone: 'green',
         available: true,
         hint:
+          'How much carbon the trees hold TODAY — a stock, not a rate. ' +
           'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
-          'using each tree’s diameter at breast height and merchantable height, then wood ' +
-          'density, biomass expansion and the IPCC carbon fraction. Trees with no recorded ' +
-          'merchantable height are left out rather than guessed at.',
+          'using each tree’s diameter at breast height and merchantable height. Trees with no ' +
+          'recorded merchantable height are left out rather than guessed at.' +
+          ' Then wood density, biomass expansion and the IPCC carbon fraction.',
       },
       {
-        key: 'carbonEmissionKg',
-        label: 'Total Carbon Emission',
-        unit: 'kg CO₂',
-        tone: 'red',
-        available: false,
-        hint: 'From the Greenhouse Gases Quantification Sheet, Climate Change Commission (July 31, 2024). The feed is not connected yet.',
+        key: 'carbonPerYearKg',
+        label: 'Estimated Carbon Sequestered per Year',
+        unit: 'kg CO₂ per year',
+        tone: 'green',
+        available: true,
+        hint:
+          'How much carbon the trees take up EACH YEAR — a rate, which is what climate ' +
+          'commitments are written in. From a year of growth put through the same equation. ' +
+          'Growth is assumed at 0.5 cm of diameter a year; replace it with a measured or ' +
+          'published figure and this becomes exact.',
       },
     ],
+  },
+];
+
+/**
+ * Figures the page is asked for and cannot yet give.
+ *
+ * They are shown, because the public looks for them and a dashboard that
+ * silently omitted them would look as though nobody had thought of it. They
+ * are shown SMALL, at the foot, because an empty figure should not hold a
+ * quarter of the headline.
+ *
+ * Unlike the six above, neither of these is waiting on arithmetic. They are
+ * waiting on another system entirely.
+ */
+export const PENDING_METRICS = [
+  {
+    key: 'forestCoverHa',
+    label: 'Forest / Tree Cover Area',
+    unit: 'ha',
+    waitingOn:
+      'the mapping feature, which has to delineate tree cover before there are hectares to count',
+  },
+  {
+    key: 'carbonEmissionKg',
+    label: 'Total Carbon Emission',
+    unit: 'kg CO₂',
+    waitingOn:
+      'the Greenhouse Gases Quantification Sheet (Climate Change Commission, 31 July 2024), which comes from outside this system',
   },
 ];
 

@@ -173,7 +173,7 @@ weeks, which is a fact about the survey rather than a fault in the data.
 
 ---
 
-## 5. The climate figures
+## 5. The climate figures — DONE
 
 **Why.** Cities report against climate commitments, and the public looks for
 these. Two of the three "Not available yet" cards do not have to stay that way.
@@ -228,7 +228,38 @@ than a quarter of the headline.
 **Done when** sequestration per year and MAI AGB are real figures with their
 assumptions stated, and only two cards remain pending.
 
+**Built.** The growth chain is in `src/lib/treeVolume.js`; the six figures
+were re-paired in `src/lib/dashboardMetrics.js` and the two still pending moved
+to `PENDING_METRICS` and a strip at the foot of the page.
+
+The pairs changed shape. Forest cover and emissions left the headline, and
+standing timber volume came in — it falls straight out of the equation with no
+extra assumption at all, and it pairs with MAI as a stock against a rate, the
+same way carbon stored pairs with carbon sequestered.
+
 ---
+
+## Parked, needing attention
+
+- **The growth rate is the weakest number on the page.** `ANNUAL_DBH_GROWTH_CM`
+  is 0.5 cm a year, chosen to be conservative rather than measured. Everything
+  on the carbon and growth cards scales linearly with it. Replace it with, in
+  order: a re-measurement of the same tree at two dates, a published figure per
+  species from PGENRO or ERDB, or at minimum a figure somebody there will put
+  their name to.
+- **MAI is no longer attributed to Lasco et al.** The original mock-up cited
+  them. The figure on the page does not come from them — it comes from the DENR
+  equation and our own growth rate — so citing them would be a false citation.
+  If PGENRO wants the Lasco figures used, they become the growth rate above and
+  the attribution comes back with them.
+- **Everything in the Wood and Carbon pairs needs a merchantable height**, and
+  one record was found holding 0.61 m, which is not one. Run query 7 of
+  `supabase/data_checks.sql`: if few trees have a usable height, four of the
+  six headline figures speak for a small slice of the inventory. The cards say
+  so, but the fix is in the field app.
+- **MAI is per tagged tree, not per hectare.** Divide by the forest cover area
+  when the mapping feature lands, and the card can say Mg/ha/yr as the mock-up
+  wanted.
 
 ## Parked, to do after the five
 

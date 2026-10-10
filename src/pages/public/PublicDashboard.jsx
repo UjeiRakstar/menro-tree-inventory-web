@@ -27,6 +27,7 @@ import {
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
 import {
   METRIC_PAIRS,
+  PENDING_METRICS,
   formatFigure,
   groupBy,
   summarise,
@@ -585,6 +586,34 @@ export default function PublicDashboard() {
 
         {/* How far the survey has got */}
         <GrowthStrip timeline={freshness.timeline} scopeLabel={scopeLabel} />
+
+        {/* Asked for, and honestly not here yet. Shown small rather than
+            omitted: the public looks for these, and a page that left them out
+            would read as though nobody had thought of them. */}
+        <section aria-label="Figures not available yet" className="mt-10">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
+            Not available yet
+          </h2>
+          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {PENDING_METRICS.map((metric) => (
+              <li
+                key={metric.key}
+                className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-3"
+              >
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  {metric.label}
+                </p>
+                <p className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-slate-300">—</span>
+                  <span className="text-xs text-slate-400">{metric.unit}</span>
+                </p>
+                <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                  Waiting on {metric.waitingOn}.
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />

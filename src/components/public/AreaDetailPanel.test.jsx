@@ -36,9 +36,9 @@ describe('AreaDetailPanel', () => {
     expect(within(panel()).getByText('112')).toBeInTheDocument();
     expect(within(panel()).getByText('14')).toBeInTheDocument();
     expect(within(panel()).getByText('4,820')).toBeInTheDocument();
-    // Forest cover, annual increment and emission have no source yet.
-    expect(within(panel()).getAllByText('—')).toHaveLength(3);
-    expect(within(panel()).getAllByText('Not available yet')).toHaveLength(3);
+    // Every figure in the panel has a source now. The two that still do not
+    // are on the analytics page's "not available yet" strip, not in here.
+    expect(within(panel()).queryByText('Not available yet')).not.toBeInTheDocument();
   });
 
   it('explains every figure, since there is no footnote to fall back on', () => {

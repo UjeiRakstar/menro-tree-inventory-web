@@ -151,25 +151,40 @@ describe('PublicDashboard', () => {
     await waitFor(() => expect(seriesKeys()).toEqual(['treeCount', 'invasiveCount']));
 
     // Anchored: the ⓘ beside the figure is its own button, named "What …".
-    fireEvent.click(screen.getByRole('button', { name: /^Total Estimated Carbon Sequestered/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Total Estimated Carbon Stored/ }));
 
-    // Carbon: only the half of the pair that has a source.
-    await waitFor(() => expect(seriesKeys()).toEqual(['carbonKg']));
-    expect(screen.getByText(/Total Carbon Emission is not connected yet/)).toBeInTheDocument();
+    // Both halves chart now: what the trees hold, and what they take up in a
+    // year. A stock and a rate, which are different questions.
+    await waitFor(() => expect(seriesKeys()).toEqual(['carbonKg', 'carbonPerYearKg']));
   });
 
-  it('says a figure has no source rather than showing an invented one', async () => {
+  it('charts wood and growth together', async () => {
+    renderDashboard();
+    await screen.findByText('Standing Timber Volume');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Standing Timber Volume/ }));
+
+    await waitFor(() => expect(seriesKeys()).toEqual(['timberVolumeM3', 'maiAgbMg']));
+  });
+
+  it('shows what it cannot give yet, small and with a reason', async () => {
     renderDashboard();
 
-    // Anchored: the ⓘ beside it is its own button, named "What …".
-    const cover = await screen.findByRole('button', { name: /^Forest \/ Tree Cover Area/ });
-    expect(within(cover).getByText('—')).toBeInTheDocument();
-    expect(within(cover).getByText('Not available yet')).toBeInTheDocument();
+    // Still shown, because the public looks for them — but out of the
+    // headline, since an empty figure should not hold a quarter of the page.
+    const pending = await screen.findByRole('region', { name: 'Figures not available yet' });
 
-    // And its pair charts nothing, with a reason.
-    fireEvent.click(cover);
-    expect(await screen.findByText(/have no source yet/)).toBeInTheDocument();
-    expect(screen.queryByTestId('chart')).not.toBeInTheDocument();
+    const cover = within(pending).getByText('Forest / Tree Cover Area').closest('li');
+    expect(within(cover).getByText('—')).toBeInTheDocument();
+    expect(within(cover).getByText(/Waiting on the mapping feature/)).toBeInTheDocument();
+
+    const emission = within(pending).getByText('Total Carbon Emission').closest('li');
+    expect(within(emission).getByText(/Climate Change Commission/)).toBeInTheDocument();
+
+    // And neither is a card that can be pressed to chart nothing.
+    expect(
+      screen.queryByRole('button', { name: /^Forest \/ Tree Cover Area/ })
+    ).not.toBeInTheDocument();
   });
 
   it('selects a city or municipality clicked on the map, and unselects it on a second click', async () => {
@@ -245,9 +260,15 @@ describe('PublicDashboard', () => {
 
     // The citations live in the tooltips instead, one per figure.
     const tooltips = screen.getAllByRole('tooltip').map((t) => t.textContent);
-    expect(tooltips.some((t) => /Lasco/.test(t))).toBe(true);
-    expect(tooltips.some((t) => /Climate Change Commission \(July 31, 2024\)/.test(t))).toBe(true);
+    expect(tooltips.some((t) => /FMB Technical Bulletin No\. 3/.test(t))).toBe(true);
     expect(tooltips.some((t) => /diameter at breast height/.test(t))).toBe(true);
+    // The growth assumption is named in the ⓘ, not buried in the arithmetic.
+    expect(tooltips.some((t) => /conservative/.test(t))).toBe(true);
+    // And NOT attributed to Lasco et al. The earlier mock-up cited them for
+    // this figure, but the number here does not come from them: it comes from
+    // the DENR equation and our own stated growth rate. Citing a source the
+    // figure was not taken from would be worse than citing none.
+    expect(tooltips.some((t) => /Lasco/.test(t))).toBe(false);
   });
 
   it('spells out the biomass figure instead of abbreviating it', async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ALL_METRICS,
   METRIC_PAIRS,
+  PENDING_METRICS,
   barangayOf,
   carbonForTree,
   formatFigure,
@@ -57,7 +58,15 @@ describe('dashboardMetrics totals', () => {
   });
 
   it('survives an empty or missing set', () => {
-    const empty = { treeCount: 0, invasiveCount: 0, carbonKg: 0, carbonMeasured: 0 };
+    const empty = {
+      treeCount: 0,
+      invasiveCount: 0,
+      carbonKg: 0,
+      carbonPerYearKg: 0,
+      timberVolumeM3: 0,
+      maiAgbMg: 0,
+      carbonMeasured: 0,
+    };
     expect(summarise([])).toEqual(empty);
     expect(summarise(undefined)).toEqual(empty);
   });
@@ -115,8 +124,16 @@ describe('dashboardMetrics definitions', () => {
 
   it('says which figures have a source today, and explains every one', () => {
     const available = ALL_METRICS.filter((m) => m.available).map((m) => m.key);
-    // Everything else is waiting on the mapping feature or the emissions feed.
-    expect(available.sort()).toEqual(['carbonKg', 'invasiveCount', 'treeCount']);
+    // All six. The growth figures stopped waiting on the mapping feature once
+    // they were computed per tree rather than per hectare.
+    expect(available.sort()).toEqual([
+      'carbonKg',
+      'carbonPerYearKg',
+      'invasiveCount',
+      'maiAgbMg',
+      'timberVolumeM3',
+      'treeCount',
+    ]);
     // There is no footnote any more, so the hint is the only explanation a
     // reader gets: every figure needs one.
     for (const metric of ALL_METRICS) {
@@ -125,13 +142,16 @@ describe('dashboardMetrics definitions', () => {
   });
 
   it('spells out Mean Annual Increment of Above Ground Biomass', () => {
-    const mai = ALL_METRICS.find((m) => m.key === 'maiAgb');
+    const mai = ALL_METRICS.find((m) => m.key === 'maiAgbMg');
     expect(mai.label).toBe('Mean Annual Increment of Above Ground Biomass');
   });
 
   it('can find the pair a figure belongs to', () => {
     expect(pairOfMetric('invasiveCount').id).toBe('trees');
-    expect(pairOfMetric('carbonEmissionKg').id).toBe('carbon');
+    expect(pairOfMetric('carbonPerYearKg').id).toBe('carbon');
+    expect(pairOfMetric('maiAgbMg').id).toBe('wood');
+    // The two still waiting on another system are not in a pair.
+    expect(pairOfMetric('carbonEmissionKg')).toBeUndefined();
     expect(pairOfMetric('nonsense')).toBeUndefined();
   });
 
@@ -140,5 +160,44 @@ describe('dashboardMetrics definitions', () => {
     expect(formatFigure(0)).toBe('0');
     expect(formatFigure(null)).toBe('—');
     expect(formatFigure(undefined)).toBe('—');
+  });
+});
+
+describe('the figures still waiting on another system', () => {
+  it('keeps them out of the headline but does not forget them', () => {
+    // The public looks for these, so they are shown — small, at the foot.
+    // An empty figure should not hold a quarter of the page.
+    expect(PENDING_METRICS.map((m) => m.key)).toEqual(['forestCoverHa', 'carbonEmissionKg']);
+    for (const metric of PENDING_METRICS) {
+      expect(metric.waitingOn.length).toBeGreaterThan(0);
+      expect(ALL_METRICS.map((m) => m.key)).not.toContain(metric.key);
+    }
+  });
+});
+
+describe('a rate is not a stock', () => {
+  it('counts what the trees hold and what they add as different figures', () => {
+    const rows = [
+      { species: 'Narra', dbh: '37 cm', merchantable_height: 9 },
+      { species: 'Mango', dbh: '20 cm', merchantable_height: 5 },
+    ];
+    const totals = summarise(rows);
+
+    // A year's uptake is a small fraction of the standing stock. If these ever
+    // came out equal, the growth step would have been skipped.
+    expect(totals.carbonPerYearKg).toBeGreaterThan(0);
+    expect(totals.carbonPerYearKg).toBeLessThan(totals.carbonKg);
+    expect(totals.timberVolumeM3).toBeGreaterThan(0);
+    expect(totals.maiAgbMg).toBeGreaterThan(0);
+  });
+
+  it('leaves an unmeasured tree out of all four, not just the carbon', () => {
+    const totals = summarise([
+      { species: 'Narra', dbh: '37 cm', merchantable_height: 9 },
+      { species: 'Acacia', dbh: '30 cm' },
+    ]);
+
+    expect(totals.treeCount).toBe(2);
+    expect(totals.carbonMeasured).toBe(1);
   });
 });

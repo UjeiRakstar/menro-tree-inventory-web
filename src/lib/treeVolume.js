@@ -318,3 +318,82 @@ export function readDiameterShape(distribution) {
       'which is what lets a forest replace itself as older trees are lost.',
   };
 }
+
+/* ===========================================================================
+ * GROWTH — what the trees add in a year
+ *
+ * Carbon STORED is a stock: how much is held today. SEQUESTRATION is a rate:
+ * how much is taken up per year. Climate commitments are written in rates, so
+ * the rate is the figure a city reporting against one is actually looking for.
+ *
+ * It comes from the volume equation applied twice — the tree as it is, and the
+ * tree one year of growth later:
+ *
+ *     biomass added = AGB(D + a year's growth) − AGB(D)
+ *     CO₂ sequestered = biomass added × carbon fraction × 44/12
+ *
+ * Mean Annual Increment of Above Ground Biomass is the same arithmetic
+ * stopping one step earlier: the biomass, before it is turned into carbon.
+ *
+ * MAI AGB was marked unavailable on this dashboard because the figure wanted
+ * was Mg per HECTARE per year, and hectares need the mapping feature. Mg per
+ * year for the tagged trees needs no area at all — it is the sum of the
+ * per-tree increments — so that is what is shown, labelled for what it is.
+ * Divide by hectares when the mapping work lands.
+ * =========================================================================== */
+
+/**
+ * How much a trunk thickens in a year, in centimetres of diameter.
+ *
+ * THIS IS THE ASSUMPTION IN THE WHOLE CHAIN. Everything else above comes from
+ * the DENR bulletin or from arithmetic; this does not. Real growth varies by
+ * species, by soil, by how much light and water a tree gets, and an urban tree
+ * in a pavement cutout grows nothing like one in a park.
+ *
+ * It is deliberately conservative, so the sequestration figure understates
+ * rather than flatters. Replace it with, in order of preference:
+ *
+ *   1. A MEASURED increment. Two diameter readings of the same tree at
+ *      different dates is the real number and no assumption at all. The field
+ *      app does not re-measure trees yet, but dateCaptured means it could.
+ *   2. A PUBLISHED figure per species, from PGENRO or ERDB — this is where
+ *      Lasco et al. belongs.
+ *   3. This.
+ *
+ * Every figure derived from it is labelled an estimate and says so on the page.
+ */
+export const ANNUAL_DBH_GROWTH_CM = 0.5;
+
+/** The volume equation itself, so a year's growth can be put through it. */
+function volumeFrom(diameterCm, heightM, dipterocarp) {
+  const coefficient = dipterocarp
+    ? VOLUME_COEFFICIENT.dipterocarp
+    : VOLUME_COEFFICIENT.nonDipterocarp;
+  return coefficient * diameterCm * diameterCm * heightM;
+}
+
+/**
+ * The biomass one tree adds in a year, in kilograms, or null.
+ *
+ * The diameter is NOT re-floored here. Rounding down is how the bulletin says
+ * to record a field measurement; applying it to an increment of half a
+ * centimetre would round every year's growth to nothing.
+ */
+export function annualBiomassKg(tree) {
+  const diameter = dbhCm(tree);
+  const height = merchantableHeightM(tree);
+  if (diameter === null || height === null) return null;
+
+  const dipterocarp = isDipterocarp(tree?.species);
+  const grown = volumeFrom(diameter + ANNUAL_DBH_GROWTH_CM, height, dipterocarp);
+  const now = volumeFrom(diameter, height, dipterocarp);
+
+  return (grown - now) * WOOD_DENSITY * 1000 * BIOMASS_EXPANSION_FACTOR;
+}
+
+/** The CO₂ one tree takes up in a year, in kilograms, or null. */
+export function annualCo2Kg(tree) {
+  const biomass = annualBiomassKg(tree);
+  if (biomass === null) return null;
+  return biomass * CARBON_FRACTION * CO2_PER_CARBON;
+}
