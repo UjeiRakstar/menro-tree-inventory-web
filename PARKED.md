@@ -5,23 +5,14 @@ section first within each heading.
 
 ## Needs you to run it
 
-In this order. All four are idempotent — running one twice changes nothing the
-second time.
+See **supabase/RUNBOOK.md** — the files in order, with what to look for in
+each result. All of them are safe to run twice.
 
-1. **`supabase/crowdsource_promotion.sql`** — the step that publishes a verified
-   community tag to the map. Nothing in the chain works end to end until this is
-   applied. It now checks the columns it depends on before creating anything and
-   says plainly what is missing, including "run species_profiles.sql first".
-2. **`supabase/tree_phenology.sql`** — a cleanup migration. It drops
-   `trees.leaf_status`, `trees.flower_status` and `trees.fruit_status`, which
-   nothing writes; the real observations live in `phenology_records`.
-3. **`supabase/data_fixes.sql`** — one name per barangay, one spelling for the
-   fruit trees. Reports what it did at the end. Not in it: the tree at 0,0,
-   because coordinates cannot be invented, only re-surveyed.
-4. **`supabase/rls_audit.sql`** — read-only. It reports what the public key can
-   reach; the policies that match what the public side actually needs are at the
-   bottom, commented out. **Do this before launch.** Paste the output back and
-   the gaps can be read together.
+The short version: species_profiles, crowdsource_promotion, tree_phenology,
+then barangays, barangay_link, the backfill tool, and rls_audit last.
+
+The field app changes go with them — step 8 of the runbook — and have never
+run on a device.
 
 ## Waiting on another system
 
