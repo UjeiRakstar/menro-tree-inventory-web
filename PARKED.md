@@ -38,6 +38,12 @@ Last read through: 10 October 2026.
   nothing has been published yet. Mango has one; the rest do not. Query 5 of
   `supabase/data_checks.sql` is the PGENRO to-do list.
 
+## In progress
+
+- **The BioDashboard rebuild.** Five items, written up in **BIODASHBOARD.md**:
+  the species layer, the barangay leaderboard and planting gap, the diameter-class
+  distribution, freshness, and the climate figures. Each is independent.
+
 ## Still open here
 
 - **Odd columns in public.trees.** The table has 43 columns and a few look
