@@ -118,8 +118,16 @@ describe('PublicDashboard', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Santa Cruz Biodiversity Analytics' })
     ).toBeInTheDocument();
-    // Three of the four trees stand in Santa Cruz, one of them invasive.
-    await waitFor(() => expect(chartRows().map((r) => r.name)).toEqual(['Bubukal', 'Pagsawitan']));
+    // Three of the four trees stand in Santa Cruz, one of them invasive. The
+    // bars are the barangays their coordinates fall in, not the names on the
+    // records: two of these were recorded as Bubukal, in different barangays.
+    await waitFor(() =>
+      expect(chartRows().map((r) => r.name).sort()).toEqual([
+        'Barangay III',
+        'San Pablo Sur',
+        'Santo Angel Sur',
+      ])
+    );
     expect(screen.getAllByTestId('pin')).toHaveLength(3);
   });
 
@@ -129,7 +137,8 @@ describe('PublicDashboard', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Pila' }));
 
-    await waitFor(() => expect(chartRows().map((r) => r.name)).toEqual(['Pansol']));
+    // Recorded as Pansol; it stands in Bulilan Sur.
+    await waitFor(() => expect(chartRows().map((r) => r.name)).toEqual(['Bulilan Sur']));
   });
 
   it('charts the pair whose figure was pressed', async () => {

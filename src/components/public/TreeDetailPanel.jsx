@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Info, Loader2, TreePine, X } from 'lucide-re
 import { traitsOf, biodiversityTrait, categoryTrait, highlightForTrait } from '../../lib/treeTraits.js';
 import { DBH_EXPLAINER, dbhOf, heightOf, observedOn, phenologyOf } from '../../lib/treeDetails.js';
 import { barangayLabel } from '../../lib/barangayNames.js';
+import { barangayForTree } from '../../lib/barangayLookup.js';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
 import dbhIcon from '../../assets/DBH_icon.png';
@@ -41,7 +42,9 @@ function imagesOf(tree) {
  */
 function placeLine(tree, municipalityLabel) {
   const parts = [];
-  const barangay = barangayLabel(tree.barangay);
+  // barangayForTree reads the position first and the written name only as a
+  // fallback, because the written one came from a reverse geocode.
+  const barangay = barangayLabel(barangayForTree(tree));
   if (barangay) parts.push(barangay);
   if (municipalityLabel) parts.push(municipalityLabel);
   if (parts.length === 0) return 'Laguna';

@@ -102,6 +102,7 @@ vi.mock('../../supabaseClient.js', async () => {
 
 import { supabaseMock } from '../../test/supabaseMock.js';
 import { boundsOfMunicipality, LAGUNA_BOUNDS } from '../../lib/lagunaBoundaries.js';
+import { loadBarangayIndex } from '../../lib/barangayLookup.js';
 import PublicMap from './PublicMap.jsx';
 
 // Two trees in Santa Cruz, one in Pila, so the per-area count has something to
@@ -154,6 +155,13 @@ function locateAt(latitude, longitude) {
     },
   });
 }
+
+// The page works out a tree's barangay from where it stands, by fetching the
+// boundaries. Loading them up front makes the assertions about which barangay
+// a tree is in deterministic rather than a race with that fetch.
+beforeAll(async () => {
+  await loadBarangayIndex();
+});
 
 beforeEach(() => {
   supabaseMock.reset();
@@ -242,7 +250,10 @@ describe('PublicMap', () => {
     featureHandlers.get('Pila').click();
 
     const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Pila' });
-    expect(within(panel).getByText('2')).toBeInTheDocument();
+    // Scoped to its own row: both Pila trees stand in one barangay, so the
+    // figure 2 and that barangay's count are both on screen.
+    const treeCount = within(panel).getByText('Total Number of Trees').closest('div');
+    expect(within(treeCount).getByText('2')).toBeInTheDocument();
     // The same six figures as the analytics page, including the three that
     // have no source yet.
     expect(within(panel).getByText('Total Number of Trees')).toBeInTheDocument();
@@ -250,8 +261,11 @@ describe('PublicMap', () => {
       within(panel).getByText('Mean Annual Increment of Above Ground Biomass')
     ).toBeInTheDocument();
     expect(within(panel).getAllByText('Not available yet')).toHaveLength(3);
-    // And where they stand inside it.
-    expect(within(panel).getByText('Pansol')).toBeInTheDocument();
+    // And where they stand inside it — the barangay their coordinates fall in,
+    // not the one typed into the record. Both Pila trees were recorded under
+    // different names; they are both in Bulilan Sur.
+    expect(within(panel).getByText('Bulilan Sur')).toBeInTheDocument();
+    expect(within(panel).queryByText('Pansol')).not.toBeInTheDocument();
   });
 
   it('links through to the full analytics for that place', async () => {
@@ -359,7 +373,9 @@ describe('PublicMap', () => {
     const panel = await screen.findByRole('complementary');
     expect(within(panel).getByRole('heading', { level: 2, name: 'Narra' })).toBeInTheDocument();
     // The municipality is not stored on the tree; it comes from the boundaries.
-    expect(within(panel).getByText('Brgy. Poblacion, Santa Cruz, Laguna')).toBeInTheDocument();
+    // The barangay its coordinates fall in, not the "Poblacion" on the record.
+    // Barangay III says Barangay once: "Brgy. Barangay III" would say it twice.
+    expect(within(panel).getByText('Barangay III, Santa Cruz, Laguna')).toBeInTheDocument();
     expect(await within(panel).findByText('Narra is the national tree.')).toBeInTheDocument();
   });
 

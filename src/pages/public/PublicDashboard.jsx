@@ -26,11 +26,11 @@ import {
 import { labelOf } from '../../lib/lguOptions.js';
 import {
   METRIC_PAIRS,
-  barangayOf,
   formatFigure,
   groupBy,
   summarise,
 } from '../../lib/dashboardMetrics.js';
+import { barangayForTree, barangayIndexReady, loadBarangayIndex } from '../../lib/barangayLookup.js';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 
@@ -299,16 +299,31 @@ export default function PublicDashboard() {
 
   const totals = useMemo(() => summarise(scopedTrees), [scopedTrees]);
 
+  // The barangay of a tree is worked out from where it stands, not from the
+  // name someone typed — so the index has to arrive before the bars are right.
+  const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
+  useEffect(() => {
+    let cancelled = false;
+    loadBarangayIndex()
+      .then(() => !cancelled && setBarangaysReady(true))
+      .catch(() => {
+        // The written names carry the chart until a reload; nothing to say.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // Across the province the bars are LGUs; inside one, they are its barangays.
   const chartRows = useMemo(
     () =>
       selectedLgu
-        ? groupBy(scopedTrees, barangayOf)
+        ? groupBy(scopedTrees, barangayForTree)
         : groupBy(scopedTrees, (tree) => {
             const name = treeAreas.get(tree.id);
             return name ? labelOf(name) : null;
           }),
-    [scopedTrees, selectedLgu, treeAreas]
+    // barangaysReady is not read here; it is what re-runs this once the
+    // boundaries are in hand.
+    [scopedTrees, selectedLgu, treeAreas, barangaysReady]
   );
 
   const scopeLabel = selectedLgu ? labelOf(selectedLgu) : 'Laguna';

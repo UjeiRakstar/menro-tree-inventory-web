@@ -29,7 +29,8 @@ import {
 import { labelOf } from '../../lib/lguOptions.js';
 import { logoFor } from '../../lib/lguLogos.js';
 import { matchesHighlight } from '../../lib/treeTraits.js';
-import { barangayOf, groupBy, summarise } from '../../lib/dashboardMetrics.js';
+import { groupBy, summarise } from '../../lib/dashboardMetrics.js';
+import { barangayForTree, barangayIndexReady, loadBarangayIndex } from '../../lib/barangayLookup.js';
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import TaggingForm from '../../components/public/TaggingForm.jsx';
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
@@ -569,6 +570,20 @@ export default function PublicMap() {
     return areas;
   }, [trees]);
 
+  // A tree's barangay is worked out from where it stands rather than from the
+  // name someone typed, so the boundaries have to arrive before the panel's
+  // list is right. Until then the written names carry it.
+  const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
+  useEffect(() => {
+    let cancelled = false;
+    loadBarangayIndex()
+      .then(() => !cancelled && setBarangaysReady(true))
+      .catch(() => {
+        // Nothing to say: the written names still work.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // What the area panel reports. Same module as the BioDashboard, so the two
   // surfaces cannot drift apart, and the same geometry-derived LGU as the rest
   // of this page.
@@ -577,7 +592,12 @@ export default function PublicMap() {
     [trees, treeAreas, selectedLgu]
   );
   const areaTotals = useMemo(() => summarise(areaTrees), [areaTrees]);
-  const areaBarangays = useMemo(() => groupBy(areaTrees, barangayOf), [areaTrees]);
+  const areaBarangays = useMemo(
+    // barangaysReady is not read here; it is what re-runs this once the
+    // boundaries are in hand.
+    () => groupBy(areaTrees, barangayForTree),
+    [areaTrees, barangaysReady]
+  );
 
   const selectedTreeMunicipality = useMemo(() => {
     const name = selectedTree ? treeAreas.get(selectedTree.id) : null;
