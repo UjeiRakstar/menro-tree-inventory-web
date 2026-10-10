@@ -1,21 +1,43 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import PublicNavbar from './components/PublicNavbar.jsx';
-import CommandCenter from './pages/CommandCenter.jsx';
-import BiodiversityHub from './pages/BiodiversityHub.jsx';
-import ActionBoard from './pages/ActionBoard.jsx';
-import ManageArborists from './pages/ManageArborists.jsx';
-import PermitsLog from './pages/PermitsLog.jsx';
-import BiodiversityDashboard from './pages/BiodiversityDashboard.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
-import PublicDashboard from './pages/public/PublicDashboard.jsx';
-import PublicMap from './pages/public/PublicMap.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
-import NotFound from './pages/NotFound.jsx';
-import Login from './pages/Login.jsx';
-import Signup from './pages/Signup.jsx';
 import { supabase } from './supabaseClient.js';
+
+/**
+ * Every page but the landing one is fetched when it is first opened.
+ *
+ * The whole site used to be one 2.5 MB file, so a resident opening the map on
+ * a phone downloaded the permit forms, the arborist management screens, the
+ * certificate printer and the charting library along with it — none of which
+ * they can even reach without signing in.
+ *
+ * AboutUs stays loaded up front because "/" redirects to it: making the
+ * landing page wait for a second request would trade one problem for another.
+ */
+const PublicDashboard = lazy(() => import('./pages/public/PublicDashboard.jsx'));
+const PublicMap = lazy(() => import('./pages/public/PublicMap.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
+const Signup = lazy(() => import('./pages/Signup.jsx'));
+const CommandCenter = lazy(() => import('./pages/CommandCenter.jsx'));
+const BiodiversityHub = lazy(() => import('./pages/BiodiversityHub.jsx'));
+const ActionBoard = lazy(() => import('./pages/ActionBoard.jsx'));
+const ManageArborists = lazy(() => import('./pages/ManageArborists.jsx'));
+const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
+const BiodiversityDashboard = lazy(() => import('./pages/BiodiversityDashboard.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
+
+/** Shown for the moment a page's code is in flight. */
+function PageLoading() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-live="polite">
+      <span className="h-8 w-8 animate-spin rounded-full border-2 border-green-700 border-t-transparent" />
+      <span className="sr-only">Loading</span>
+    </div>
+  );
+}
 
 /**
  * Starts every page at the top.
@@ -46,7 +68,10 @@ function Shell() {
     <div className="h-screen flex flex-col">
       <Header />
       <main className={mainClassName}>
-        <Outlet />
+        {/* Inside the shell, so the header stays while a page arrives. */}
+        <Suspense fallback={<PageLoading />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );
@@ -62,7 +87,11 @@ function PublicShell() {
     <div className="min-h-screen flex flex-col">
       <PublicNavbar />
       <main className="flex-1">
-        <Outlet />
+        {/* Inside the shell, not around it: a page arriving should not take
+            the navigation away while it does. */}
+        <Suspense fallback={<PageLoading />}>
+          <Outlet />
+        </Suspense>
       </main>
       {!hideFooter && <PublicFooter />}
     </div>
@@ -107,6 +136,7 @@ export default function App() {
   return (
     <>
       <ScrollToTop />
+      <Suspense fallback={<PageLoading />}>
       <Routes>
       {/* Auth routes */}
       <Route path="/login" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Login />} />
@@ -131,6 +161,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Route>
       </Routes>
+      </Suspense>
     </>
   );
 }

@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../supabaseClient.js';
-import { generateMenroExcel } from '../lib/excelExport.js';
 import { X, Image, ArrowUpDown, MapPin, Download, Printer } from 'lucide-react';
 
 const NULL_CELL_PLACEHOLDER = '—';
@@ -142,6 +141,9 @@ export default function InventoryView() {
     if (isExporting || filteredTrees.length === 0) return;
     setIsExporting(true);
     try {
+      // Fetched on the click rather than with the page: ExcelJS is 900 KB,
+      // and most visits to this screen never export anything.
+      const { generateMenroExcel } = await import('../lib/excelExport.js');
       await generateMenroExcel(filteredTrees);
     } finally {
       setIsExporting(false);

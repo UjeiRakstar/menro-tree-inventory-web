@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, lazy, Suspense } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -37,7 +37,12 @@ import {
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
-import TaggingForm from '../../components/public/TaggingForm.jsx';
+/**
+ * The tagging form carries a confetti animation for its success screen, which
+ * is a quarter of a megabyte a visitor should not download for a button they
+ * may never press. It arrives when tagging actually starts.
+ */
+const TaggingForm = lazy(() => import('../../components/public/TaggingForm.jsx'));
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
 import AreaDetailPanel from '../../components/public/AreaDetailPanel.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
@@ -1054,11 +1059,13 @@ export default function PublicMap() {
           through the Green Tag mobile app, which is why nothing here writes to
           the trees table. */}
       {showTaggingForm && (
-        <TaggingForm
-          initialPosition={userTagPosition}
-          onClose={closeTagging}
-          onSuccess={closeTagging}
-        />
+        <Suspense fallback={null}>
+          <TaggingForm
+            initialPosition={userTagPosition}
+            onClose={closeTagging}
+            onSuccess={closeTagging}
+          />
+        </Suspense>
       )}
 
       {/* Asking for the data behind the place in focus */}

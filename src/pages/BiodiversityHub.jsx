@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { classifyPinColor } from '../lib/pinColor.js';
-import { generateMenroExcel } from '../lib/excelExport.js';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { X, Image, ArrowUpDown, MapPin, Download, Search, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -119,7 +118,12 @@ export default function BiodiversityHub() {
             Print QR Tags
           </button>
           <button
-            onClick={() => generateMenroExcel(trees)}
+            onClick={async () => {
+              // Fetched on the click rather than with the page: ExcelJS is
+              // 900 KB, and most visits here never export anything.
+              const { generateMenroExcel } = await import('../lib/excelExport.js');
+              await generateMenroExcel(trees);
+            }}
             className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-800 transition"
           >
             <Download size={16} />
