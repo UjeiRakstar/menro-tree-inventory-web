@@ -106,6 +106,18 @@ check its terminal output against the report.
 
 ---
 
+## 6b. `barangay_verify.sql`
+
+Read-only, after the backfill. The backfill’s own report reads the name
+through a join on the code, so it cannot disagree with itself — it would look
+right even if `trees.barangay` still held "Brgy. V". This checks the column
+the screens actually read.
+
+**Look for:** every count 0 except the first two, and the unplaced row
+reading 1 — the Mahogany at 0,0.
+
+---
+
 ## 7. `rls_audit.sql`
 
 Read-only. **Do this before launch.** It was five queries and you only saw the

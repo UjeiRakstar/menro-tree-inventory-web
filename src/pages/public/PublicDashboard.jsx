@@ -30,7 +30,12 @@ import {
   groupBy,
   summarise,
 } from '../../lib/dashboardMetrics.js';
-import { barangayForTree, barangayIndexReady, loadBarangayIndex } from '../../lib/barangayLookup.js';
+import {
+  barangayForTree,
+  barangayIndexReady,
+  loadBarangayIndex,
+  needsBarangayIndex,
+} from '../../lib/barangayLookup.js';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 
@@ -303,6 +308,9 @@ export default function PublicDashboard() {
   // name someone typed — so the index has to arrive before the bars are right.
   const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
   useEffect(() => {
+    // Only when some tree still needs working out. Every row the database has
+    // settled already carries its barangay, so there is nothing to fetch.
+    if (!needsBarangayIndex(trees)) return undefined;
     let cancelled = false;
     loadBarangayIndex()
       .then(() => !cancelled && setBarangaysReady(true))
@@ -310,7 +318,7 @@ export default function PublicDashboard() {
         // The written names carry the chart until a reload; nothing to say.
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [trees]);
 
   // Across the province the bars are LGUs; inside one, they are its barangays.
   const chartRows = useMemo(

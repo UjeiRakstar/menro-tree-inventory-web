@@ -155,8 +155,17 @@ grant execute on function public.is_menro_admin() to authenticated;
 -- anonymous caller has no auth.uid(), so no row ever matches. Signup also
 -- depends on one of them, which is why this file does not touch them blind.
 --
--- Run this to see what they actually check, and tighten only if the
--- expression does NOT mention auth.uid():
+-- ANSWERED, 10 October 2026. Both mention auth.uid():
+--   "Users can insert own profile."  with check (auth.uid() = id)
+--   "Users can update own profile."  using      (auth.uid() = id)
+--
+-- An anonymous caller has no auth.uid(), so the comparison is null, which is
+-- not true, so no row ever passes. These are safe as they stand and need no
+-- change. Narrowing them to 'authenticated' would change nothing a caller can
+-- do — the policies already require a session — so it is tidying, not
+-- securing, and it risks signup for no gain. Left alone deliberately.
+--
+-- The query that answered it, if you want to check again:
 -- ===========================================================================
 select policyname, cmd, roles, qual as using_expression, with_check
 from pg_policies

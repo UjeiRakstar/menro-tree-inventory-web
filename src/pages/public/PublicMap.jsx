@@ -30,7 +30,12 @@ import { labelOf } from '../../lib/lguOptions.js';
 import { logoFor } from '../../lib/lguLogos.js';
 import { matchesHighlight } from '../../lib/treeTraits.js';
 import { groupBy, summarise } from '../../lib/dashboardMetrics.js';
-import { barangayForTree, barangayIndexReady, loadBarangayIndex } from '../../lib/barangayLookup.js';
+import {
+  barangayForTree,
+  barangayIndexReady,
+  loadBarangayIndex,
+  needsBarangayIndex,
+} from '../../lib/barangayLookup.js';
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import TaggingForm from '../../components/public/TaggingForm.jsx';
 import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
@@ -575,6 +580,9 @@ export default function PublicMap() {
   // list is right. Until then the written names carry it.
   const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
   useEffect(() => {
+    // Only when some tree still needs working out. Every row the database has
+    // settled already carries its barangay, so there is nothing to fetch.
+    if (!needsBarangayIndex(trees)) return undefined;
     let cancelled = false;
     loadBarangayIndex()
       .then(() => !cancelled && setBarangaysReady(true))
@@ -582,7 +590,7 @@ export default function PublicMap() {
         // Nothing to say: the written names still work.
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [trees]);
 
   // What the area panel reports. Same module as the BioDashboard, so the two
   // surfaces cannot drift apart, and the same geometry-derived LGU as the rest

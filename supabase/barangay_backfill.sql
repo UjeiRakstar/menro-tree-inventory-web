@@ -7,48 +7,40 @@
 -- PSGC code is set here, and the trigger from barangay_link fills the name
 -- from the reference table, so the two can never disagree.
 --
--- 112 trees read. 40 to correct, 71 already right, 1 that coordinates cannot place.
+-- 112 trees read. 32 to correct, 79 already right, 1 that coordinates cannot place.
 
-update public.trees set barangay_psgc = 403426003 where id = '1771919319824';  -- Santa Cruz: "Unknown Barangay" -> Bubukal
-update public.trees set barangay_psgc = 403426017 where id = 'e100f80e-3c72-4d05-ab91-c19eb9c4d98a';  -- Santa Cruz: "Barangay V" -> Barangay IV
-update public.trees set barangay_psgc = 403426003 where id = '1773029362927';  -- Santa Cruz: null -> Bubukal
-update public.trees set barangay_psgc = 403426001 where id = '0d625221-524b-4ef5-9353-fc3741f72fbd';  -- Santa Cruz: "San Jose" -> Alipit
-update public.trees set barangay_psgc = 403426019 where id = '0fe052ea-7302-4653-9a75-9eb2a0a2c03a';  -- Santa Cruz: "II" -> San Jose
-update public.trees set barangay_psgc = 403426016 where id = 'dc3bb93f-c662-46be-8bd7-1fdbabf317b9';  -- Santa Cruz: "III" -> Barangay III
-update public.trees set barangay_psgc = 403426015 where id = 'f74b62db-f38b-4a5c-ad44-bfab1889a742';  -- Santa Cruz: "III" -> Barangay II
-update public.trees set barangay_psgc = 403426017 where id = '8c9ba488-8246-4c48-b4b0-9c2b4291ad84';  -- Santa Cruz: "IV" -> Barangay IV
-update public.trees set barangay_psgc = 403426017 where id = 'd1f8da2b-b6ec-4cbb-bdc6-bbdf655fc2c3';  -- Santa Cruz: "IV" -> Barangay IV
-update public.trees set barangay_psgc = 403426012 where id = '9b5fd6c4-4433-4a2a-8519-f70c0f15d6c6';  -- Santa Cruz: "Patimbao" -> Palasan
-update public.trees set barangay_psgc = 403426001 where id = '70df331c-b633-4fbb-a178-57ca504f2d7a';  -- Santa Cruz: "San Jose" -> Alipit
-update public.trees set barangay_psgc = 403426018 where id = '26eb57ec-b072-4d2b-a010-b9690196ce20';  -- Santa Cruz: "IV" -> Barangay V
-update public.trees set barangay_psgc = 403426014 where id = 'fb80db57-3c58-47e0-af96-dc3d83dd6153';  -- Santa Cruz: "I" -> Barangay I
-update public.trees set barangay_psgc = 403426016 where id = 'd1f52d5a-da85-48ad-ad44-a9578cc12d8a';  -- Santa Cruz: "III" -> Barangay III
-update public.trees set barangay_psgc = 403426014 where id = 'd17d12f3-f542-4fdb-ac49-55da341496b9';  -- Santa Cruz: "I" -> Barangay I
-update public.trees set barangay_psgc = 403420003 where id = 'c63a0de6-7771-4bb2-9a45-2fabec36e400';  -- Pakil: "Taft" -> Burgos
-update public.trees set barangay_psgc = 403426014 where id = 'ecaa7bc6-55a6-48ee-a316-cdd61e56b4bd';  -- Santa Cruz: "I" -> Barangay I
-update public.trees set barangay_psgc = 403426016 where id = 'b5660dc9-b70b-455b-af77-e5f9685ff517';  -- Santa Cruz: "III" -> Barangay III
-update public.trees set barangay_psgc = 403426010 where id = '3382e9de-1682-4bdb-ad81-caeff9e8b81b';  -- Santa Cruz: "Malinao" -> Oogong
-update public.trees set barangay_psgc = 403426017 where id = '8088ed91-42e7-4b71-a08d-8a1d7f6c8d20';  -- Santa Cruz: "IV" -> Barangay IV
-update public.trees set barangay_psgc = 403426006 where id = '1771944105857';  -- Santa Cruz: null -> Gatid
-update public.trees set barangay_psgc = 403426006 where id = '1778189728624';  -- Santa Cruz: null -> Gatid
-update public.trees set barangay_psgc = 403426011 where id = '1772098081802';  -- Santa Cruz: null -> Pagsawitan
-update public.trees set barangay_psgc = 403426003 where id = '1771919255646';  -- Santa Cruz: null -> Bubukal
-update public.trees set barangay_psgc = 403426015 where id = 'c4228ab3-3882-4ce0-81f1-3d922bb33fbc';  -- Santa Cruz: "II" -> Barangay II
-update public.trees set barangay_psgc = 403426016 where id = 'ec02dbf0-b0f7-4180-a6ad-e61da2d17462';  -- Santa Cruz: "III" -> Barangay III
-update public.trees set barangay_psgc = 403426014 where id = 'f7c9e0d1-0f4b-4b2a-bf3b-252f207fc11d';  -- Santa Cruz: "I" -> Barangay I
-update public.trees set barangay_psgc = 403426017 where id = '441d3b45-6677-4b77-8c66-afde90ccad80';  -- Santa Cruz: "IV" -> Barangay IV
-update public.trees set barangay_psgc = 403426016 where id = 'e1a49f50-3dd6-42bb-a309-84724813cd69';  -- Santa Cruz: "III" -> Barangay III
-update public.trees set barangay_psgc = 403426017 where id = '3ef350cf-2df9-42b7-a37a-db3cc7dd7491';  -- Santa Cruz: "IV" -> Barangay IV
-update public.trees set barangay_psgc = 403426016 where id = 'b0965e68-07bd-4b68-abfb-9d520f011ba2';  -- Santa Cruz: "III" -> Barangay III
-update public.trees set barangay_psgc = 403426015 where id = '229ba97d-bb62-421e-ad5d-cd947c6ce729';  -- Santa Cruz: "II" -> Barangay II
-update public.trees set barangay_psgc = 403426014 where id = '1da13689-d1bd-4217-a0de-4ff45091a1df';  -- Santa Cruz: "I" -> Barangay I
-update public.trees set barangay_psgc = 403426001 where id = 'c40469b2-32b0-46eb-8e50-f8f4a7c1b52d';  -- Santa Cruz: "San Jose" -> Alipit
-update public.trees set barangay_psgc = 403426006 where id = 'a9e877e0-f4a7-45ca-8756-d366c3fb1113';  -- Santa Cruz: "Labuin" -> Gatid
-update public.trees set barangay_psgc = 403426012 where id = '114e6578-cdce-4edc-8776-d8c7a821a1f6';  -- Santa Cruz: "Patimbao" -> Palasan
-update public.trees set barangay_psgc = 403426001 where id = '57c17433-2949-4295-b4e2-884c2858cc4c';  -- Santa Cruz: "San Jose" -> Alipit
-update public.trees set barangay_psgc = 403426021 where id = '5ec4433c-ab38-4e89-a2a1-0ccaa67ad335';  -- Santa Cruz: "Dolor Subdivision" -> San Pablo Norte
-update public.trees set barangay_psgc = 403426022 where id = 'e1a7428c-ce4a-4d7a-af0e-dd0e118c7c97';  -- Santa Cruz: "Villa Silangan Subdivision" -> San Pablo Sur
-update public.trees set barangay_psgc = 403426021 where id = '70a4ef2d-6251-4dcd-ad3d-6cc3d6cdb71a';  -- Santa Cruz: "Barangay V" -> San Pablo Norte
+update public.trees set barangay_psgc = 403426005 where id = '366d2fcc-08f6-419b-a0cd-89d71ccfbb0a';  -- Santa Cruz: "Duhat" -> Duhat
+update public.trees set barangay_psgc = 403426003 where id = 'e1a425de-5085-48cd-b80c-c6fdf1f1966a';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426003 where id = '22502698-1e4e-4e4b-97e3-ad4bd53ad37b';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426003 where id = '1c981b2d-263a-426f-804b-2f45807d258e';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426008 where id = 'b0c1921f-35ca-4ca3-90f3-e934a4318116';  -- Santa Cruz: "Labuin" -> Labuin
+update public.trees set barangay_psgc = 403426005 where id = 'd47cb9f6-53af-46db-837f-74ae4748a28e';  -- Santa Cruz: "Duhat" -> Duhat
+update public.trees set barangay_psgc = 403426003 where id = 'c4b8885f-9ca0-489f-bdda-5629eebe24ad';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426003 where id = '0ce47242-6f26-4c35-9c7d-6c0dce4008a1';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426003 where id = '503923fc-9892-4fdf-9730-8451f28b493c';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426003 where id = '21e831c5-08df-4822-b9e8-09d57a70c6cb';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426003 where id = 'e0b0a040-a501-44da-8c3b-e81f396db7fb';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426020 where id = '8c9b3e1a-c045-42cf-968b-d72b22606660';  -- Santa Cruz: "San Juan" -> San Juan
+update public.trees set barangay_psgc = 403426003 where id = 'ba62854b-d72b-426c-9407-cce5ce7986ee';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426002 where id = '1270c538-4e89-4bc7-b892-2633d7cdd990';  -- Santa Cruz: "Bagumbayan" -> Bagumbayan
+update public.trees set barangay_psgc = 403426002 where id = 'ccad554f-1736-4c7b-944a-db3e29f0ce0b';  -- Santa Cruz: "Bagumbayan" -> Bagumbayan
+update public.trees set barangay_psgc = 403426003 where id = 'e3d81023-b108-410a-8d76-57849e75eb82';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426002 where id = 'cdbafb70-13f8-45e3-85f8-bba07842609d';  -- Santa Cruz: "Bagumbayan" -> Bagumbayan
+update public.trees set barangay_psgc = 403426019 where id = '3cfb7a21-7ae4-4765-8837-384dae927e58';  -- Santa Cruz: "San Jose" -> San Jose
+update public.trees set barangay_psgc = 403426005 where id = '127045b8-53e7-49f3-8fba-70967520eec9';  -- Santa Cruz: "Duhat" -> Duhat
+update public.trees set barangay_psgc = 403426020 where id = '188f8bca-998c-448b-8b11-780004af6608';  -- Santa Cruz: "San Juan" -> San Juan
+update public.trees set barangay_psgc = 403426020 where id = '03988636-508b-4914-93e8-fc581baee34a';  -- Santa Cruz: "San Juan" -> San Juan
+update public.trees set barangay_psgc = 403426003 where id = '22f1837b-9f93-4a6c-941d-d2495d43e5a5';  -- Santa Cruz: "Bubukal" -> Bubukal
+update public.trees set barangay_psgc = 403426002 where id = 'e100f951-dc4a-4712-a1f9-5095d739e88d';  -- Santa Cruz: "Bagumbayan" -> Bagumbayan
+update public.trees set barangay_psgc = 403426008 where id = '34793a7c-943b-4be6-8c3b-05482531e83f';  -- Santa Cruz: "Labuin" -> Labuin
+update public.trees set barangay_psgc = 403426020 where id = '2e2768d6-1913-4333-8473-b78cc73f71c4';  -- Santa Cruz: "San Juan" -> San Juan
+update public.trees set barangay_psgc = 403426019 where id = '2b13f6ee-301c-4dea-985f-fdd1770803e0';  -- Santa Cruz: "San Jose" -> San Jose
+update public.trees set barangay_psgc = 403426020 where id = 'c4cf7e7d-c475-455b-9d41-e7c6afc94978';  -- Santa Cruz: "San Juan" -> San Juan
+update public.trees set barangay_psgc = 403426008 where id = '06986ac6-5fe5-4a8a-bdfd-403879cac420';  -- Santa Cruz: "Labuin" -> Labuin
+update public.trees set barangay_psgc = 403426009 where id = 'd55560e8-930a-4993-a9cc-71c8395d184d';  -- Santa Cruz: "Malinao" -> Malinao
+update public.trees set barangay_psgc = 403426019 where id = '37e1a8e8-1a38-4088-8456-c7f3e5882f00';  -- Santa Cruz: "San Jose" -> San Jose
+update public.trees set barangay_psgc = 403426002 where id = '8088ed84-9843-4de7-9e42-1279a0dbecb0';  -- Santa Cruz: "Bagumbayan" -> Bagumbayan
+update public.trees set barangay_psgc = 403426003 where id = '445585b7-7eb2-43ce-9a3b-b0b30bb533ad';  -- Santa Cruz: "Bubukal" -> Bubukal
 
 -- ---------------------------------------------------------------------------
 -- Not touched — these need a person, not a query.

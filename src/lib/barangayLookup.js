@@ -106,13 +106,45 @@ export function barangayAt(position) {
 /**
  * The barangay to file a tree under.
  *
- * Derived from where it stands when that can be worked out, and only then
- * falling back to what someone wrote down.
+ * Three answers, in order of how much they can be trusted:
+ *
+ *   barangay_psgc set   The database has already settled it. A trigger keeps
+ *                       trees.barangay copied from the reference table
+ *                       whenever that code is set, so the text cannot be a
+ *                       subdivision, a placeholder or a misspelling — it is a
+ *                       barangay that exists.
+ *   a usable position   Work it out from the boundaries.
+ *   neither             Whatever was written down, tidied.
  */
 export function barangayForTree(tree) {
+  if (tree?.barangay_psgc) {
+    const settled = canonicalBarangay(tree.barangay);
+    if (settled) return settled;
+  }
+
   const lat = Number(tree?.latitude);
   const lng = Number(tree?.longitude);
   const derived = barangayAt([lat, lng]);
   if (derived) return derived.barangay;
+
   return canonicalBarangay(tree?.barangay);
+}
+
+/**
+ * Is the index worth fetching for this set of trees?
+ *
+ * It is 617 KB. Once every tree carries a barangay_psgc — which is what
+ * supabase/barangay_link.sql and the backfill are for — nothing needs working
+ * out and the download is pure waste. A single tree without one brings it
+ * back, so a row synced by an older build of the field app is still placed
+ * properly rather than quietly showing whatever it was tagged with.
+ */
+export function needsBarangayIndex(trees) {
+  return (Array.isArray(trees) ? trees : []).some((tree) => {
+    if (tree?.barangay_psgc) return false;
+    const lat = Number(tree?.latitude);
+    const lng = Number(tree?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    return !(lat === 0 && lng === 0);
+  });
 }
