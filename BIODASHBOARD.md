@@ -56,7 +56,7 @@ the DSS later; it is not in scope here.
 
 ---
 
-## 1. The species layer
+## 1. The species layer — DONE
 
 **Why.** It is the missing half of the page's own name, and it needs no data
 that is not already there.
@@ -85,6 +85,12 @@ two, which need adding.
 
 **Done when** the page says how many species there are, which ten are
 commonest, and names any that are over-planted.
+
+**Built.** `src/lib/speciesMetrics.js` and
+`src/components/public/SpeciesSection.jsx`. The family threshold of the
+10-20-30 rule is deliberately not checked: it needs a species-to-family list
+this system has not got, and inventing one would be worse than checking two of
+the three honestly. The page says so.
 
 ---
 

@@ -105,8 +105,10 @@ describe('PublicDashboard', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Laguna Biodiversity Analytics' })
     ).toBeInTheDocument();
-    // All four trees, not one municipality's worth.
-    expect(await screen.findByText('4')).toBeInTheDocument();
+    // All four trees, not one municipality's worth. Scoped to its own card:
+    // the species section counts things too, and "4" appears there as well.
+    const treeCount = (await screen.findByText('Total Number of Trees')).closest('button');
+    expect(within(treeCount).getByText('4')).toBeInTheDocument();
   });
 
   it('follows the city or municipality that was picked', async () => {

@@ -39,6 +39,7 @@ import {
 import { PUBLIC_DASHBOARD_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
+import SpeciesSection from '../../components/public/SpeciesSection.jsx';
 
 const MARKER_COLOR = '#16a34a';
 const MASK_STYLE = { color: 'transparent', weight: 0, fillColor: '#e2e8f0', fillOpacity: 0.75 };
@@ -488,6 +489,9 @@ export default function PublicDashboard() {
         <div className="mt-3">
           <PairChart pair={pair} rows={chartRows} scopeLabel={scopeLabel} />
         </div>
+
+        {/* What is actually growing — the diversity the page is named after */}
+        <SpeciesSection trees={scopedTrees} scopeLabel={scopeLabel} />
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />

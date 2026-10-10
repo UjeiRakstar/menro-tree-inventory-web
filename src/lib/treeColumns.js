@@ -77,6 +77,10 @@ export const PUBLIC_DASHBOARD_COLUMNS = [
   'merchantable_height',
   'biodiversity_status',
   'species_type',
+  // The species layer: the genus comes from the binomial, and the mix of
+  // what the trees are grown for comes from the category.
+  'scientific_name',
+  'tree_category',
 ].join(',');
 
 /** PostgreSQL's code for "there is no column by that name". */

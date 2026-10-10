@@ -29,6 +29,8 @@ const READ_BY_THE_MAP = [
 const READ_BY_THE_DASHBOARD = [
   'id', 'species', 'barangay', 'barangay_psgc', 'latitude', 'longitude',
   'dbh', 'merchantable_height', 'biodiversity_status', 'species_type',
+  // The species layer
+  'scientific_name', 'tree_category',
 ];
 
 /**
