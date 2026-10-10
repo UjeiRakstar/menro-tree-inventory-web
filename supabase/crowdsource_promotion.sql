@@ -56,6 +56,44 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 1b. Check the columns this file is about to depend on.
+--
+-- A PL/pgSQL body is not checked against the schema until it runs, so a column
+-- that is not there fails in the field, in front of an arborist, rather than
+-- here. This says so now instead.
+--
+-- Note the quoted names: public.trees was created by the mobile app's upsert,
+-- so the photo and date columns are camelCase and have to be written exactly
+-- as they are, "imageUrl" and "dateCaptured", not imageurl.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_missing text[] := '{}';
+  v_column text;
+begin
+  foreach v_column in array array['id', 'species', 'barangay', 'latitude', 'longitude',
+                                  'imageUrl', 'leaves_url', 'bark_url', 'fruits_url',
+                                  'dateCaptured', 'source']
+  loop
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'trees' and column_name = v_column
+    ) then
+      v_missing := v_missing || v_column;
+    end if;
+  end loop;
+
+  if 'source' = any (v_missing) then
+    raise exception 'public.trees has no "source" column. Run supabase/species_profiles.sql first.';
+  end if;
+
+  if array_length(v_missing, 1) > 0 then
+    raise exception 'public.trees is missing %. promote_pending_tree() would fail the first time an arborist used it, so it is not being created.', v_missing;
+  end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 2. Who may publish a submission.
 --
 -- Verification happens in the field, so the arborists doing it must be allowed,
@@ -136,15 +174,19 @@ begin
     v_tree_id := p_tree_id;
   else
     v_tree_id := gen_random_uuid()::text;
+    -- "imageUrl" and "dateCaptured" are quoted because that is how the mobile
+    -- app's upsert created them; unquoted, Postgres would fold them to
+    -- imageurl and datecaptured and not find the columns. The submission's
+    -- photo_url is the tree's main photo.
     insert into public.trees (
       id, species, barangay, latitude, longitude,
-      photo_url, leaves_url, bark_url, fruits_url,
-      source, is_tagged, created_at
+      "imageUrl", leaves_url, bark_url, fruits_url,
+      source, "dateCaptured"
     )
     values (
       v_tree_id, v_pending.species, v_pending.barangay, v_pending.latitude, v_pending.longitude,
       v_pending.photo_url, v_pending.leaves_url, v_pending.bark_url, v_pending.fruits_url,
-      'crowdsource', true, now()
+      'crowdsource', coalesce(v_pending.submitted_at, now())
     );
   end if;
 
