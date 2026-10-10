@@ -117,3 +117,24 @@ describe('SpeciesSection', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe('the guideline line', () => {
+  it('is drawn when a species is within reach of it', () => {
+    const rest = Array.from({ length: 86 }, (_, i) => tree(`Species ${i}`));
+    renderSection([...many(14, 'Mango'), ...rest]);
+
+    expect(within(section()).getByText('10% guideline')).toBeInTheDocument();
+  });
+
+  it('is not drawn when nothing is near it, and says so instead', () => {
+    // Sixty species: the commonest is under 3%. Keeping the line on the track
+    // would squash every bar to a stub against a line nothing approaches.
+    const trees = Array.from({ length: 60 }, (_, i) => many(2, `Species ${i}`)).flat();
+    renderSection(trees);
+
+    expect(within(section()).queryByText('10% guideline')).not.toBeInTheDocument();
+    expect(
+      within(section()).getByText('No species is anywhere near the 10% guideline.')
+    ).toBeInTheDocument();
+  });
+});

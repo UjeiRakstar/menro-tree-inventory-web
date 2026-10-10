@@ -2,7 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, GeoJSON, Polygon, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Download, Info, Loader2 } from 'lucide-react';
+import {
+  CalendarRange,
+  Download,
+  Info,
+  Leaf,
+  Loader2,
+  MapPin,
+  Ruler,
+} from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -65,6 +73,19 @@ const HOVER_STYLE = { color: '#15803d', weight: 2, opacity: 1, fillColor: '#22c5
 /** How a city or municipality should look, given what is selected. */
 const styleFor = (name, selected) => (name === selected ? SELECTED_STYLE : MUNICIPALITY_STYLE);
 
+/**
+ * The four detail views, one at a time.
+ *
+ * Stacked, they made the page a scroll and nothing below the figures was ever
+ * on screen with them. Behind tabs each is a step a reader takes on purpose.
+ */
+const DETAIL_TABS = [
+  { key: 'species', label: 'Species', icon: Leaf },
+  { key: 'places', label: 'Places', icon: MapPin },
+  { key: 'sizes', label: 'Sizes', icon: Ruler },
+  { key: 'survey', label: 'Survey', icon: CalendarRange },
+];
+
 /** Series colours, matched to how each figure reads: growth green, pressure red. */
 const SERIES_COLOR = { green: '#16a34a', red: '#dc2626', blue: '#0ea5e9' };
 
@@ -125,46 +146,67 @@ function StatCard({ metric, value, note = '', active, onSelect }) {
   const tone = metric.tone === 'red' ? 'text-red-700' : 'text-green-800';
 
   return (
-    <div className="relative flex-1">
+    <div className="relative bg-white">
       <button
         type="button"
         onClick={onSelect}
         aria-pressed={active}
-        className={`flex h-full w-full flex-col justify-between rounded-2xl border bg-white px-5 py-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 ${
-          active
-            ? 'border-green-600 shadow-md ring-1 ring-green-600'
-            : 'border-slate-200 hover:border-green-400 hover:shadow-sm'
+        /* The figure is first on screen because six of these are scanned, not
+           read. Spoken, that order is useless — a bare number before its
+           name — so the accessible name puts the label back in front. */
+        aria-label={[
+          metric.label,
+          unavailable ? 'not available yet' : `${formatFigure(value)} ${metric.unit}`.trim(),
+          !unavailable && note ? note : '',
+        ]
+          .filter(Boolean)
+          .join(', ')}
+        className={`flex h-full w-full flex-col justify-between px-3 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-600 sm:px-4 ${
+          active ? 'bg-green-50/70' : 'hover:bg-slate-50'
         }`}
       >
+        {/* The number first and largest: a reader scanning six of these is
+            comparing figures, not reading labels. */}
+        <span className="flex items-baseline gap-1">
+          <span
+            className={`text-2xl font-bold leading-none sm:text-3xl ${
+              unavailable ? 'text-slate-300' : tone
+            }`}
+          >
+            {unavailable ? '—' : formatFigure(value)}
+          </span>
+          {metric.unit && !unavailable && (
+            <span className="text-[10px] leading-tight text-slate-400">{metric.unit}</span>
+          )}
+        </span>
+
         <span
-          className={`block min-h-[2.25rem] pr-7 text-[11px] font-bold uppercase leading-snug tracking-wider sm:text-xs ${
-            metric.tone === 'red' ? 'text-red-700' : 'text-green-800'
+          className={`mt-1.5 block pr-5 text-[10px] font-semibold uppercase leading-tight tracking-wide ${
+            metric.tone === 'red' ? 'text-red-700/90' : 'text-slate-600'
           }`}
         >
           {metric.label}
         </span>
 
-        <span className="mt-3 block">
-          <span className="flex items-baseline gap-2">
-            <span className={`text-3xl font-bold sm:text-4xl ${unavailable ? 'text-slate-300' : tone}`}>
-              {unavailable ? '—' : formatFigure(value)}
-            </span>
-            {metric.unit && <span className="text-xs text-slate-400">{metric.unit}</span>}
+        {/* Context under the figure: how much of the inventory it speaks for,
+            or how it has moved. A number alone is raw data. */}
+        {unavailable ? (
+          <span className="mt-1 block text-[10px] leading-snug text-slate-400">
+            Not available yet
           </span>
+        ) : (
+          note && <span className="mt-1 block text-[10px] leading-snug text-slate-500">{note}</span>
+        )}
 
-          {unavailable && (
-            <span className="mt-1 block text-[11px] leading-snug text-slate-500">Not available yet</span>
-          )}
-
-          {/* A total built from part of the inventory says which part. */}
-          {!unavailable && note && (
-            <span className="mt-1 block text-[11px] leading-snug text-slate-500">{note}</span>
-          )}
-        </span>
+        {/* The chosen pair is marked with a rule, not by tint alone. */}
+        <span
+          aria-hidden="true"
+          className={`mt-2 block h-0.5 rounded-full ${active ? 'bg-green-600' : 'bg-transparent'}`}
+        />
       </button>
 
       {metric.hint && (
-        <span className="absolute right-4 top-4">
+        <span className="absolute right-1.5 top-2.5">
           <InfoHint label={`What ${metric.label} means`} text={metric.hint} />
         </span>
       )}
@@ -264,6 +306,7 @@ export default function PublicDashboard() {
     );
 
   const [activePair, setActivePair] = useState(METRIC_PAIRS[0].id);
+  const [detail, setDetail] = useState(DETAIL_TABS[0].key);
   const [requestOpen, setRequestOpen] = useState(false);
   const municipalityLayer = useRef(null);
   const selectedRef = useRef('');
@@ -479,37 +522,35 @@ export default function PublicDashboard() {
           </p>
         )}
 
-{/* The figures: one column per pair, so the two that belong together are
-            always one above the other. */}
-        <div className="mt-6 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {METRIC_PAIRS.map((group) => (
-            <div key={group.id} className="flex flex-col gap-4">
-              {group.metrics.map((metric) => (
-                <StatCard
-                  key={metric.key}
-                  metric={metric}
-                  value={totals[metric.key]}
-                  note={
-                    metric.key === 'carbonKg'
-                      ? carbonCoverage
-                      : metric.key === 'treeCount'
-                        ? recentLine
-                        : ''
-                  }
-                  active={activePair === group.id}
-                  onSelect={() => setActivePair(group.id)}
-                />
-              ))}
-            </div>
-          ))}
+        {/* The figures: one row of six, hairline-separated. A dashboard is
+            read across before it is read down, and six stacked cards push
+            everything else off the first screen. */}
+        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-6">
+          {METRIC_PAIRS.flatMap((group) =>
+            group.metrics.map((metric) => (
+              <StatCard
+                key={metric.key}
+                metric={metric}
+                value={totals[metric.key]}
+                note={
+                  metric.key === 'carbonKg'
+                    ? carbonCoverage
+                    : metric.key === 'treeCount'
+                      ? recentLine
+                      : ''
+                }
+                active={activePair === group.id}
+                onSelect={() => setActivePair(group.id)}
+              />
+            ))
+          )}
         </div>
-        <p className="mt-2 text-xs text-slate-500">
-          Pick any figure to chart its pair below, {selectedLgu ? 'barangay by barangay' : 'across the province'}.
-          You can also click a city or municipality on the map to look at it on its own.
-        </p>
 
-        {/* Where it is */}
-        <div className="relative mt-6 h-[380px] overflow-hidden rounded-2xl border border-slate-200 sm:h-[460px]">
+        {/* Where it is, and how it is spread — side by side, because one
+            answers "where" and the other "how much where", and a reader
+            wants them in the same glance. */}
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="relative h-[320px] overflow-hidden rounded-2xl border border-slate-200 sm:h-[380px]">
           {loading && (
             <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/80">
               <span className="flex items-center gap-2 text-sm text-slate-600">
@@ -558,34 +599,81 @@ export default function PublicDashboard() {
           </MapContainer>
         </div>
 
-        {/* How it is distributed */}
-        <h2 className="mt-8 text-sm font-bold uppercase tracking-wider text-slate-600">
-          {pair.title} — {selectedLgu ? `barangays of ${scopeLabel}` : 'cities and municipalities of Laguna'}
-        </h2>
-        <div className="mt-3">
-          <PairChart pair={pair} rows={chartRows} scopeLabel={scopeLabel} />
+        {/* How it is distributed — the pair chosen above, place by place */}
+        <div className="flex min-h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-4 sm:min-h-[380px] sm:p-5">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            {pair.title}
+          </h2>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {selectedLgu ? `By barangay of ${scopeLabel}` : 'By city and municipality'} · pick any
+            figure above to change this
+          </p>
+          <div className="mt-2 flex-1">
+            <PairChart pair={pair} rows={chartRows} scopeLabel={scopeLabel} />
+          </div>
+        </div>
         </div>
 
-        {/* What is actually growing — the diversity the page is named after */}
-        <SpeciesSection trees={scopedTrees} scopeLabel={scopeLabel} />
+        {/* The detail, one question at a time.
+            These were four full-width sections stacked down the page, which
+            made the dashboard a scroll: nothing below the figures was ever on
+            screen with them. Behind tabs, each is a step a reader takes on
+            purpose rather than one they have to pass through. */}
+        <div className="mt-6">
+          <div
+            role="tablist"
+            aria-label="What to look at"
+            className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1"
+          >
+            {DETAIL_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const current = detail === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  id={`detail-tab-${tab.key}`}
+                  aria-selected={current}
+                  aria-controls="detail-panel"
+                  onClick={() => setDetail(tab.key)}
+                  className={`inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 sm:flex-none ${
+                    current ? 'bg-white text-green-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Icon size={14} aria-hidden="true" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Where it has reached, and where it has not. Inside a city or
-            municipality that is its barangays; across the province it is the
-            thirty cities and municipalities themselves. */}
-        <CoverageSection
-          trees={scopedTrees}
-          keyOf={selectedLgu ? barangayForTree : (tree) => treeAreas.get(tree.id) ?? null}
-          allPlaces={places}
-          scopeLabel={scopeLabel}
-          noun={selectedLgu ? 'barangay' : 'city or municipality'}
-          nounPlural={selectedLgu ? 'barangays' : 'cities and municipalities'}
-        />
-
-        {/* How old it is — the question counting trees cannot answer */}
-        <SizeSection trees={scopedTrees} scopeLabel={scopeLabel} />
-
-        {/* How far the survey has got */}
-        <GrowthStrip timeline={freshness.timeline} scopeLabel={scopeLabel} />
+          <div
+            id="detail-panel"
+            role="tabpanel"
+            aria-labelledby={`detail-tab-${detail}`}
+            tabIndex={-1}
+            className="mt-4"
+          >
+            {detail === 'species' && (
+              <SpeciesSection trees={scopedTrees} scopeLabel={scopeLabel} />
+            )}
+            {detail === 'places' && (
+              <CoverageSection
+                trees={scopedTrees}
+                keyOf={selectedLgu ? barangayForTree : (tree) => treeAreas.get(tree.id) ?? null}
+                allPlaces={places}
+                scopeLabel={scopeLabel}
+                noun={selectedLgu ? 'barangay' : 'city or municipality'}
+                nounPlural={selectedLgu ? 'barangays' : 'cities and municipalities'}
+              />
+            )}
+            {detail === 'sizes' && <SizeSection trees={scopedTrees} scopeLabel={scopeLabel} />}
+            {detail === 'survey' && (
+              <GrowthStrip timeline={freshness.timeline} scopeLabel={scopeLabel} />
+            )}
+          </div>
+        </div>
 
         {/* Asked for, and honestly not here yet. Shown small rather than
             omitted: the public looks for these, and a page that left them out

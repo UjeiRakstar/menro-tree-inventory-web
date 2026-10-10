@@ -173,7 +173,7 @@ export default function LguStrip({ selected, onSelect }) {
         role="tablist"
         aria-label="Cities and municipalities of Laguna"
         onScroll={wrap}
-        className="flex flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden px-2 py-4 sm:gap-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden px-2 py-2.5 sm:gap-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {Array.from({ length: COPIES }).flatMap((_, copy) =>
           CHOICES.map((choice) => {
@@ -201,12 +201,12 @@ export default function LguStrip({ selected, onSelect }) {
                     loading="lazy"
                     className={`rounded-full object-contain transition-all duration-300 ease-out motion-reduce:transition-none ${
                       active
-                        ? 'h-20 w-20 sm:h-24 sm:w-24'
-                        : 'h-14 w-14 opacity-80 group-hover:opacity-100 sm:h-16 sm:w-16'
+                        ? 'h-14 w-14 sm:h-16 sm:w-16'
+                        : 'h-10 w-10 opacity-80 group-hover:opacity-100 sm:h-12 sm:w-12'
                     }`}
                   />
                 ) : (
-                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-[10px] font-bold text-green-800 sm:h-16 sm:w-16">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-50 text-[9px] font-bold text-green-800 sm:h-12 sm:w-12">
                     {choice.label}
                   </span>
                 )}

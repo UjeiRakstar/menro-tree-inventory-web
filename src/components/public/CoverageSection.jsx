@@ -24,7 +24,7 @@ const VIEWS = [
  * two municipalities this is a survey that has barely started, and a page that
  * called those places bare would be lying about the province.
  */
-export default function CoverageSection({ trees, keyOf, allPlaces, scopeLabel, noun, nounPlural }) {
+export default function CoverageSection({ trees, keyOf, allPlaces, scopeLabel, noun, nounPlural, className = '' }) {
   const [view, setView] = useState('most');
 
   const result = coverage(trees, keyOf, allPlaces);
@@ -36,7 +36,7 @@ export default function CoverageSection({ trees, keyOf, allPlaces, scopeLabel, n
   const showing = view === 'most' ? leaders : empty.slice(0, SHOWN * 2);
 
   return (
-    <section aria-label="Where the trees are" className="mt-10">
+    <section aria-label="Where the trees are" className={className}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">

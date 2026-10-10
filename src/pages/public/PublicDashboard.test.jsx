@@ -322,3 +322,50 @@ describe('PublicDashboard', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('connection refused');
   });
 });
+
+describe('reading the detail one question at a time', () => {
+  it('opens on the species view, and shows only that one', async () => {
+    renderDashboard();
+    await screen.findByRole('tab', { name: 'Species' });
+
+    expect(screen.getByRole('region', { name: 'What is growing here' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Where the trees are' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'How old the trees are' })).not.toBeInTheDocument();
+  });
+
+  it('swaps the panel when another question is chosen', async () => {
+    renderDashboard();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Places' }));
+
+    expect(
+      await screen.findByRole('region', { name: 'Where the trees are' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'What is growing here' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Sizes' }));
+    expect(await screen.findByRole('region', { name: 'How old the trees are' })).toBeInTheDocument();
+  });
+
+  it('marks which question is open for a screen reader, not only by tint', async () => {
+    renderDashboard();
+    const species = await screen.findByRole('tab', { name: 'Species' });
+    const places = screen.getByRole('tab', { name: 'Places' });
+
+    expect(species).toHaveAttribute('aria-selected', 'true');
+    expect(places).toHaveAttribute('aria-selected', 'false');
+
+    fireEvent.click(places);
+    expect(places).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('a figure card', () => {
+  it('reads its name before its number, however it is laid out', async () => {
+    renderDashboard();
+
+    // On screen the number comes first, because six cards are scanned rather
+    // than read. Spoken, a bare number before its name is useless.
+    const card = await screen.findByRole('button', { name: /^Total Number of Trees, 4/ });
+    expect(card).toBeInTheDocument();
+  });
+});

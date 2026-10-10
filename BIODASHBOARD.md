@@ -263,15 +263,12 @@ same way carbon stored pairs with carbon sequestered.
 
 ## Parked, to do after the five
 
-- **Check the species bars against the real inventory.** With 112 trees the
-  scaling is a guess: ~25 species makes the top-ten list meaningful and at
-  least one species probably sits over 10%; 60 species makes every bar short
-  and pushes the guideline line far right. Look at it and tune the track.
-- **Revamp the layout.** The arrangement of the page is not appealing yet,
-  and that is a separate job from having the right numbers on it. Finish all
-  five items first, then redo the layout — which should start with reading
-  what good analytical dashboards actually look like rather than guessing.
-  **Needs web research**, so it wants a session with search available.
+- ~~Check the species bars against the real inventory.~~ Done by simulation
+  rather than by waiting: the track held at 3 and 25 species and collapsed on a
+  flat inventory — 21% of the track at 60 species, 7% at 100 — because the 10%
+  guideline was forced onto it regardless. The guideline is now drawn only when
+  something is within half of it, and said in words otherwise.
+- ~~Revamp the layout.~~ Done, 11 October 2026.
 
 ## Rules for all five
 

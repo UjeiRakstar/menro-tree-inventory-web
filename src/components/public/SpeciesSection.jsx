@@ -37,12 +37,15 @@ function SpeciesRow({ row, trackMax, guidelineAt, over }) {
         />
         {/* The guideline, inside the track it applies to. Every track is the
             same width, so these line up down the list without anything having
-            to know how wide the name column came out. */}
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-[-2px] border-l border-dashed border-amber-600/80"
-          style={{ left: `${guidelineAt}%` }}
-        />
+            to know how wide the name column came out. Absent when nothing is
+            near it, rather than drawn far off to the right. */}
+        {guidelineAt !== null && (
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-[-2px] border-l border-dashed border-amber-600/80"
+            style={{ left: `${guidelineAt}%` }}
+          />
+        )}
       </span>
 
       <span className="flex items-center gap-1.5 tabular-nums text-xs text-slate-500">
@@ -91,7 +94,7 @@ function Mix({ title, rows, total }) {
  * score well on. This is the part that answers how many kinds there are, which
  * dominate, and whether the mix is one a single pest could take out.
  */
-export default function SpeciesSection({ trees, scopeLabel }) {
+export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
   const richness = speciesRichness(trees);
   const counts = speciesCounts(trees);
   const warnings = overPlanted(trees);
@@ -104,18 +107,29 @@ export default function SpeciesSection({ trees, scopeLabel }) {
     warnings.filter((w) => w.rank === 'species').map((w) => w.name.toLowerCase())
   );
 
-  // The track runs a little past whichever is larger — the commonest species
-  // or the guideline — so the guideline is always on the chart and the bars
-  // still fill a useful amount of it.
-  const trackMax = Math.max(top[0]?.share ?? 0, DIVERSITY_LIMITS.species) * 1.25;
-  const guidelineAt = (DIVERSITY_LIMITS.species / trackMax) * 100;
+  /**
+   * How wide the bar track runs, as a share of the inventory.
+   *
+   * Forcing the 10% guideline onto the track regardless squashes the bars
+   * whenever the mix is genuinely diverse: at sixty species the commonest is
+   * under 3%, and every bar becomes a stub against a line nothing is near.
+   *
+   * So the guideline is drawn only when something is within reach of it.
+   * Otherwise the track scales to the commonest species, the bars stay
+   * readable, and the fact that nothing is close is said in words underneath —
+   * which is the more useful way to say it anyway.
+   */
+  const topShare = top[0]?.share ?? 0;
+  const guidelineInReach = topShare >= DIVERSITY_LIMITS.species / 2;
+  const trackMax = (guidelineInReach ? Math.max(topShare, DIVERSITY_LIMITS.species) : topShare) * 1.15;
+  const guidelineAt = guidelineInReach ? (DIVERSITY_LIMITS.species / trackMax) * 100 : null;
 
   if (total === 0) {
     return null;
   }
 
   return (
-    <section aria-label="What is growing here" className="mt-10">
+    <section aria-label="What is growing here" className={className}>
       <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
         What is growing in {scopeLabel}
       </h2>
@@ -155,10 +169,14 @@ export default function SpeciesSection({ trees, scopeLabel }) {
               </ol>
 
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block h-3 border-l border-dashed border-amber-600" />
-                  10% guideline
-                </span>
+                {guidelineAt !== null ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-3 border-l border-dashed border-amber-600" />
+                    10% guideline
+                  </span>
+                ) : (
+                  <span>No species is anywhere near the 10% guideline.</span>
+                )}
                 {counts.length > top.length && (
                   <span>and {formatFigure(counts.length - top.length)} more species.</span>
                 )}

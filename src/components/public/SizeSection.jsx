@@ -17,7 +17,7 @@ import { formatFigure } from '../../lib/dashboardMetrics.js';
  * the same document the volume equation comes from, so the dashboard and any
  * inventory report MENRO files are counting in the same bands.
  */
-export default function SizeSection({ trees, scopeLabel }) {
+export default function SizeSection({ trees, scopeLabel, className = '' }) {
   const distribution = diameterDistribution(trees);
   const shape = readDiameterShape(distribution);
   const { classes, measured, unmeasured, belowSmallest, total } = distribution;
@@ -27,7 +27,7 @@ export default function SizeSection({ trees, scopeLabel }) {
   const tallest = Math.max(1, ...classes.map((row) => row.count));
 
   return (
-    <section aria-label="How old the trees are" className="mt-10">
+    <section aria-label="How old the trees are" className={className}>
       <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
         How big the trees are in {scopeLabel}
       </h2>

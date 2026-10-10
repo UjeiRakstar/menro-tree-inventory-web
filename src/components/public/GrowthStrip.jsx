@@ -12,7 +12,7 @@ import { formatFigure } from '../../lib/dashboardMetrics.js';
  * Deliberately small. It is context for the figures above it, not a figure of
  * its own, and giving it a quarter of the page would say otherwise.
  */
-export default function GrowthStrip({ timeline, scopeLabel }) {
+export default function GrowthStrip({ timeline, scopeLabel, className = '' }) {
   // One month is a dot, not a trend. Two is the shortest thing worth drawing.
   if (!Array.isArray(timeline) || timeline.length < 2) return null;
 
@@ -20,7 +20,7 @@ export default function GrowthStrip({ timeline, scopeLabel }) {
   const busiest = timeline.reduce((best, month) => (month.added > best.added ? month : best));
 
   return (
-    <section aria-label="How the inventory has grown" className="mt-10">
+    <section aria-label="How the inventory has grown" className={className}>
       <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
         How the survey has grown
       </h2>
