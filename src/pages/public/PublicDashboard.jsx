@@ -215,15 +215,18 @@ function StatCard({ metric, value, note = '', active, onSelect }) {
 }
 
 /** The chart under the figures, showing the selected pair place by place. */
+/** How many places the chart draws before the names stop being readable. */
+const CHARTED_PLACES = 12;
+
 function PairChart({ pair, rows, scopeLabel }) {
   const charted = pair.metrics.filter((metric) => metric.available);
 
   if (charted.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 text-center">
+      <div className="flex h-full min-h-[16rem] items-center justify-center px-6 text-center">
         <p className="max-w-md text-sm text-slate-500">
-          {pair.metrics.map((m) => m.label).join(' and ')} have no source yet, so there is nothing to chart.
-          They arrive with the mapping feature.
+          {pair.metrics.map((m) => m.label).join(' and ')} have no source yet, so there is nothing
+          to chart.
         </p>
       </div>
     );
@@ -231,49 +234,79 @@ function PairChart({ pair, rows, scopeLabel }) {
 
   if (rows.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white px-6 text-center">
+      <div className="flex h-full min-h-[16rem] items-center justify-center px-6 text-center">
         <p className="text-sm text-slate-500">No tagged trees in {scopeLabel} yet.</p>
       </div>
     );
   }
 
+  /*
+   * Twenty-six barangays at an angle is a smear of overlapping text, and the
+   * tail of the list is a row of bars a pixel high. The top twelve are the
+   * ones with anything to say; the rest are named in the Places tab, which is
+   * a list and does not have this problem.
+   */
+  const shown = rows.slice(0, CHARTED_PLACES);
+  const hidden = rows.length - shown.length;
+
+  /*
+   * TWO AXES, NOT ONE. The metrics in a pair share a subject, not a scale:
+   * standing volume runs to 28 m³ in a barangay while the biomass it adds in
+   * a year is about 0.1 Mg, and carbon stored is eighty times what is taken
+   * up in a year. On a single axis the second series is a flat line along the
+   * bottom — drawn, truthful and completely unreadable. Each gets its own
+   * axis, coloured to match the bars it belongs to.
+   */
+  const twoScales = charted.length === 2;
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
-      <ResponsiveContainer width="100%" height={320}>
-        <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 56 }}>
+    <div className="h-full">
+      <ResponsiveContainer width="100%" height="100%" minHeight={260}>
+        <BarChart data={shown} margin={{ top: 8, right: twoScales ? 4 : 8, left: -8, bottom: 60 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis
             dataKey="name"
-            angle={-35}
+            angle={-40}
             textAnchor="end"
             interval={0}
-            height={70}
-            tick={{ fontSize: 11, fill: '#475569' }}
+            height={76}
+            tick={{ fontSize: 10, fill: '#475569' }}
           />
-          <YAxis tick={{ fontSize: 11, fill: '#475569' }} />
+          <YAxis
+            yAxisId="left"
+            width={46}
+            tick={{ fontSize: 10, fill: SERIES_COLOR[charted[0].tone] || SERIES_COLOR.green }}
+          />
+          {twoScales && (
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              width={46}
+              tick={{ fontSize: 10, fill: SERIES_COLOR[charted[1].tone] || SERIES_COLOR.green }}
+            />
+          )}
           <Tooltip
             formatter={(value, name) => [formatFigure(value), name]}
             contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }}
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          {charted.map((metric) => (
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {charted.map((metric, index) => (
             <Bar
               key={metric.key}
+              yAxisId={twoScales && index === 1 ? 'right' : 'left'}
               dataKey={metric.key}
               name={metric.label}
               fill={SERIES_COLOR[metric.tone] || SERIES_COLOR.green}
-              radius={[4, 4, 0, 0]}
+              radius={[3, 3, 0, 0]}
             />
           ))}
         </BarChart>
       </ResponsiveContainer>
 
-      {charted.length < pair.metrics.length && (
-        <p className="mt-2 text-center text-[11px] text-slate-500">
-          {pair.metrics.filter((m) => !m.available).map((m) => m.label).join(' and ')} is not connected yet, so
-          only what the inventory knows is charted.
-        </p>
-      )}
+      <p className="mt-1 text-center text-[10px] leading-snug text-slate-400">
+        {twoScales && 'Each figure has its own axis — they share a subject, not a scale. '}
+        {hidden > 0 && `Top ${CHARTED_PLACES} of ${rows.length}; the rest are in the Places tab.`}
+      </p>
     </div>
   );
 }
@@ -472,7 +505,10 @@ export default function PublicDashboard() {
 
   return (
     <div className="bg-slate-50">
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      {/* Full width. A dashboard is read across, and a 1152px column on a
+          1900px screen left a third of the browser empty while the chart
+          crushed twenty-six barangay names into half of what was left. */}
+      <div className="w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Who you are looking at */}
         <LguStrip selected={selectedLgu} onSelect={setSelectedLgu} />
 
@@ -550,7 +586,12 @@ export default function PublicDashboard() {
             answers "where" and the other "how much where", and a reader
             wants them in the same glance. */}
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="relative h-[320px] overflow-hidden rounded-2xl border border-slate-200 sm:h-[380px]">
+        {/* `isolate` matters here. Leaflet stacks its panes up past z-index
+            600, and the site header is sticky at z-50 — so scrolling put the
+            map on top of the navigation. Isolating makes a stacking context,
+            which keeps Leaflet's numbers scoped inside this box instead of
+            competing with the page. */}
+        <div className="relative isolate h-[320px] overflow-hidden rounded-2xl border border-slate-200 sm:h-[380px]">
           {loading && (
             <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/80">
               <span className="flex items-center gap-2 text-sm text-slate-600">

@@ -56,9 +56,13 @@ vi.mock('recharts', () => ({
       {children}
     </div>
   ),
-  Bar: ({ dataKey, name }) => <div data-testid="series" data-key={dataKey} data-name={name} />,
+  Bar: ({ dataKey, name, yAxisId }) => (
+    <div data-testid="series" data-key={dataKey} data-name={name} data-axis={yAxisId} />
+  ),
   XAxis: () => null,
-  YAxis: () => null,
+  YAxis: ({ yAxisId, orientation }) => (
+    <div data-testid="axis" data-id={yAxisId} data-side={orientation ?? 'left'} />
+  ),
   CartesianGrid: () => null,
   Tooltip: () => null,
   Legend: () => null,
@@ -367,5 +371,31 @@ describe('a figure card', () => {
     // than read. Spoken, a bare number before its name is useless.
     const card = await screen.findByRole('button', { name: /^Total Number of Trees, 4/ });
     expect(card).toBeInTheDocument();
+  });
+});
+
+describe('charting a pair whose figures are not on the same scale', () => {
+  const axes = () => screen.getAllByTestId('axis');
+  const seriesAxes = () => screen.getAllByTestId('series').map((s) => s.dataset.axis);
+
+  it('gives each figure its own axis', async () => {
+    renderDashboard();
+    await screen.findByText('Standing Timber Volume');
+
+    // Standing volume runs to tens of cubic metres a barangay; the biomass it
+    // adds in a year is a tenth of one. Sharing an axis would draw the second
+    // series as a flat line along the bottom — truthful and unreadable.
+    fireEvent.click(screen.getByRole('button', { name: /^Standing Timber Volume/ }));
+
+    await waitFor(() => expect(seriesAxes()).toEqual(['left', 'right']));
+    expect(axes().map((a) => a.dataset.side).sort()).toEqual(['left', 'right']);
+  });
+
+  it('puts a lone figure on one axis, with no empty second scale', async () => {
+    renderDashboard();
+    await screen.findByText('Total Number of Trees');
+
+    // Trees and invasive trees are both counts of trees: one scale is right.
+    await waitFor(() => expect(seriesAxes()).toEqual(['left', 'right']));
   });
 });
