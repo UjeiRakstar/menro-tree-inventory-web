@@ -23,7 +23,7 @@ const READ_BY_THE_MAP = [
   // The three badges: endemic/invasive, fruit/ornamental/timber, how it was tagged
   'biodiversity_status', 'species_type', 'tree_category', 'source',
   // The carousel
-  'imageUrl', 'leaves_url', 'bark_url', 'fruits_url',
+  'imageUrl', 'photo_url', 'leaves_url', 'bark_url', 'fruits_url',
 ];
 
 const READ_BY_THE_DASHBOARD = [
@@ -32,16 +32,19 @@ const READ_BY_THE_DASHBOARD = [
 ];
 
 /**
- * Read in the code, but NOT columns of public.trees.
+ * Read in the code, but NOT a column of public.trees.
  *
- * Both appear only as fallbacks — `tree.source || tree.data_source`,
- * `tree.photo_url || tree.imageUrl` — and both belong to pending_trees.
- * Selecting every column hid the mistake, because a column that is not there
- * simply never arrived and the `||` moved on. Naming them made PostgREST
- * refuse the whole query, and the public map showed "The tagged trees could
- * not be loaded" where the trees should be.
+ * It appears only as a fallback — `tree.source || tree.data_source`. Selecting
+ * every column hid that, because a column that is not there simply never
+ * arrived and the `||` moved on. Naming it made PostgREST refuse the whole
+ * query, and the public map showed "The tagged trees could not be loaded"
+ * where the trees should be.
+ *
+ * photo_url was removed alongside it on the same suspicion and turned out to
+ * be real, which is why the column list is now checked against the database
+ * rather than reasoned about: tools/show-tree-columns.mjs.
  */
-const NOT_COLUMNS_OF_TREES = ['data_source', 'photo_url'];
+const NOT_COLUMNS_OF_TREES = ['data_source'];
 
 describe('what the public side asks for', () => {
   it('asks for everything the map reads', () => {
@@ -74,7 +77,7 @@ describe('what the public side asks for', () => {
 
   it('keeps the analytics query free of photographs', () => {
     // Nothing on that page shows a picture.
-    for (const column of ['imageUrl', 'leaves_url', 'bark_url', 'fruits_url']) {
+    for (const column of ['imageUrl', 'photo_url', 'leaves_url', 'bark_url', 'fruits_url']) {
       expect(dashboardColumns).not.toContain(column);
     }
   });

@@ -154,3 +154,34 @@ order by 2 desc;
 -- from public.trees
 -- where merchantable_height is not null and total_height is not null
 -- order by species limit 50;
+
+-- ---------------------------------------------------------------------------
+-- 8. Columns of public.trees that look like accidents.
+--
+-- From the 43 columns the table turned out to have (October 2026). None of
+-- this is urgent; it is here so it is written down rather than rediscovered.
+--
+--   trees          a column named after its own table. Nothing reads or writes
+--                  it anywhere in either repo.
+--   heightClass    two columns for one fact. The field app writes heightClass;
+--   height_class   the web app reads heightClass; nothing uses height_class.
+--   photo_url      two columns for the main photograph. The field app writes
+--   imageUrl       imageUrl; the web reads photo_url first and falls back.
+--   is_tagged      nothing in either repo reads or writes it.
+--
+-- Run this before dropping anything: a column that is empty everywhere is safe
+-- to drop, one with values in it is somebody's data.
+-- ---------------------------------------------------------------------------
+select
+  'trees'        as column_name, count(trees)        as non_null_values from public.trees
+union all
+select 'height_class', count(height_class) from public.trees
+union all
+select 'heightClass',  count("heightClass") from public.trees
+union all
+select 'photo_url',    count(photo_url) from public.trees
+union all
+select 'imageUrl',     count("imageUrl") from public.trees
+union all
+select 'is_tagged',    count(is_tagged) from public.trees
+order by 2 desc;

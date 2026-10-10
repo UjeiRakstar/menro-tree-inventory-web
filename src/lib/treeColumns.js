@@ -1,16 +1,19 @@
 /**
- * NOT LISTED, DELIBERATELY: data_source and photo_url.
+ * NOT LISTED, DELIBERATELY: data_source.
  *
- * Both are read in the code as fallbacks — `tree.source || tree.data_source`,
- * `tree.photo_url || tree.imageUrl` — but neither is a column of public.trees.
- * They are written to public.pending_trees, and the reads were defensive
- * guesses at a schema.
+ * It is read in the code as a fallback — `tree.source || tree.data_source` —
+ * but public.trees has no such column. Asking for every column hid that: a
+ * column that is not there simply never appeared and the `||` moved on.
+ * Naming it made PostgREST answer "column trees.data_source does not exist"
+ * and the public map showed an error instead of trees.
  *
- * Asking for all columns hid that: a column that is not there simply never
- * appeared, and the `||` moved on. Naming the columns made PostgREST answer
- * "column trees.data_source does not exist" and the public map showed an error
- * instead of trees. Anything added to these lists has to be a column that
- * really exists — tools/show-tree-columns.mjs prints the real set.
+ * photo_url, which was removed alongside it on the same suspicion, DOES exist
+ * and is back: the panel reads `tree.photo_url || tree.imageUrl`, so dropping
+ * it would have quietly cost the main photograph of any tree that uses it.
+ *
+ * The lesson is the same either way — a name in these lists has to be a column
+ * that really exists, and tools/show-tree-columns.mjs is how to be sure rather
+ * than to reason about it.
  *
  * What the public side asks the database for.
  *
@@ -50,6 +53,7 @@ export const PUBLIC_MAP_COLUMNS = [
   'tree_category',
   'source',
   'imageUrl',
+  'photo_url',
   'leaves_url',
   'bark_url',
   'fruits_url',

@@ -79,4 +79,7 @@ const unused = actual.filter(
 );
 console.log(`\nNot sent to the public (${unused.length}): ${unused.join(', ')}`);
 
-process.exit(wrong > 0 ? 1 : 0);
+// exitCode rather than process.exit(): on Windows, exiting while stdout is
+// still flushing aborts the write and Node prints a libuv assertion failure
+// after a run that actually succeeded.
+process.exitCode = wrong > 0 ? 1 : 0;
