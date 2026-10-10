@@ -35,7 +35,11 @@
 -- ---------------------------------------------------------------------------
 alter table public.trees
   add column if not exists barangay_psgc bigint references public.barangays (psgc),
+  add column if not exists municipality text,
   add column if not exists landmark text;
+
+comment on column public.trees.municipality is
+  'The city or municipality, as the field app worked it out from the coordinates. It is what tells one "Barangay I" from another: five towns in Laguna have one.';
 
 comment on column public.trees.barangay_psgc is
   'The barangay this tree stands in, by PSGC code. Filled by the field app from the bundled boundaries. The barangay text column is kept in step with it by a trigger.';
@@ -87,6 +91,22 @@ begin
   -- the real Barangay V.
   v_bare := regexp_replace(v_written, '^(brgy\.?|barangay)\s+', '', 'i');
 
+  -- With a city or municipality to go on there is nothing to be ambiguous
+  -- about: (municipality, name) is unique across all 681 of them. This is the
+  -- path the field app takes, since it now sends both.
+  if coalesce(trim(new.municipality), '') <> '' then
+    select b.psgc, b.name into v_psgc, v_name
+    from public.barangays b
+    where lower(b.municipality) = lower(trim(new.municipality))
+      and lower(b.name) in (lower(v_written), lower(v_bare), lower('Barangay ' || v_bare));
+
+    if v_psgc is not null then
+      new.barangay_psgc := v_psgc;
+      new.barangay := v_name;
+      return new;
+    end if;
+  end if;
+
   select count(*) into v_matches
   from public.barangays b
   where lower(b.name) in (lower(v_written), lower(v_bare), lower('Barangay ' || v_bare));
@@ -109,7 +129,7 @@ $$;
 
 drop trigger if exists trees_sync_barangay on public.trees;
 create trigger trees_sync_barangay
-  before insert or update of barangay, barangay_psgc on public.trees
+  before insert or update of barangay, barangay_psgc, municipality on public.trees
   for each row execute function public.sync_tree_barangay();
 
 -- ---------------------------------------------------------------------------
