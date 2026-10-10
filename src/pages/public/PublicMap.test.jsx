@@ -257,9 +257,12 @@ describe('PublicMap', () => {
     // The same six figures as the analytics page, including the three that
     // have no source yet.
     expect(within(panel).getByText('Total Number of Trees')).toBeInTheDocument();
+    // The public six, not the forestry terms: this panel tells a resident what
+    // is here, and standing timber volume is not that.
+    expect(within(panel).getByText('Species Recorded')).toBeInTheDocument();
     expect(
-      within(panel).getByText('Mean Annual Increment of Above Ground Biomass')
-    ).toBeInTheDocument();
+      within(panel).queryByText('Mean Annual Increment of Above Ground Biomass')
+    ).not.toBeInTheDocument();
     // All six figures are real now: the growth ones stopped waiting on an
     // area to divide by once they were computed per tree.
     expect(within(panel).queryByText('Not available yet')).not.toBeInTheDocument();

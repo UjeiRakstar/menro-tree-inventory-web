@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ALL_METRICS,
   METRIC_PAIRS,
+  FORESTRY_PAIR,
   PENDING_METRICS,
   barangayOf,
   carbonForTree,
@@ -60,6 +61,8 @@ describe('dashboardMetrics totals', () => {
   it('survives an empty or missing set', () => {
     const empty = {
       treeCount: 0,
+      speciesCount: 0,
+      endemicCount: 0,
       invasiveCount: 0,
       carbonKg: 0,
       carbonPerYearKg: 0,
@@ -124,14 +127,15 @@ describe('dashboardMetrics definitions', () => {
 
   it('says which figures have a source today, and explains every one', () => {
     const available = ALL_METRICS.filter((m) => m.available).map((m) => m.key);
-    // All six. The growth figures stopped waiting on the mapping feature once
-    // they were computed per tree rather than per hectare.
+    // The six a public page leads with. Standing volume and mean annual
+    // increment moved to FORESTRY_PAIR: inventory terms for the people who
+    // report them, not a headline a resident is owed.
     expect(available.sort()).toEqual([
       'carbonKg',
       'carbonPerYearKg',
+      'endemicCount',
       'invasiveCount',
-      'maiAgbMg',
-      'timberVolumeM3',
+      'speciesCount',
       'treeCount',
     ]);
     // There is no footnote any more, so the hint is the only explanation a
@@ -142,15 +146,17 @@ describe('dashboardMetrics definitions', () => {
   });
 
   it('spells out Mean Annual Increment of Above Ground Biomass', () => {
-    const mai = ALL_METRICS.find((m) => m.key === 'maiAgbMg');
+    const mai = FORESTRY_PAIR.metrics.find((m) => m.key === 'maiAgbMg');
     expect(mai.label).toBe('Mean Annual Increment of Above Ground Biomass');
   });
 
   it('can find the pair a figure belongs to', () => {
-    expect(pairOfMetric('invasiveCount').id).toBe('trees');
+    expect(pairOfMetric('speciesCount').id).toBe('inventory');
+    expect(pairOfMetric('invasiveCount').id).toBe('origin');
     expect(pairOfMetric('carbonPerYearKg').id).toBe('carbon');
-    expect(pairOfMetric('maiAgbMg').id).toBe('wood');
-    // The two still waiting on another system are not in a pair.
+    // Forestry is not one of the headline pairs any more.
+    expect(pairOfMetric('maiAgbMg')).toBeUndefined();
+    // Nor are the two still waiting on another system.
     expect(pairOfMetric('carbonEmissionKg')).toBeUndefined();
     expect(pairOfMetric('nonsense')).toBeUndefined();
   });

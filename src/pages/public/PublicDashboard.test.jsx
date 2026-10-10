@@ -151,8 +151,8 @@ describe('PublicDashboard', () => {
     renderDashboard();
     await screen.findByText('Total Number of Trees');
 
-    // Trees and invasives to begin with.
-    await waitFor(() => expect(seriesKeys()).toEqual(['treeCount', 'invasiveCount']));
+    // Trees and species to begin with: how many, and how varied.
+    await waitFor(() => expect(seriesKeys()).toEqual(['treeCount', 'speciesCount']));
 
     // Anchored: the ⓘ beside the figure is its own button, named "What …".
     fireEvent.click(screen.getByRole('button', { name: /^Total Estimated Carbon Stored/ }));
@@ -162,13 +162,25 @@ describe('PublicDashboard', () => {
     await waitFor(() => expect(seriesKeys()).toEqual(['carbonKg', 'carbonPerYearKg']));
   });
 
-  it('charts wood and growth together', async () => {
+  it('keeps the forestry figures behind their own tab', async () => {
     renderDashboard();
-    await screen.findByText('Standing Timber Volume');
+    await screen.findByText('Total Number of Trees');
 
-    fireEvent.click(screen.getByRole('button', { name: /^Standing Timber Volume/ }));
+    // Standing volume and mean annual increment are inventory terms. They are
+    // not a headline a public page owes its public.
+    expect(screen.queryByText('Standing Timber Volume')).not.toBeInTheDocument();
 
-    await waitFor(() => expect(seriesKeys()).toEqual(['timberVolumeM3', 'maiAgbMg']));
+    fireEvent.click(screen.getByRole('tab', { name: 'Forestry' }));
+
+    const forestry = await screen.findByRole('region', { name: 'Forestry figures' });
+    expect(within(forestry).getByText('Standing Timber Volume')).toBeInTheDocument();
+
+    // Scoped to the tab: the headline chart is still on screen above it, so an
+    // unscoped query would collect the series from both.
+    const series = within(forestry)
+      .getAllByTestId('series')
+      .map((s) => s.dataset.key);
+    expect(series).toEqual(['timberVolumeM3', 'maiAgbMg']);
   });
 
   it('shows what it cannot give yet, small and with a reason', async () => {
@@ -277,6 +289,8 @@ describe('PublicDashboard', () => {
 
   it('spells out the biomass figure instead of abbreviating it', async () => {
     renderDashboard();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Forestry' }));
+
     expect(
       await screen.findByText('Mean Annual Increment of Above Ground Biomass')
     ).toBeInTheDocument();
@@ -380,12 +394,12 @@ describe('charting a pair whose figures are not on the same scale', () => {
 
   it('gives each figure its own axis', async () => {
     renderDashboard();
-    await screen.findByText('Standing Timber Volume');
+    await screen.findByText('Total Estimated Carbon Stored');
 
-    // Standing volume runs to tens of cubic metres a barangay; the biomass it
-    // adds in a year is a tenth of one. Sharing an axis would draw the second
-    // series as a flat line along the bottom — truthful and unreadable.
-    fireEvent.click(screen.getByRole('button', { name: /^Standing Timber Volume/ }));
+    // Carbon stored is eighty times what is taken up in a year. Sharing an
+    // axis would draw the second series as a flat line along the bottom —
+    // truthful and completely unreadable.
+    fireEvent.click(screen.getByRole('button', { name: /^Total Estimated Carbon Stored/ }));
 
     await waitFor(() => expect(seriesAxes()).toEqual(['left', 'right']));
     expect(axes().map((a) => a.dataset.side).sort()).toEqual(['left', 'right']);

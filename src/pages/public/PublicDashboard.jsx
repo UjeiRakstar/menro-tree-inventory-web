@@ -10,6 +10,7 @@ import {
   Loader2,
   MapPin,
   Ruler,
+  TreePine,
 } from 'lucide-react';
 import {
   Bar,
@@ -34,6 +35,7 @@ import {
 } from '../../lib/lagunaBoundaries.js';
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
 import {
+  FORESTRY_PAIR,
   METRIC_PAIRS,
   PENDING_METRICS,
   formatFigure,
@@ -84,6 +86,8 @@ const DETAIL_TABS = [
   { key: 'places', label: 'Places', icon: MapPin },
   { key: 'sizes', label: 'Sizes', icon: Ruler },
   { key: 'survey', label: 'Survey', icon: CalendarRange },
+  // Last, and on purpose: inventory terms for the people who report them.
+  { key: 'forestry', label: 'Forestry', icon: TreePine },
 ];
 
 /** Series colours, matched to how each figure reads: growth green, pressure red. */
@@ -512,37 +516,43 @@ export default function PublicDashboard() {
         {/* Who you are looking at */}
         <LguStrip selected={selectedLgu} onSelect={setSelectedLgu} />
 
-        {/* What you are looking at */}
-        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-3xl font-bold text-green-800 sm:text-4xl">
-            {scopeLabel} Biodiversity Analytics
-          </h1>
+        {/* What you are looking at.
+            The title and the freshness line stack in one column so the title
+            has the width to stay on one line — it was breaking into three
+            ("Santa Cruz / Biodiversity / Analytics") because the date was a
+            full-width flex sibling squeezing it from the right. */}
+        <div className="mt-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold leading-tight text-green-800 sm:text-3xl">
+              {scopeLabel} Biodiversity Analytics
+            </h1>
 
-          {/* Every figure below was true at some moment; this says which. */}
-          {freshness.lastTagged ? (
-            <p className="-mt-2 text-xs text-slate-500 sm:order-last sm:mt-0 sm:w-full">
-              Newest tag {formatDate(freshness.lastTagged)}{' '}
-              <span className="text-slate-400">({timeAgo(freshness.lastTagged)})</span>
-              {freshness.undated > 0 &&
-                `. ${formatFigure(freshness.undated)} ${
-                  freshness.undated === 1 ? 'tree is' : 'trees are'
-                } undated`}
+            {/* Every figure below was true at some moment; this says which. */}
+            <p className="mt-1 text-xs text-slate-500">
+              {freshness.lastTagged ? (
+                <>
+                  Newest tag {formatDate(freshness.lastTagged)}{' '}
+                  <span className="text-slate-400">({timeAgo(freshness.lastTagged)})</span>
+                  {freshness.undated > 0 &&
+                    `. ${formatFigure(freshness.undated)} ${
+                      freshness.undated === 1 ? 'tree is' : 'trees are'
+                    } undated`}
+                </>
+              ) : (
+                'No tree here records when it was tagged.'
+              )}
             </p>
-          ) : (
-            <p className="-mt-2 text-xs text-slate-500 sm:order-last sm:mt-0 sm:w-full">
-              No tree here records when it was tagged.
-            </p>
-          )}
+          </div>
 
-          <span className="inline-flex items-center gap-2 self-start sm:self-auto">
+          <span className="inline-flex items-center gap-2">
             <button
               type="button"
               onClick={() => setRequestOpen(true)}
-              className="inline-flex items-center justify-center gap-3 rounded-xl border-2 border-green-700 px-5 py-3 text-sm font-bold text-green-800 transition hover:bg-green-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border-2 border-green-700 px-4 py-2.5 text-sm font-bold text-green-800 transition hover:bg-green-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
             >
               Download Data
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-white">
-                <Download size={16} />
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-700 text-white">
+                <Download size={14} />
               </span>
             </button>
             <InfoHint
@@ -712,6 +722,46 @@ export default function PublicDashboard() {
             {detail === 'sizes' && <SizeSection trees={scopedTrees} scopeLabel={scopeLabel} />}
             {detail === 'survey' && (
               <GrowthStrip timeline={freshness.timeline} scopeLabel={scopeLabel} />
+            )}
+            {detail === 'forestry' && (
+              <section aria-label="Forestry figures">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
+                  Forestry figures for {scopeLabel}
+                </h2>
+                <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-500">
+                  How a stand is reported to the DENR. These are inventory terms rather than public
+                  ones, which is why they sit here and not among the figures above — but they are
+                  what MENRO and the decision-support work are built on, and both come straight out
+                  of the volume equation in FMB Technical Bulletin No. 3.
+                </p>
+
+                <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
+                  <div className="grid grid-cols-2 gap-px self-start overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 lg:grid-cols-1">
+                    {FORESTRY_PAIR.metrics.map((metric) => (
+                      <StatCard
+                        key={metric.key}
+                        metric={metric}
+                        value={totals[metric.key]}
+                        note={carbonCoverage}
+                        active={false}
+                        onSelect={() => {}}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="flex min-h-[300px] flex-col rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                      {FORESTRY_PAIR.title}
+                    </h3>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      {selectedLgu ? `By barangay of ${scopeLabel}` : 'By city and municipality'}
+                    </p>
+                    <div className="mt-2 flex-1">
+                      <PairChart pair={FORESTRY_PAIR} rows={chartRows} scopeLabel={scopeLabel} />
+                    </div>
+                  </div>
+                </div>
+              </section>
             )}
           </div>
         </div>

@@ -47,6 +47,19 @@ export function isInvasive(tree) {
   return status.trim() === 'invasive';
 }
 
+/** And its counterpart: native to the Philippines, as the record has it. */
+export function isEndemic(tree) {
+  const status = (tree?.biodiversity_status || tree?.species_type || '').toString().toLowerCase();
+  return status.trim() === 'endemic';
+}
+
+/** The species name as it should be counted, or null when unrecorded. */
+function canonicalSpecies(tree) {
+  const name = String(tree?.species ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (!name || /^(unknown|unidentified|n\/?a|none|other)$/.test(name)) return null;
+  return name;
+}
+
 /**
  * Barangay name as it should be grouped and shown, or null when unrecorded.
  *
@@ -87,8 +100,21 @@ export function summarise(trees) {
     measured += 1;
   }
 
+  // Diversity and origin, counted here so that grouping by place gets them
+  // for free — a chart of species per barangay is the same call as a chart of
+  // trees per barangay.
+  const species = new Set();
+  let endemic = 0;
+  for (const tree of rows) {
+    const name = canonicalSpecies(tree);
+    if (name) species.add(name);
+    if (isEndemic(tree)) endemic += 1;
+  }
+
   return {
     treeCount: rows.length,
+    speciesCount: species.size,
+    endemicCount: endemic,
     invasiveCount: rows.filter(isInvasive).length,
     carbonKg: Math.round(carbon),
     carbonPerYearKg: Math.round(carbonPerYear),
@@ -133,8 +159,8 @@ export function groupBy(trees, keyOf) {
  */
 export const METRIC_PAIRS = [
   {
-    id: 'trees',
-    title: 'Trees and invasive species',
+    id: 'inventory',
+    title: 'Trees and species',
     metrics: [
       {
         key: 'treeCount',
@@ -145,46 +171,38 @@ export const METRIC_PAIRS = [
         hint: 'Every tree tagged in the Green Tag inventory, counted where it stands.',
       },
       {
+        key: 'speciesCount',
+        label: 'Species Recorded',
+        unit: '',
+        tone: 'green',
+        available: true,
+        hint: 'How many different species are tagged here — the diversity figure the Species tab breaks down.',
+      },
+    ],
+  },
+  {
+    id: 'origin',
+    title: 'Native and introduced',
+    metrics: [
+      {
+        key: 'endemicCount',
+        label: 'Endemic Trees',
+        unit: '',
+        tone: 'green',
+        available: true,
+        hint: 'Tagged trees recorded as endemic — native to the Philippines and part of the local ecosystem.',
+      },
+      {
         key: 'invasiveCount',
-        label: 'Number of Invasive Trees',
+        label: 'Invasive Trees',
         unit: '',
         tone: 'red',
         available: true,
-        hint: 'Tagged trees the field team recorded as invasive — species that spread at the expense of native ones.',
+        hint: 'Tagged trees recorded as invasive — introduced species that spread at the expense of native ones.',
       },
     ],
   },
-  {
-    id: 'wood',
-    title: 'Wood and growth',
-    metrics: [
-      {
-        key: 'timberVolumeM3',
-        label: 'Standing Timber Volume',
-        unit: 'm³',
-        tone: 'green',
-        available: true,
-        hint:
-          'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
-          'using each tree’s diameter at breast height and merchantable height. Trees with no ' +
-          'recorded merchantable height are left out rather than guessed at.' +
-          ' Nothing is assumed beyond the equation itself.',
-      },
-      {
-        key: 'maiAgbMg',
-        label: 'Mean Annual Increment of Above Ground Biomass',
-        unit: 'Mg per year',
-        tone: 'green',
-        available: true,
-        hint:
-          'How much biomass the tagged trees add in a year: the same volume equation applied ' +
-          'twice, to each tree as it is and after a year of growth. For the TAGGED TREES, not ' +
-          'per hectare — hectares need the mapping feature. Growth is assumed at ' +
-          '0.5 cm of diameter a year, which is deliberately conservative.',
-      },
-    ],
-  },
-  {
+{
     id: 'carbon',
     title: 'Carbon',
     metrics: [
@@ -210,12 +228,58 @@ export const METRIC_PAIRS = [
         hint:
           'How much carbon the trees take up EACH YEAR — a rate, which is what climate ' +
           'commitments are written in. From a year of growth put through the same equation. ' +
-          'Growth is assumed at 0.5 cm of diameter a year; replace it with a measured or ' +
-          'published figure and this becomes exact.',
+          'Growth is assumed at 0.5 cm of diameter a year, deliberately conservative so the ' +
+          'figure understates rather than flatters; replace it with a measured or published ' +
+          'rate and this becomes exact.',
       },
     ],
   },
 ];
+
+/**
+ * The two figures a forester wants and a resident does not.
+ *
+ * Standing volume and mean annual increment are inventory terms: they are how
+ * a stand is reported to the DENR, and neither means much to someone asking
+ * what is growing near them. They are kept, because MENRO and the DSS need
+ * them, but behind a tab rather than in a headline a public page owes its
+ * public.
+ *
+ * Carbon deliberately did NOT come down here with them. "These trees hold
+ * 371,786 kg of CO2" is the most publicly legible figure on the page and the
+ * one a city reports against; filing it under forestry would bury the single
+ * number connecting a tree to something a reader already cares about.
+ */
+export const FORESTRY_PAIR = {
+  id: 'wood',
+  title: 'Wood and growth',
+  metrics: [
+      {
+        key: 'timberVolumeM3',
+        label: 'Standing Timber Volume',
+        unit: 'm³',
+        tone: 'green',
+        available: true,
+        hint:
+          'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
+          'using each tree’s diameter at breast height and merchantable height. Trees with no ' +
+          'recorded merchantable height are left out rather than guessed at.' +
+          ' Nothing is assumed beyond the equation itself.',
+      },
+      {
+        key: 'maiAgbMg',
+        label: 'Mean Annual Increment of Above Ground Biomass',
+        unit: 'Mg per year',
+        tone: 'green',
+        available: true,
+        hint:
+          'How much biomass the tagged trees add in a year: the same volume equation applied ' +
+          'twice, to each tree as it is and after a year of growth. For the TAGGED TREES, not ' +
+          'per hectare — hectares need the mapping feature. Growth is assumed at ' +
+          '0.5 cm of diameter a year, which is deliberately conservative.',
+      },
+    ],
+};
 
 /**
  * Figures the page is asked for and cannot yet give.
