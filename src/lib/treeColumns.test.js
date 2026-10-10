@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PUBLIC_DASHBOARD_COLUMNS, PUBLIC_MAP_COLUMNS } from './treeColumns.js';
+import { PUBLIC_DASHBOARD_COLUMNS, PUBLIC_MAP_COLUMNS, selectPublicTrees } from './treeColumns.js';
 
 const mapColumns = PUBLIC_MAP_COLUMNS.split(',');
 const dashboardColumns = PUBLIC_DASHBOARD_COLUMNS.split(',');
@@ -21,15 +21,27 @@ const READ_BY_THE_MAP = [
   // Measurements, for the Tree Details tab and the carbon figure
   'dbh', 'merchantable_height', 'total_height',
   // The three badges: endemic/invasive, fruit/ornamental/timber, how it was tagged
-  'biodiversity_status', 'species_type', 'tree_category', 'source', 'data_source',
+  'biodiversity_status', 'species_type', 'tree_category', 'source',
   // The carousel
-  'imageUrl', 'photo_url', 'leaves_url', 'bark_url', 'fruits_url',
+  'imageUrl', 'leaves_url', 'bark_url', 'fruits_url',
 ];
 
 const READ_BY_THE_DASHBOARD = [
   'id', 'species', 'barangay', 'barangay_psgc', 'latitude', 'longitude',
   'dbh', 'merchantable_height', 'biodiversity_status', 'species_type',
 ];
+
+/**
+ * Read in the code, but NOT columns of public.trees.
+ *
+ * Both appear only as fallbacks — `tree.source || tree.data_source`,
+ * `tree.photo_url || tree.imageUrl` — and both belong to pending_trees.
+ * Selecting every column hid the mistake, because a column that is not there
+ * simply never arrived and the `||` moved on. Naming them made PostgREST
+ * refuse the whole query, and the public map showed "The tagged trees could
+ * not be loaded" where the trees should be.
+ */
+const NOT_COLUMNS_OF_TREES = ['data_source', 'photo_url'];
 
 describe('what the public side asks for', () => {
   it('asks for everything the map reads', () => {
@@ -62,7 +74,7 @@ describe('what the public side asks for', () => {
 
   it('keeps the analytics query free of photographs', () => {
     // Nothing on that page shows a picture.
-    for (const column of ['imageUrl', 'photo_url', 'leaves_url', 'bark_url', 'fruits_url']) {
+    for (const column of ['imageUrl', 'leaves_url', 'bark_url', 'fruits_url']) {
       expect(dashboardColumns).not.toContain(column);
     }
   });
@@ -72,5 +84,64 @@ describe('what the public side asks for', () => {
     // only match "imageUrl" exactly — "imageurl" finds nothing.
     expect(mapColumns).toContain('imageUrl');
     expect(mapColumns).not.toContain('imageurl');
+  });
+});
+
+describe('columns that are not columns', () => {
+  it('never asks for a field the table has not got', () => {
+    for (const column of NOT_COLUMNS_OF_TREES) {
+      expect(mapColumns).not.toContain(column);
+      expect(dashboardColumns).not.toContain(column);
+    }
+  });
+});
+
+describe('selectPublicTrees', () => {
+  const rows = [{ id: '1', species: 'Narra' }];
+
+  it('asks for the narrow list and hands it back', async () => {
+    const select = vi.fn().mockResolvedValue({ data: rows, error: null });
+    const supabase = { from: vi.fn(() => ({ select })) };
+
+    const result = await selectPublicTrees(supabase, 'id,species');
+
+    expect(select).toHaveBeenCalledWith('id,species');
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(result.data).toBe(rows);
+  });
+
+  it('falls back to every column rather than showing an empty map', async () => {
+    // The real failure: "column trees.data_source does not exist".
+    const select = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: '42703', message: 'column trees.data_source does not exist' },
+      })
+      .mockResolvedValueOnce({ data: rows, error: null });
+    const supabase = { from: vi.fn(() => ({ select })) };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await selectPublicTrees(supabase, 'id,data_source');
+
+    expect(select).toHaveBeenNthCalledWith(2, '*');
+    expect(result.data).toBe(rows);
+    expect(result.error).toBeNull();
+    // And it says which column to go and fix.
+    expect(warn.mock.calls[0][0]).toMatch(/data_source/);
+    warn.mockRestore();
+  });
+
+  it('lets a real failure through instead of asking twice', async () => {
+    // A network or permission error is not a column problem, and retrying it
+    // with every column would only be slower before failing the same way.
+    const error = { code: 'PGRST301', message: 'JWT expired' };
+    const select = vi.fn().mockResolvedValue({ data: null, error });
+    const supabase = { from: vi.fn(() => ({ select })) };
+
+    const result = await selectPublicTrees(supabase, 'id,species');
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(result.error).toBe(error);
   });
 });
