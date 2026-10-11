@@ -91,7 +91,31 @@ describe('what the panel admits', () => {
     // These are numbers about somebody's land. Showing a soil series and a
     // flood extent without that sentence is making a claim.
     show(forest());
-    expect(screen.getByText(/Sample data/)).toBeInTheDocument();
+    const note = document.querySelector('[data-provisional="placeholder"]');
+    expect(note).toHaveTextContent('Placeholder');
+    expect(note).toHaveTextContent(/until the PGENRO uploads the survey layers/);
+  });
+
+  it('separates the figure it measured from the figures it made up', () => {
+    // This is the distinction somebody planning the next build needs: the area
+    // comes off the polygon and is already true, while the soil series is
+    // invented and will be replaced outright.
+    show(forest());
+
+    const soil = screen.getByText('Macolod clay loam').closest('li');
+    expect(soil.querySelector('[data-provisional="placeholder"]')).toBeTruthy();
+
+    const area = screen.getByText(formatArea(siteAreaM2(forest()))).closest('div');
+    expect(area.querySelector('[data-provisional]')).toBeNull();
+  });
+
+  it('marks a borrowed rate as borrowed, not as invented', () => {
+    // The MAI rate is a real published measurement — it was just taken in
+    // Leyte. That is a different problem from a made-up soil series, and it
+    // clears in a different way.
+    show(forest());
+    const mai = screen.getByText(/t\/yr$/).closest('div');
+    expect(mai.querySelector('[data-provisional="borrowed"]')).toBeTruthy();
   });
 
   it('credits every agency the ground truth belongs to', () => {

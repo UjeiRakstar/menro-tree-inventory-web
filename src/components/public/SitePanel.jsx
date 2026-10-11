@@ -28,6 +28,7 @@ import {
 } from '../../lib/mapSites.js';
 import { DATA_SOURCES, DATA_SOURCE_INTRO } from '../../lib/dataSources.js';
 import InfoHint from './InfoHint.jsx';
+import { ProvisionalNote, ProvisionalTag } from './Provisional.jsx';
 
 /** In step with the slide class below, and with the other two panels'. */
 const SLIDE_MS = 300;
@@ -42,7 +43,7 @@ function SectionHeading({ children }) {
 }
 
 /** A headline figure: icon on the left, label above, number below. */
-function FigureBlock({ icon, label, value, tone = 'slate', hint = null, note = '' }) {
+function FigureBlock({ icon, label, value, tone = 'slate', hint = null, note = '', provisional = null }) {
   const colour = tone === 'red' ? 'text-red-600' : 'text-slate-600';
   return (
     <div className="flex items-start gap-3 py-2.5">
@@ -51,6 +52,7 @@ function FigureBlock({ icon, label, value, tone = 'slate', hint = null, note = '
         <p className="flex items-start gap-1 text-[12px] font-bold leading-snug text-slate-700">
           <span>{label}</span>
           {hint && <InfoHint label={`Where ${label} comes from`} text={hint} size={13} />}
+          {provisional && <ProvisionalTag kind={provisional} className="ml-auto" />}
         </p>
         <p className={`text-xl font-extrabold leading-tight ${colour}`}>{value}</p>
         {note && <p className="text-[11px] leading-tight text-slate-400">{note}</p>}
@@ -60,7 +62,7 @@ function FigureBlock({ icon, label, value, tone = 'slate', hint = null, note = '
 }
 
 /** A quieter one-line fact: icon, name, value on the same line. */
-function FactRow({ icon, label, value }) {
+function FactRow({ icon, label, value, provisional = null }) {
   return (
     <li className="flex items-center gap-3 py-1.5">
       <img src={icon} alt="" aria-hidden="true" className="h-7 w-7 shrink-0 object-contain" />
@@ -68,6 +70,7 @@ function FactRow({ icon, label, value }) {
         <span className="font-semibold text-slate-700">{label}:</span>{' '}
         <span>{value}</span>
       </p>
+      {provisional && <ProvisionalTag kind={provisional} compact className="ml-auto" />}
     </li>
   );
 }
@@ -113,6 +116,7 @@ function HazardBlock({ icon, label, feature, unit }) {
         icon={icon}
         label={`Area Exposed to ${label}`}
         value="Not assessed"
+        provisional="awaiting"
         note="No hazard layer has been uploaded for this area yet."
       />
     );
@@ -126,6 +130,9 @@ function HazardBlock({ icon, label, feature, unit }) {
       label={`Area Exposed to ${label}`}
       value={none ? 'None mapped' : formatArea(exposed, unit)}
       tone={none ? 'slate' : 'red'}
+      // The share is invented while the records are samples; the NOAH layer
+      // will hand over square metres and this stops being a placeholder.
+      provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
       note={none ? 'None of this area falls inside the hazard extent.' : `${Math.round(share * 100)}% of the area`}
     />
   );
@@ -265,10 +272,11 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
           {/* Nothing below the geometry is a measurement yet, and saying so is
               not optional: these are figures about somebody's land. */}
           {SITES_ARE_SAMPLE && (
-            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900">
-              <strong>Sample data.</strong> The boundary is drawn in the right barangay, but the
-              figures below are placeholders until the PGENRO uploads the survey layers.
-            </p>
+            <ProvisionalNote kind="placeholder" title="everything but the area" className="mb-3">
+              The boundary is drawn inside the right barangay and the area is measured from it, so
+              that figure is real. Everything carrying an amber dot below is invented, and stays so
+              until the PGENRO uploads the survey layers.
+            </ProvisionalNote>
           )}
 
           {isPlantingSite && (
@@ -295,6 +303,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
                 icon={maiIcon}
                 label="Estimated Total MAI AGB"
                 value={mai === null ? '—' : `${formatTonnesPerYear(mai)} t/yr`}
+                provisional="borrowed"
                 hint={maiSourceNote(props.coverId)}
                 note={
                   cover
@@ -310,16 +319,23 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
             <FactRow
               icon={elevationIcon}
               label="Elevation Type"
+              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
               value={
                 props.elevationM != null
                   ? `${props.elevationType} — ${props.elevationM} m asl`
                   : (props.elevationType ?? 'Not recorded')
               }
             />
-            <FactRow icon={soilIcon} label="Soil Type" value={props.soilType ?? 'Not recorded'} />
+            <FactRow
+              icon={soilIcon}
+              label="Soil Type"
+              value={props.soilType ?? 'Not recorded'}
+              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
+            />
             <FactRow
               icon={rainfallIcon}
               label="Average Rainfall"
+              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
               value={
                 props.rainfallMmPerYear != null
                   ? `${props.rainfallMmPerYear.toLocaleString('en-US')} mm a year`
@@ -329,6 +345,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
             <FactRow
               icon={temperatureIcon}
               label="Average Temperature"
+              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
               value={props.temperatureC != null ? `${props.temperatureC} °C` : 'Not recorded'}
             />
           </ul>

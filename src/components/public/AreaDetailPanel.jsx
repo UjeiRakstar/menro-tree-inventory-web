@@ -42,7 +42,9 @@ function FigureRow({ metric, value, note = '' }) {
         {metric.unit && !unavailable && (
           <span className="ml-1 text-[10px] text-slate-400">{metric.unit}</span>
         )}
-        {unavailable && <span className="block text-[10px] text-slate-400">Not available yet</span>}
+        {unavailable && (
+          <span className="block text-[10px] font-semibold text-amber-700">Awaiting data</span>
+        )}
         {!unavailable && note && (
           <span className="mt-0.5 block text-[10px] leading-tight text-slate-400">{note}</span>
         )}

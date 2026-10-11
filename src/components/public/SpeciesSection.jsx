@@ -10,6 +10,7 @@ import {
   speciesRichness,
 } from '../../lib/speciesMetrics.js';
 import { formatFigure } from '../../lib/dashboardMetrics.js';
+import { ProvisionalNote } from './Provisional.jsx';
 
 /** How many species the list shows before it stops. */
 const SHOWN = 10;
@@ -100,8 +101,7 @@ function Mix({ title, rows, total }) {
 /** The rule itself, said once, wherever it is needed. */
 const SANTAMOUR_NOTE =
   'Guideline: no more than 10% of an urban forest in one species and 20% in one genus ' +
-  '(Santamour’s 10-20-30 rule). The third threshold, 30% in one family, is not checked — ' +
-  'it needs a species-to-family list this system does not have.';
+  '(Santamour’s 10-20-30 rule).';
 
 /**
  * What being past the guideline means, on request.
@@ -166,6 +166,18 @@ function GuidelineModal({ warnings, scopeLabel, onClose }) {
         </p>
 
         <p className="mt-3 text-[11px] leading-relaxed text-slate-400">{SANTAMOUR_NOTE}</p>
+
+        {/* Two of the three thresholds are checked. The third is not, and that
+            is a gap in the advice rather than a footnote about it. */}
+        <ProvisionalNote
+          kind="awaiting"
+          title="the third threshold is not checked"
+          className="mt-2"
+        >
+          30% in one family is part of the same rule and this page does not test it — it needs a
+          species-to-family list the system does not have. Until it does, a mix could pass both
+          checks above and still be concentrated in one family.
+        </ProvisionalNote>
 
         <button
           ref={closeRef}

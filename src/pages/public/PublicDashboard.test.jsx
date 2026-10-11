@@ -199,11 +199,43 @@ describe('PublicDashboard', () => {
     expect(within(forestry).getByText('0.47')).toBeInTheDocument();
 
     // The growth rate is the only figure on this page with nothing behind it,
-    // so it is called out rather than listed among the sourced constants.
-    expect(
-      within(forestry).getByText(/Assumed: 0\.5 cm of diameter growth a year/)
-    ).toBeInTheDocument();
-    expect(within(forestry).getByText(/no measurement or publication behind it/)).toBeInTheDocument();
+    // so it is called out rather than listed among the sourced constants —
+    // and marked ASSUMED, which is the kind that moves only when somebody
+    // changes it, as against a figure that is waiting on another system.
+    const assumed = forestry.querySelector('[data-provisional="assumed"]');
+    expect(assumed).toBeTruthy();
+    expect(assumed).toHaveTextContent('0.5 cm of diameter growth a year');
+    expect(assumed).toHaveTextContent(/no measurement or publication behind it/);
+
+    // Hectares are a different kind of gap: nothing here can derive them.
+    expect(forestry.querySelector('[data-provisional="awaiting"]')).toHaveTextContent(
+      /mapping feature/
+    );
+  });
+
+  it('marks in amber only what will not move as the inventory grows', async () => {
+    renderDashboard();
+
+    const pending = await screen.findByRole('region', { name: 'Figures not available yet' });
+
+    // The two figures no amount of tagging produces.
+    expect(pending.querySelectorAll('[data-provisional="awaiting"]').length).toBeGreaterThanOrEqual(
+      2
+    );
+
+    // And a key, so the colour means something rather than being a mood.
+    expect(within(pending).getByText('Reading the figures')).toBeInTheDocument();
+    expect(within(pending).getByText(/except where it is marked in amber/)).toBeInTheDocument();
+
+    // The coverage note is NOT amber: it moves every time a height is
+    // recorded. Amber that covers live figures too stops meaning anything.
+    // All six headline figures are counted from the tagged trees, so not one
+    // of them is marked. Amber that covered live figures too would stop
+    // meaning anything.
+    for (const label of ['Total Number of Trees', 'Species Recorded', 'Total Estimated Carbon Stored']) {
+      const card = screen.getByText(label).closest('div');
+      expect(card.querySelector('[data-provisional]')).toBeNull();
+    }
   });
 
   it('shows what it cannot give yet, small and with a reason', async () => {

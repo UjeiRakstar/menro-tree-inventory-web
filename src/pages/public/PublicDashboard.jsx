@@ -58,6 +58,11 @@ import {
   measuredCoverage,
 } from '../../lib/treeVolume.js';
 import InfoHint from '../../components/public/InfoHint.jsx';
+import {
+  ProvisionalKey,
+  ProvisionalNote,
+  ProvisionalTag,
+} from '../../components/public/Provisional.jsx';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 import SpeciesSection from '../../components/public/SpeciesSection.jsx';
@@ -178,8 +183,8 @@ function StatCard({ metric, value, note = '', active, onSelect }) {
         {/* Context under the figure: how much of the inventory it speaks for,
             or how it has moved. A number alone is raw data. */}
         {unavailable ? (
-          <span className="mt-1 block text-[10px] leading-snug text-slate-400">
-            Not available yet
+          <span className="mt-1 block text-[10px] font-semibold leading-snug text-amber-700">
+            Awaiting data
           </span>
         ) : (
           note && <span className="mt-1 block text-[10px] leading-snug text-slate-500">{note}</span>
@@ -254,23 +259,26 @@ function WorkingsCard({ trees }) {
 
       {/* The one number on this page with no source behind it, said plainly
           and set apart so nobody has to go looking for the weak link. */}
-      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-        <p className="text-[11px] font-bold text-amber-900">
-          Assumed: {ANNUAL_DBH_GROWTH_CM} cm of diameter growth a year
-        </p>
-        <p className="mt-0.5 text-[10.5px] leading-snug text-amber-800">
-          The mean annual increment rests entirely on this, and it is the only figure here with no
-          measurement or publication behind it. It is set low on purpose, so the increment
-          understates rather than flatters. Replace it with a measured or published rate for Laguna
-          and the figure above becomes exact — everything scales straight off it.
-        </p>
-      </div>
+      <ProvisionalNote
+        kind="assumed"
+        title={`${ANNUAL_DBH_GROWTH_CM} cm of diameter growth a year`}
+        className="mt-3"
+      >
+        The mean annual increment rests entirely on this, and it is the only figure here with no
+        measurement or publication behind it. It is set low on purpose, so the increment understates
+        rather than flatters. Replace it with a measured or published rate for Laguna and the figure
+        above becomes exact — everything scales straight off it.
+      </ProvisionalNote>
 
+      <ProvisionalNote kind="awaiting" title="per hectare" className="mt-2">
+        Both figures are totals for the TAGGED TREES, not per hectare. Hectares need the mapping
+        feature to delineate cover first; nothing here can derive them.
+      </ProvisionalNote>
+
+      {/* Live, so NOT amber: this moves every time somebody records a height. */}
       <p className="mt-2.5 text-[10.5px] leading-snug text-slate-400">
         Both figures cover {formatFigure(coverage.measured)} of {formatFigure(coverage.total)} trees
         — the rest have no recorded merchantable height and are left out rather than guessed at.
-        They are also totals for the TAGGED TREES, not per hectare; hectares need the mapping
-        feature.
       </p>
     </div>
   );
@@ -842,21 +850,28 @@ export default function PublicDashboard() {
             {PENDING_METRICS.map((metric) => (
               <li
                 key={metric.key}
-                className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-4 py-3"
+                data-provisional="awaiting"
+                className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 px-4 py-3"
               >
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  {metric.label}
+                <p className="flex items-start justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900">
+                    {metric.label}
+                  </span>
+                  <ProvisionalTag kind="awaiting" />
                 </p>
                 <p className="mt-1 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-slate-300">—</span>
-                  <span className="text-xs text-slate-400">{metric.unit}</span>
+                  <span className="text-2xl font-bold text-amber-300">—</span>
+                  <span className="text-xs text-amber-700/80">{metric.unit}</span>
                 </p>
-                <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                <p className="mt-1 text-[11px] leading-snug text-amber-800">
                   Waiting on {metric.waitingOn}.
                 </p>
               </li>
             ))}
           </ul>
+
+          {/* What the amber means, said once, on the page that uses it most. */}
+          <ProvisionalKey className="mt-4" />
         </section>
       </div>
 

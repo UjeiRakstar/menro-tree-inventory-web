@@ -44,6 +44,29 @@ Last read through: 10 October 2026.
   the species layer, the barangay leaderboard and planting gap, the diameter-class
   distribution, freshness, and the climate figures. Each is independent.
 
+## Finding this stuff on the page
+
+Anything on the public pages that is **not** computed from the inventory is
+marked in amber, through `src/components/public/Provisional.jsx`. Four kinds,
+and the distinction is the point — they clear in different ways:
+
+| Kind | What it means | Clears when |
+|---|---|---|
+| **Assumed** | a constant this system chose | somebody changes the constant |
+| **Borrowed** | published, but measured elsewhere | an equivalent is measured in Laguna |
+| **Placeholder** | invented, standing in for real data | the real layer is uploaded |
+| **Awaiting data** | no figure at all yet | another system supplies one |
+
+Everything unmarked is live: counted from the tagged trees on every load, and
+already right the moment a tree is tagged. `grep -rn 'data-provisional'
+src/` lists every marked figure on the site, and the key explaining the colour
+is at the foot of the BioDashboard.
+
+Do NOT mark something amber because it reads like a caveat. "From 103 of 110
+trees measured", "no tagged trees in Pila yet" and "2 not yet identified" are
+all live figures that move by themselves. Amber only means something while it
+stays reserved for the four kinds above.
+
 ## Still open here
 
 ### Waiting on the PGENRO account
