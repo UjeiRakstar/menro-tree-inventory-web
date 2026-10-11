@@ -44,9 +44,30 @@ describe('AreaDetailPanel', () => {
   it('explains every figure, since there is no footnote to fall back on', () => {
     renderPanel();
 
-    const hints = within(panel()).getAllByRole('tooltip');
-    expect(hints).toHaveLength(6);
-    for (const hint of hints) expect(hint.textContent.trim().length).toBeGreaterThan(0);
+    // The tooltip is rendered through a portal and only while it is open —
+    // inside the panel it would be clipped by the panel's own scrolling, which
+    // used to cut every one of these explanations off mid-sentence. So each is
+    // opened in turn rather than read out of the markup.
+    const buttons = within(panel()).getAllByRole('button', { name: /^What .* means$/ });
+    expect(buttons).toHaveLength(6);
+
+    for (const button of buttons) {
+      fireEvent.click(button);
+      const hint = screen.getByRole('tooltip');
+      expect(hint.textContent.trim().length).toBeGreaterThan(0);
+      fireEvent.click(button);
+    }
+  });
+
+  it('puts the explanation outside the panel, where nothing can clip it', () => {
+    renderPanel();
+
+    fireEvent.click(within(panel()).getAllByRole('button', { name: /^What .* means$/ })[0]);
+    const hint = screen.getByRole('tooltip');
+    // In the body, not under the scrolling panel: `overflow` cannot clip it
+    // there, and neither can the dashboard's rounded figure grid.
+    expect(panel().contains(hint)).toBe(false);
+    expect(document.body.contains(hint)).toBe(true);
   });
 
   it('lists the busiest barangays and counts the rest', () => {

@@ -1,50 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, ChevronLeft, ChevronRight, Download, Info, X } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import { METRIC_PAIRS, formatFigure } from '../../lib/dashboardMetrics.js';
+import InfoHint from './InfoHint.jsx';
 
 /** In step with the slide class below, and with the tree panel's. */
 const SLIDE_MS = 300;
 
 /** How many barangays the panel lists before sending the reader to the chart. */
 const BARANGAYS_SHOWN = 6;
-
-/**
- * A tooltip that hangs to the left of what it belongs to.
- *
- * The ⓘ sit at the panel's right edge, where a centred tooltip would be cut
- * off — the same reason the tree panel anchors its tooltips this way.
- */
-function Tooltip({ children, open = false }) {
-  return (
-    <span
-      role="tooltip"
-      className={`pointer-events-none absolute right-0 top-full z-10 mt-2 w-56 max-w-[16rem] rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white shadow-lg ${
-        open ? 'block' : 'hidden group-hover:block group-focus-within:block'
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function InfoHint({ label, text }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative group inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={label}
-        aria-expanded={open}
-        className="text-slate-400 transition hover:text-slate-600"
-      >
-        <Info size={13} />
-      </button>
-      <Tooltip open={open}>{text}</Tooltip>
-    </span>
-  );
-}
 
 /**
  * Which part of the place's trees the carbon figure speaks for.
@@ -69,7 +33,7 @@ function FigureRow({ metric, value, note = '' }) {
     <div className="flex items-start justify-between gap-3 px-3 py-2.5">
       <dt className="flex items-start gap-1 pt-0.5 text-[11px] font-semibold leading-snug text-slate-600">
         <span>{metric.label}</span>
-        <InfoHint label={`What ${metric.label} means`} text={metric.hint} />
+        <InfoHint label={`What ${metric.label} means`} text={metric.hint} size={13} />
       </dt>
       <dd className="shrink-0 text-right">
         <span className={`text-xl font-bold leading-none ${unavailable ? 'text-slate-300' : tone}`}>

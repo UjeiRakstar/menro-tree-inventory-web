@@ -183,6 +183,29 @@ describe('PublicDashboard', () => {
     expect(series).toEqual(['timberVolumeM3', 'maiAgbMg']);
   });
 
+  it('shows the workings beside the forestry figures, not an empty column', async () => {
+    renderDashboard();
+    await screen.findByText('Total Number of Trees');
+    fireEvent.click(screen.getByRole('tab', { name: 'Forestry' }));
+
+    const forestry = await screen.findByRole('region', { name: 'Forestry figures' });
+
+    // Anybody putting standing volume into a report needs every constant
+    // behind it, and this is the tab those readers are on.
+    expect(within(forestry).getByText('How these are worked out')).toBeInTheDocument();
+    expect(within(forestry).getByText('V = c × D² × H')).toBeInTheDocument();
+    expect(within(forestry).getByText('0.57 t/m³')).toBeInTheDocument();
+    expect(within(forestry).getByText('1.5×')).toBeInTheDocument();
+    expect(within(forestry).getByText('0.47')).toBeInTheDocument();
+
+    // The growth rate is the only figure on this page with nothing behind it,
+    // so it is called out rather than listed among the sourced constants.
+    expect(
+      within(forestry).getByText(/Assumed: 0\.5 cm of diameter growth a year/)
+    ).toBeInTheDocument();
+    expect(within(forestry).getByText(/no measurement or publication behind it/)).toBeInTheDocument();
+  });
+
   it('shows what it cannot give yet, small and with a reason', async () => {
     renderDashboard();
 
@@ -274,8 +297,17 @@ describe('PublicDashboard', () => {
     // No sources list at the foot of the page any more.
     expect(screen.queryByRole('region', { name: 'Sources' })).not.toBeInTheDocument();
 
-    // The citations live in the tooltips instead, one per figure.
-    const tooltips = screen.getAllByRole('tooltip').map((t) => t.textContent);
+    // The citations live in the tooltips instead, one per figure. Each is
+    // opened in turn: a tooltip exists only while it is showing, because it
+    // goes through a portal to escape the figure grid's rounded `overflow`,
+    // which used to cut every one of these explanations off mid-sentence.
+    const tooltips = [];
+    for (const button of screen.getAllByRole('button', { name: /^What .* means$/ })) {
+      fireEvent.click(button);
+      tooltips.push(screen.getByRole('tooltip').textContent);
+      fireEvent.click(button);
+    }
+    expect(tooltips.length).toBeGreaterThan(0);
     expect(tooltips.some((t) => /FMB Technical Bulletin No\. 3/.test(t))).toBe(true);
     expect(tooltips.some((t) => /diameter at breast height/.test(t))).toBe(true);
     // The growth assumption is named in the ⓘ, not buried in the arithmetic.

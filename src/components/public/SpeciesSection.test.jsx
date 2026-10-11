@@ -1,4 +1,4 @@
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import SpeciesSection from './SpeciesSection.jsx';
 
 const tree = (species, over = {}) => ({ species, ...over });
@@ -61,10 +61,60 @@ describe('SpeciesSection', () => {
     );
     renderSection([...many(14, 'Mango', { scientific_name: 'Mangifera indica' }), ...rest]);
 
-    const warning = within(section()).getByText(/Planted past the guideline/i).closest('div');
+    // The explanation is behind the ⚠ now rather than printed under the
+    // section: it is a paragraph that never changes, and it was costing a
+    // hundred pixels of page to say something most readers already took from
+    // the amber bar.
+    fireEvent.click(within(section()).getByRole('button', { name: /past the guideline/i }));
+
+    const warning = screen.getByRole('dialog');
+    expect(within(warning).getByText(/Planted past the guideline/i)).toBeInTheDocument();
     expect(within(warning).getByText(/Mango/)).toBeInTheDocument();
     expect(within(warning).getByText(/14%/)).toBeInTheDocument();
     expect(within(warning).getByText(/above the 10% guideline for one species/)).toBeInTheDocument();
+  });
+
+  it('opens the same explanation from the ⚠ on the row itself', () => {
+    const rest = Array.from({ length: 86 }, (_, i) =>
+      tree(`Species ${i}`, { scientific_name: `Genus${i} species` })
+    );
+    renderSection([...many(14, 'Mango', { scientific_name: 'Mangifera indica' }), ...rest]);
+
+    fireEvent.click(
+      within(section()).getByRole('button', { name: /Mango is above the guideline/i })
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('closes the explanation on Okay, on the ✕ and on Escape', () => {
+    const rest = Array.from({ length: 86 }, (_, i) =>
+      tree(`Species ${i}`, { scientific_name: `Genus${i} species` })
+    );
+    renderSection([...many(14, 'Mango', { scientific_name: 'Mangifera indica' }), ...rest]);
+
+    const open = () =>
+      fireEvent.click(within(section()).getByRole('button', { name: /past the guideline/i }));
+
+    open();
+    fireEvent.click(screen.getByRole('button', { name: 'Okay' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    open();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    open();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps the page clear when nothing is over the guideline', () => {
+    // No warning line, and nothing to open.
+    renderSection(Array.from({ length: 40 }, (_, i) => tree(`Species ${i}`)));
+    expect(
+      within(section()).queryByRole('button', { name: /past the guideline/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('warns about a genus even when no single species is over', () => {
@@ -78,8 +128,10 @@ describe('SpeciesSection', () => {
       ...rest,
     ]);
 
-    expect(within(section()).getByText(/above the 20% guideline for one genus/)).toBeInTheDocument();
-    expect(within(section()).getByText(/Shorea/)).toBeInTheDocument();
+    fireEvent.click(within(section()).getByRole('button', { name: /past the guideline/i }));
+    const warning = screen.getByRole('dialog');
+    expect(within(warning).getByText(/above the 20% guideline for one genus/)).toBeInTheDocument();
+    expect(within(warning).getByText(/Shorea/)).toBeInTheDocument();
   });
 
   it('marks an over-planted row with more than a colour', () => {

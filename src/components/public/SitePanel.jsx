@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Info, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import areaIcon from '../../assets/Total_Area_icon.png';
 import maiIcon from '../../assets/Total_MAI_icon.png';
 import elevationIcon from '../../assets/Elevation_Type_icon.png';
@@ -27,47 +27,10 @@ import {
   statusOf,
 } from '../../lib/mapSites.js';
 import { DATA_SOURCES, DATA_SOURCE_INTRO } from '../../lib/dataSources.js';
+import InfoHint from './InfoHint.jsx';
 
 /** In step with the slide class below, and with the other two panels'. */
 const SLIDE_MS = 300;
-
-/**
- * A tooltip that hangs to the LEFT of what it belongs to.
- *
- * This panel sits on the right edge of the map, so a tooltip growing rightwards
- * would run off the window — the mirror of why the left-hand panels anchor
- * theirs the other way.
- */
-function Tooltip({ children, open = false }) {
-  return (
-    <span
-      role="tooltip"
-      className={`pointer-events-none absolute left-0 top-full z-10 mt-2 w-60 max-w-[17rem] rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-white shadow-lg ${
-        open ? 'block' : 'hidden group-hover:block group-focus-within:block'
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function InfoHint({ label, text }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative group inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={label}
-        aria-expanded={open}
-        className="text-slate-400 transition hover:text-slate-600"
-      >
-        <Info size={13} />
-      </button>
-      <Tooltip open={open}>{text}</Tooltip>
-    </span>
-  );
-}
 
 /** The thin green rule the mockup puts under every section heading. */
 function SectionHeading({ children }) {
@@ -87,7 +50,7 @@ function FigureBlock({ icon, label, value, tone = 'slate', hint = null, note = '
       <div className="min-w-0 flex-1">
         <p className="flex items-start gap-1 text-[12px] font-bold leading-snug text-slate-700">
           <span>{label}</span>
-          {hint && <InfoHint label={`Where ${label} comes from`} text={hint} />}
+          {hint && <InfoHint label={`Where ${label} comes from`} text={hint} size={13} />}
         </p>
         <p className={`text-xl font-extrabold leading-tight ${colour}`}>{value}</p>
         {note && <p className="text-[11px] leading-tight text-slate-400">{note}</p>}

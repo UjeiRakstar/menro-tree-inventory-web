@@ -5,7 +5,6 @@ import 'leaflet/dist/leaflet.css';
 import {
   CalendarRange,
   Download,
-  Info,
   Leaf,
   Loader2,
   MapPin,
@@ -49,6 +48,16 @@ import {
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
 import { PUBLIC_DASHBOARD_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js';
+import {
+  ANNUAL_DBH_GROWTH_CM,
+  BIOMASS_EXPANSION_FACTOR,
+  CARBON_FRACTION,
+  MIN_MERCHANTABLE_HEIGHT_M,
+  VOLUME_COEFFICIENT,
+  WOOD_DENSITY,
+  measuredCoverage,
+} from '../../lib/treeVolume.js';
+import InfoHint from '../../components/public/InfoHint.jsx';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 import SpeciesSection from '../../components/public/SpeciesSection.jsx';
@@ -111,32 +120,6 @@ function FocusController({ selected }) {
     map.flyToBounds(bounds, { padding: [24, 24], maxZoom: selected ? 13 : 11, duration: 1 });
   }, [selected, map]);
   return null;
-}
-
-/** The ⓘ beside a figure: hover on a mouse, tap on a phone. */
-function InfoHint({ label, text }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative inline-flex group align-middle">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={label}
-        aria-expanded={open}
-        className="text-slate-400 transition hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 rounded-full"
-      >
-        <Info size={14} />
-      </button>
-      <span
-        role="tooltip"
-        className={`pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-60 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-normal leading-snug text-white shadow-lg ${
-          open ? 'block' : 'hidden group-hover:block group-focus-within:block'
-        }`}
-      >
-        {text}
-      </span>
-    </span>
-  );
 }
 
 /**
@@ -214,6 +197,81 @@ function StatCard({ metric, value, note = '', active, onSelect }) {
           <InfoHint label={`What ${metric.label} means`} text={metric.hint} />
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Every constant behind the two forestry figures, and which of them is a guess.
+ *
+ * This sits on the Forestry tab because that is who it is for: a MENRO officer
+ * putting standing volume into a report needs to be able to say where each
+ * number came from, and an assumption nobody can find is one nobody can
+ * challenge. The values are read out of src/lib/treeVolume.js rather than
+ * typed here, so the page cannot quietly disagree with the arithmetic.
+ */
+function WorkingsCard({ trees }) {
+  const coverage = measuredCoverage(trees);
+
+  const rows = [
+    {
+      label: 'Volume equation',
+      value: 'V = c × D² × H',
+      note: 'FMB Technical Bulletin No. 3, Southern Luzon',
+    },
+    {
+      label: 'Coefficient c',
+      value: `${VOLUME_COEFFICIENT.dipterocarp} / ${VOLUME_COEFFICIENT.nonDipterocarp}`,
+      note: 'dipterocarp / non-dipterocarp',
+    },
+    { label: 'Wood density', value: `${WOOD_DENSITY} t/m³` },
+    { label: 'Biomass expansion factor', value: `${BIOMASS_EXPANSION_FACTOR}×` },
+    { label: 'Carbon fraction', value: `${CARBON_FRACTION}`, note: 'IPCC default' },
+    {
+      label: 'Shortest bole counted',
+      value: `${MIN_MERCHANTABLE_HEIGHT_M} m`,
+      note: 'anything less is not a merchantable bole',
+    },
+  ];
+
+  return (
+    <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+        How these are worked out
+      </h3>
+
+      <dl className="mt-3 divide-y divide-slate-100 text-[11px]">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-baseline justify-between gap-3 py-1.5">
+            <dt className="text-slate-500">{row.label}</dt>
+            <dd className="shrink-0 text-right">
+              <span className="font-semibold tabular-nums text-slate-700">{row.value}</span>
+              {row.note && <span className="block text-[10px] text-slate-400">{row.note}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {/* The one number on this page with no source behind it, said plainly
+          and set apart so nobody has to go looking for the weak link. */}
+      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+        <p className="text-[11px] font-bold text-amber-900">
+          Assumed: {ANNUAL_DBH_GROWTH_CM} cm of diameter growth a year
+        </p>
+        <p className="mt-0.5 text-[10.5px] leading-snug text-amber-800">
+          The mean annual increment rests entirely on this, and it is the only figure here with no
+          measurement or publication behind it. It is set low on purpose, so the increment
+          understates rather than flatters. Replace it with a measured or published rate for Laguna
+          and the figure above becomes exact — everything scales straight off it.
+        </p>
+      </div>
+
+      <p className="mt-2.5 text-[10.5px] leading-snug text-slate-400">
+        Both figures cover {formatFigure(coverage.measured)} of {formatFigure(coverage.total)} trees
+        — the rest have no recorded merchantable height and are left out rather than guessed at.
+        They are also totals for the TAGGED TREES, not per hectare; hectares need the mapping
+        feature.
+      </p>
     </div>
   );
 }
@@ -736,17 +794,24 @@ export default function PublicDashboard() {
                 </p>
 
                 <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_2fr]">
-                  <div className="grid grid-cols-2 gap-px self-start overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 lg:grid-cols-1">
-                    {FORESTRY_PAIR.metrics.map((metric) => (
-                      <StatCard
-                        key={metric.key}
-                        metric={metric}
-                        value={totals[metric.key]}
-                        note={carbonCoverage}
-                        active={false}
-                        onSelect={() => {}}
-                      />
-                    ))}
+                  <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 lg:grid-cols-1">
+                      {FORESTRY_PAIR.metrics.map((metric) => (
+                        <StatCard
+                          key={metric.key}
+                          metric={metric}
+                          value={totals[metric.key]}
+                          note={carbonCoverage}
+                          active={false}
+                          onSelect={() => {}}
+                        />
+                      ))}
+                    </div>
+
+                    {/* What used to be empty column. Anyone defending these two
+                        figures in a report needs every constant behind them,
+                        and this is the one tab where that belongs. */}
+                    <WorkingsCard trees={scopedTrees} />
                   </div>
 
                   <div className="flex min-h-[300px] flex-col rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">

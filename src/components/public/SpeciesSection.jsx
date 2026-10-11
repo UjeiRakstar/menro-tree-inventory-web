@@ -1,4 +1,5 @@
-import { AlertTriangle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
 import {
   DIVERSITY_LIMITS,
   asPercent,
@@ -21,7 +22,7 @@ const SHOWN = 10;
  * it, every row needs its number and percentage in text beside it anyway, and
  * this way the section costs nothing to download.
  */
-function SpeciesRow({ row, trackMax, guidelineAt, over }) {
+function SpeciesRow({ row, trackMax, guidelineAt, over, onExplain }) {
   const width = Math.max(1.5, (row.share / trackMax) * 100);
 
   return (
@@ -51,9 +52,19 @@ function SpeciesRow({ row, trackMax, guidelineAt, over }) {
       <span className="flex items-center gap-1.5 tabular-nums text-xs text-slate-500">
         <span className="font-semibold text-slate-700">{formatFigure(row.count)}</span>
         <span className="w-11 text-right">{asPercent(row.share)}</span>
-        {/* Never colour alone: the warning carries an icon and a word. */}
+        {/* Never colour alone: the warning carries an icon and a word. The
+            icon is also the way in to what it means — the explanation used to
+            sit in a block under the whole section, which cost a hundred pixels
+            of page to say something most readers already understood. */}
         {over ? (
-          <AlertTriangle size={13} className="text-amber-600" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={onExplain}
+            aria-label={`${row.name} is above the guideline — what this means`}
+            className="rounded-full text-amber-600 transition hover:text-amber-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+          >
+            <AlertTriangle size={13} aria-hidden="true" />
+          </button>
         ) : (
           <span className="w-[13px]" aria-hidden="true" />
         )}
@@ -86,6 +97,89 @@ function Mix({ title, rows, total }) {
   );
 }
 
+/** The rule itself, said once, wherever it is needed. */
+const SANTAMOUR_NOTE =
+  'Guideline: no more than 10% of an urban forest in one species and 20% in one genus ' +
+  '(Santamour’s 10-20-30 rule). The third threshold, 30% in one family, is not checked — ' +
+  'it needs a species-to-family list this system does not have.';
+
+/**
+ * What being past the guideline means, on request.
+ *
+ * It used to be a block under the section, which is a lot of page spent on a
+ * paragraph that does not change: three species names and a sentence about
+ * pests. Behind the ⚠ it costs nothing until somebody wants it, and it can say
+ * more rather than less once they do.
+ */
+function GuidelineModal({ warnings, scopeLabel, onClose }) {
+  const closeRef = useRef(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guideline-modal-title"
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <AlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+          <h2 id="guideline-modal-title" className="flex-1 text-base font-bold text-amber-800">
+            Planted past the guideline
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-1 -mt-1 shrink-0 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <ul className="mt-3 space-y-1.5 text-sm leading-relaxed text-slate-700">
+          {warnings.map((warning) => (
+            <li key={`${warning.rank}-${warning.name}`}>
+              <span className="font-semibold">{warning.name}</span> is {asPercent(warning.share)} of
+              the trees in {scopeLabel} — above the {asPercent(warning.limit)} guideline for one{' '}
+              {warning.rank}.
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">
+          Choosing other species for new planting spreads the risk: a forest that is a large share
+          of one thing can lose that share to a single pest or disease.
+        </p>
+
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-400">{SANTAMOUR_NOTE}</p>
+
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-xl bg-green-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-green-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
+        >
+          Okay
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * What is growing here.
  *
@@ -95,6 +189,7 @@ function Mix({ title, rows, total }) {
  * dominate, and whether the mix is one a single pest could take out.
  */
 export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
+  const [explaining, setExplaining] = useState(false);
   const richness = speciesRichness(trees);
   const counts = speciesCounts(trees);
   const warnings = overPlanted(trees);
@@ -164,6 +259,7 @@ export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
                     trackMax={trackMax}
                     guidelineAt={guidelineAt}
                     over={overNames.has(row.name.toLowerCase())}
+                    onExplain={() => setExplaining(true)}
                   />
                 ))}
               </ol>
@@ -179,6 +275,25 @@ export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
                 )}
                 {counts.length > top.length && (
                   <span>and {formatFigure(counts.length - top.length)} more species.</span>
+                )}
+
+                {/* The verdict, in one line. What it MEANS is behind it, for
+                    whoever wants it, rather than printed for everyone who
+                    does not. */}
+                {warnings.length === 0 ? (
+                  <span className="font-semibold text-green-800">
+                    The mix is within the guideline.
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setExplaining(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full font-semibold text-amber-700 underline decoration-dotted underline-offset-2 transition hover:text-amber-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+                  >
+                    <AlertTriangle size={12} aria-hidden="true" />
+                    {formatFigure(warnings.length)}{' '}
+                    {warnings.length === 1 ? 'is' : 'are'} past the guideline — what this means
+                  </button>
                 )}
               </p>
             </>
@@ -213,42 +328,13 @@ export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
         </div>
       </div>
 
-      {/* The recommendation. This is what turns the chart into advice. */}
-      <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:px-6">
-        {warnings.length === 0 ? (
-          <p className="text-xs leading-relaxed text-slate-600">
-            <span className="font-semibold text-green-800">The mix is within the guideline.</span>{' '}
-            No single species makes up more than a tenth of the trees here, and no genus more than a
-            fifth — which is what keeps one pest or disease from taking out a large share of the
-            canopy.
-          </p>
-        ) : (
-          <div className="flex gap-3">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
-            <div className="text-xs leading-relaxed text-slate-700">
-              <p className="font-semibold text-amber-800">Planted past the guideline</p>
-              <ul className="mt-1 space-y-0.5">
-                {warnings.slice(0, 4).map((warning) => (
-                  <li key={`${warning.rank}-${warning.name}`}>
-                    <span className="font-semibold">{warning.name}</span> is{' '}
-                    {asPercent(warning.share)} of the trees here — above the{' '}
-                    {asPercent(warning.limit)} guideline for one {warning.rank}.
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-1.5 text-slate-500">
-                Choosing other species for new planting spreads the risk: a forest that is a large
-                share of one thing can lose that share to a single pest or disease.
-              </p>
-            </div>
-          </div>
-        )}
-        <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-          Guideline: no more than 10% of an urban forest in one species and 20% in one genus
-          (Santamour&apos;s 10-20-30 rule). The third threshold, 30% in one family, is not checked —
-          it needs a species-to-family list this system does not have.
-        </p>
-      </div>
+      {explaining && (
+        <GuidelineModal
+          warnings={warnings}
+          scopeLabel={scopeLabel}
+          onClose={() => setExplaining(false)}
+        />
+      )}
     </section>
   );
 }
