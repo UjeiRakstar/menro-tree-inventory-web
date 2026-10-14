@@ -58,7 +58,10 @@ function createSupabaseMock() {
       };
     };
 
-    passthrough('select');
+    // The columns asked for, so a test can answer as a database that lacks one.
+    passthrough('select', (columns) => {
+      record.columns = columns;
+    });
     passthrough('order');
     passthrough('limit');
     passthrough('single');

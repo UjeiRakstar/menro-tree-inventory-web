@@ -154,13 +154,17 @@ export function codeState(code, now = new Date()) {
 
 /**
  * Seats an LGU has given out: admins not archived, plus codes that could still
- * be used. Locked admins keep their seat — locking is reversible. Mirrors
- * lgu_seats_taken() in the SQL; the database is what refuses the sixth.
+ * be used. Locked admins keep their seat — locking is reversible. Training
+ * accounts and training codes take no seat. Mirrors lgu_seats_taken() in the
+ * SQL; the database is what refuses the sixth.
  */
 export function seatsTaken({ admins = [], codes = [] } = {}, now = new Date()) {
   const seated = admins.filter(
-    (admin) => roleOf(admin) === ROLES.LGU_ADMIN && admin.status !== STATUS.ARCHIVED
+    (admin) =>
+      roleOf(admin) === ROLES.LGU_ADMIN && admin.status !== STATUS.ARCHIVED && !admin.is_training
   ).length;
-  const outstanding = codes.filter((code) => codeState(code, now) === 'outstanding').length;
+  const outstanding = codes.filter(
+    (code) => codeState(code, now) === 'outstanding' && !code.is_training
+  ).length;
   return seated + outstanding;
 }

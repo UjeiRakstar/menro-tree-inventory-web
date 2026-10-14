@@ -67,17 +67,29 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 3. `supabase/municipal_halls.sql`
 4. `supabase/tag_routing.sql` — then **open the field app's task list** and
    check a dispatched tag still shows
+5. `supabase/training_sandbox.sql` — the wall between training and real data
+6. `supabase/training_seed.sql` — the dummy Siniloan data (run again any time
+   to reset it; `node tools/make-training-seed.mjs` regenerates it)
 
-Steps 2 and 4 are the only ones the mobile app could feel. Both were tested
-against real Postgres (20 of 20, 24 of 24) but never against the app; step 2's
-section 4 undoes it in one statement.
+When a training batch is done: `supabase/training_purge.sql`. It deletes every
+training row and leaves real rows alone; its section 3, commented out, also
+archives the training accounts.
+
+Steps 2, 4 and 5 are the ones the mobile app could feel. All were tested
+against real Postgres (20 of 20, 24 of 24, 50 of 50) but never against the
+app; step 2's section 4 undoes it in one statement. After step 5, check the
+real field app still syncs a tree — nothing in it should change for a real
+account.
 
 Still open:
 - **`promote_pending_tree` does not check jurisdiction.** It is SECURITY
   DEFINER, so it reads `pending_trees` past the new routing rules: a field
   officer who knew the id of another LGU's tag could publish it. Not reachable
   from the app's own screens. The fix is one check inside the function, which
-  lives in `supabase/crowdsource_promotion.sql`.
+  lives in `supabase/crowdsource_promotion.sql`. The same gap lets a training
+  account that knows a real tree's id set that tree's `source` to
+  'crowdsource' by "adopting" it — the tree stays real and unseen by the
+  trainee (tested), but the one column changes.
 - **A MENRO can create a field officer in any municipality.** The Arborists
   page lets them pick any of the thirty. The new officer then lands in that
   LGU — out of sight of the MENRO who created them. The list should be their
@@ -107,13 +119,10 @@ way: **any signed-in arborist could make themselves an admin** by updating the
 
 ## Asked for on 14 October, not built yet
 
-- **A training account, for Siniloan first.** Dummy data an LGU can practise
-  on and that is purged afterwards. Waiting on one decision: in the live
-  database, walled off, or in a separate Supabase project. See the reply of
-  14 October.
 - **PGENRO's Action Board** — an overview of every LGU's hazards, read-only,
-  each count opening the trees behind it. Waiting on what "code 1" and
-  "code 2" mean.
+  each count opening the trees behind it. "Code 1" and "code 2" are the field
+  app's stem quality: `stem_quality` is 'Code 1 (Straight/No Defects)',
+  'Code 2 (Little Defects)' or 'Code 3 (Several Defects)'.
 - **PGENRO's permit logs** — grouped by LGU, read-only, with archive and a
   report.
 - **Species from the RISE publication** — a Trees sub-tab where the PGENRO

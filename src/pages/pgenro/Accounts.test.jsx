@@ -104,6 +104,45 @@ describe('the LGU list', () => {
   });
 });
 
+describe('training accounts', () => {
+  it('marks a trainee, and gives them no seat', async () => {
+    seed({
+      profiles: [admin(), admin({ id: 't1', email: 'trainee@scz.gov.ph', full_name: 'Trainee', is_training: true })],
+      codes: [code({ id: 'tc', note: 'Batch 1', is_training: true })],
+    });
+    render(<Accounts />);
+    const santaCruz = await screen.findByRole('region', { name: 'Santa Cruz' });
+
+    expect(within(santaCruz).getByText('1 of 5 seats')).toBeInTheDocument();
+    const trainee = within(santaCruz).getByText('Trainee').closest('li');
+    expect(within(trainee).getByText('Training')).toBeInTheDocument();
+    expect(within(santaCruz).getByText(/Batch 1/).closest('li')).toHaveTextContent('Training');
+    expect(screen.getByText('1 in training')).toBeInTheDocument();
+  });
+
+  it('does not count a trainee as an LGU having somebody to run it', async () => {
+    seed({ profiles: [admin({ is_training: true })] });
+    render(<Accounts />);
+    await screen.findByRole('region', { name: 'Santa Cruz' });
+    // Neither Calamba nor Santa Cruz has a real admin.
+    expect(screen.getByText('2 with no active admin')).toBeInTheDocument();
+  });
+
+  it('still loads before training_sandbox.sql has added the column', async () => {
+    const missingColumn = (rows) => (query) =>
+      /is_training/.test(query.columns ?? '')
+        ? { data: null, error: { code: '42703', message: 'column profiles.is_training does not exist' } }
+        : { data: rows, error: null };
+    supabaseMock.setResponse('profiles:select', missingColumn([PGENRO_ADMIN, admin()]));
+    supabaseMock.setResponse('account_codes:select', missingColumn([]));
+
+    render(<Accounts />);
+    const santaCruz = await screen.findByRole('region', { name: 'Santa Cruz' });
+    expect(within(santaCruz).getByText('Juan dela Cruz')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
 describe('issuing a code', () => {
   it('shows the code once, and says it will not be shown again', async () => {
     supabaseMock.supabase.rpc.mockResolvedValue({
@@ -125,6 +164,52 @@ describe('issuing a code', () => {
     });
     // Only a hash is kept. If this dialog is closed, the code is gone.
     expect(within(dialog).getByText(/only time this code is shown/)).toBeInTheDocument();
+  });
+
+  it('issues a training code, for an account walled off from the real inventory', async () => {
+    supabaseMock.supabase.rpc.mockResolvedValue({
+      data: [{ code: 'CLB-TR4N-2NGG', expires_at: FUTURE }],
+      error: null,
+    });
+    render(<Accounts />);
+    const calamba = await screen.findByRole('region', { name: 'Calamba City' });
+    fireEvent.click(within(calamba).getByRole('button', { name: 'Issue a training code for Calamba City' }));
+
+    const dialog = screen.getByRole('dialog', { name: /New training code/ });
+    expect(within(dialog).getByText(/takes none\s+of the five seats/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Issue training code' }));
+
+    expect(await within(dialog).findByText('CLB-TR4N-2NGG')).toBeInTheDocument();
+    expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('issue_training_code', {
+      p_lgu: CALAMBA.psgc,
+      p_note: null,
+    });
+    expect(within(dialog).getByText(/sees only the practice data/)).toBeInTheDocument();
+  });
+
+  it('issues a training code even when every real seat is taken', async () => {
+    seed({
+      profiles: [1, 2, 3, 4, 5].map((n) => admin({ id: `a${n}`, email: `a${n}@scz.gov.ph` })),
+    });
+    render(<Accounts />);
+    const santaCruz = await screen.findByRole('region', { name: 'Santa Cruz' });
+    expect(within(santaCruz).getByRole('button', { name: /^Issue code/ })).toBeDisabled();
+    expect(
+      within(santaCruz).getByRole('button', { name: 'Issue a training code for Santa Cruz' })
+    ).toBeEnabled();
+  });
+
+  it('says what to run when training codes are not in the database yet', async () => {
+    supabaseMock.supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'Could not find the function public.issue_training_code' },
+    });
+    render(<Accounts />);
+    const calamba = await screen.findByRole('region', { name: 'Calamba City' });
+    fireEvent.click(within(calamba).getByRole('button', { name: 'Issue a training code for Calamba City' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Issue training code' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('training_sandbox.sql');
   });
 
   it('revokes a code still out', async () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   Copy,
+  GraduationCap,
   KeyRound,
   Loader2,
   Lock,
@@ -117,8 +118,13 @@ function Dialog({ title, onClose, children }) {
 /**
  * Issuing a code. The plain code exists only in this dialog: the database keeps
  * a hash. Lose it, revoke it, issue another.
+ *
+ * A TRAINING code makes a training account: same activation page, same
+ * website, but behind the wall in training_sandbox.sql — it sees only the
+ * practice data, and nothing it does reaches the real inventory. It takes none
+ * of the LGU's five seats.
  */
-function IssueCodeDialog({ lgu, onClose, onIssued }) {
+function IssueCodeDialog({ lgu, training = false, onClose, onIssued }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -129,14 +135,19 @@ function IssueCodeDialog({ lgu, onClose, onIssued }) {
     event.preventDefault();
     setBusy(true);
     setError('');
-    const { data, error: rpcError } = await supabase.rpc('issue_account_code', {
-      p_lgu: lgu.psgc,
-      p_note: note.trim() || null,
-    });
+    const { data, error: rpcError } = await supabase.rpc(
+      training ? 'issue_training_code' : 'issue_account_code',
+      { p_lgu: lgu.psgc, p_note: note.trim() || null }
+    );
     setBusy(false);
     const row = Array.isArray(data) ? data[0] : data;
     if (rpcError || !row?.code) {
-      setError(rpcError?.message ?? 'The code could not be issued.');
+      const missing = training && /could not find the function|does not exist/i.test(rpcError?.message ?? '');
+      setError(
+        missing
+          ? 'Training codes need supabase/training_sandbox.sql, which has not been run yet.'
+          : rpcError?.message ?? 'The code could not be issued.'
+      );
       return;
     }
     setIssued(row);
@@ -153,12 +164,23 @@ function IssueCodeDialog({ lgu, onClose, onIssued }) {
   }
 
   return (
-    <Dialog title={issued ? 'Account code issued' : `New account code — ${lgu.label}`} onClose={onClose}>
+    <Dialog
+      title={
+        issued
+          ? training
+            ? 'Training code issued'
+            : 'Account code issued'
+          : `New ${training ? 'training' : 'account'} code — ${lgu.label}`
+      }
+      onClose={onClose}
+    >
       {issued ? (
         <div>
           <p className="text-sm text-slate-600">
-            This sets up one {roleLabel(ROLES.LGU_ADMIN, { isCity: lgu.is_city })} account for{' '}
-            <strong>{lgu.label}</strong>.
+            This sets up one {training && <strong>training</strong>}{' '}
+            {roleLabel(ROLES.LGU_ADMIN, { isCity: lgu.is_city })} account for <strong>{lgu.label}</strong>.
+            {training &&
+              ' It sees only the practice data, and nothing done with it reaches the real inventory.'}
           </p>
           <div className="mt-4 flex items-center gap-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50 px-4 py-3">
             <code className="flex-1 select-all font-mono text-xl font-bold tracking-widest text-green-900">
@@ -202,6 +224,13 @@ function IssueCodeDialog({ lgu, onClose, onIssued }) {
           <p className="mt-1 text-xs text-slate-500">
             So that a code still out can be traced to whoever it was meant for.
           </p>
+          {training && (
+            <p className="mt-3 rounded-lg bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-900 ring-1 ring-violet-200">
+              A training account practises on dummy data, walled off from the real inventory. It takes none
+              of the five seats. Field officers it approves become trainees too. When training is over,{' '}
+              <code>supabase/training_purge.sql</code> clears everything they made.
+            </p>
+          )}
           {error && (
             <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
@@ -212,7 +241,7 @@ function IssueCodeDialog({ lgu, onClose, onIssued }) {
             disabled={busy}
             className="mt-5 w-full rounded-xl bg-green-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50"
           >
-            {busy ? 'Issuing…' : 'Issue code'}
+            {busy ? 'Issuing…' : training ? 'Issue training code' : 'Issue code'}
           </button>
         </form>
       )}
@@ -371,6 +400,28 @@ function StatusDialog({ account, next, onClose, onDone }) {
   );
 }
 
+/**
+ * Runs a read asking for is_training, and again without it if the column is
+ * not there yet — training_sandbox.sql adds it, and this page must not stop
+ * working for the time between deploying the site and running that file.
+ */
+async function withTrainingColumn(query) {
+  const result = await query(', is_training');
+  const missing =
+    result.error &&
+    (result.error.code === '42703' || /is_training/.test(result.error.message ?? ''));
+  return missing ? query('') : result;
+}
+
+/** Marks a training account or code wherever one is listed beside the real ones. */
+function TrainingTag() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-800">
+      <GraduationCap size={11} aria-hidden="true" /> Training
+    </span>
+  );
+}
+
 /** One admin, and what PGENRO can do to their account. */
 function AccountRow({ account, isCity, onAction }) {
   const status = account.status ?? STATUS.ACTIVE;
@@ -385,6 +436,7 @@ function AccountRow({ account, isCity, onAction }) {
           {account.email} · {roleLabel(account.role, { isCity, short: true })}
         </p>
       </div>
+      {account.is_training && <TrainingTag />}
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${STATUS_STYLE[status]}`}>
         {STATUS_LABEL[status]}
       </span>
@@ -429,7 +481,7 @@ function AccountRow({ account, isCity, onAction }) {
 }
 
 /** One city or municipality: its seats, its admins, its codes still out. */
-function LguCard({ lgu, admins, codes, fieldOfficers, now, onIssue, onRevoke, onAction }) {
+function LguCard({ lgu, admins, codes, fieldOfficers, now, onIssue, onIssueTraining, onRevoke, onAction }) {
   const taken = seatsTaken({ admins, codes }, now);
   const full = taken >= SEAT_LIMIT;
   const outstanding = codes.filter((code) => codeState(code, now) === 'outstanding');
@@ -469,6 +521,15 @@ function LguCard({ lgu, admins, codes, fieldOfficers, now, onIssue, onRevoke, on
         >
           <KeyRound size={14} aria-hidden="true" /> Issue code
         </button>
+        <button
+          type="button"
+          onClick={() => onIssueTraining(lgu)}
+          aria-label={`Issue a training code for ${lgu.label}`}
+          title="A training account, walled off from the real inventory. Takes no seat."
+          className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-violet-800 ring-1 ring-violet-200 hover:bg-violet-50"
+        >
+          <GraduationCap size={14} aria-hidden="true" /> Training code
+        </button>
       </div>
 
       {admins.length > 0 ? (
@@ -489,6 +550,7 @@ function LguCard({ lgu, admins, codes, fieldOfficers, now, onIssue, onRevoke, on
           <ul className="mt-1 space-y-1">
             {outstanding.map((code) => (
               <li key={code.id} className="flex items-center gap-2 text-xs text-slate-600">
+                {code.is_training && <TrainingTag />}
                 <span className="flex-1">
                   {code.note || 'No note'} · issued {formatDate(code.issued_at)} · expires{' '}
                   {formatDate(code.expires_at)}
@@ -557,14 +619,18 @@ export default function Accounts() {
     setLoadError('');
     const [lgusResult, profilesResult, codesResult, logResult] = await Promise.all([
       supabase.from('lgus').select('psgc, name, label, is_city, short_code').order('label'),
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, role, lgu_psgc, status, is_approved')
-        .order('full_name'),
-      supabase
-        .from('account_codes')
-        .select('id, lgu_psgc, note, issued_at, expires_at, redeemed_at, revoked_at')
-        .order('issued_at', { ascending: false }),
+      withTrainingColumn((columns) =>
+        supabase
+          .from('profiles')
+          .select(`id, email, full_name, role, lgu_psgc, status, is_approved${columns}`)
+          .order('full_name')
+      ),
+      withTrainingColumn((columns) =>
+        supabase
+          .from('account_codes')
+          .select(`id, lgu_psgc, note, issued_at, expires_at, redeemed_at, revoked_at${columns}`)
+          .order('issued_at', { ascending: false })
+      ),
       supabase
         .from('activity_log')
         .select('id, at, actor_email, actor_role, lgu_psgc, action, entity, entity_id')
@@ -620,14 +686,20 @@ export default function Accounts() {
   const totals = useMemo(() => {
     let admins = 0;
     let outstanding = 0;
+    let trainees = 0;
     for (const group of byLgu.values()) {
-      admins += group.admins.filter((admin) => admin.status !== STATUS.ARCHIVED).length;
+      const open = group.admins.filter((admin) => admin.status !== STATUS.ARCHIVED);
+      admins += open.filter((admin) => !admin.is_training).length;
+      trainees += open.filter((admin) => admin.is_training).length;
       outstanding += group.codes.filter((code) => codeState(code, now) === 'outstanding').length;
     }
+    // A training account is not an office: an LGU with only a trainee still
+    // has nobody running it.
     const withNone = [...byLgu.values()].filter(
-      (group) => group.admins.filter((admin) => admin.status === STATUS.ACTIVE).length === 0
+      (group) =>
+        group.admins.filter((admin) => admin.status === STATUS.ACTIVE && !admin.is_training).length === 0
     ).length;
-    return { admins, outstanding, withNone };
+    return { admins, trainees, outstanding, withNone };
   }, [byLgu, now]);
 
   function finish(message) {
@@ -675,6 +747,11 @@ export default function Accounts() {
             <p className="mt-1 text-sm text-slate-500">
               {lgus.length} cities and municipalities · {totals.admins} admin accounts ·{' '}
               {totals.outstanding} codes not yet used
+              {totals.trainees > 0 && (
+                <>
+                  {' '}· <span className="font-semibold text-violet-700">{totals.trainees} in training</span>
+                </>
+              )}
               {totals.withNone > 0 && (
                 <>
                   {' '}· <span className="font-semibold text-amber-700">{totals.withNone} with no active admin</span>
@@ -761,6 +838,7 @@ export default function Accounts() {
                     fieldOfficers={group.fieldOfficers}
                     now={now}
                     onIssue={(target) => setDialog({ kind: 'issue', lgu: target })}
+                    onIssueTraining={(target) => setDialog({ kind: 'issue', lgu: target, training: true })}
                     onRevoke={handleRevoke}
                     onAction={handleAction}
                   />
@@ -781,7 +859,12 @@ export default function Accounts() {
       )}
 
       {dialog?.kind === 'issue' && (
-        <IssueCodeDialog lgu={dialog.lgu} onClose={() => setDialog(null)} onIssued={load} />
+        <IssueCodeDialog
+          lgu={dialog.lgu}
+          training={Boolean(dialog.training)}
+          onClose={() => setDialog(null)}
+          onIssued={load}
+        />
       )}
       {(dialog?.kind === 'email' || dialog?.kind === 'password') && (
         <CredentialDialog kind={dialog.kind} account={dialog.account} onClose={() => setDialog(null)} onDone={finish} />

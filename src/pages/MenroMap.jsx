@@ -11,11 +11,14 @@ import { TreeMap } from './public/PublicMap.jsx';
  * whose pin colours it keeps, and whose Biodiversity / Action toggle it drops.
  *
  * An LGU account sees its own LGU and nothing else; PGENRO sees the province.
- * The centre button flies to the LGU's hall, which its own office pins.
+ * The centre button flies to the LGU's hall, which its own office pins — but
+ * not a training account: the hall is the real one, and the database refuses
+ * a trainee's pin (training_sandbox.sql), so the map does not offer it.
  */
 export default function MenroMap() {
   const { profile, lgu, refreshProfile } = useAuth();
   const isLguAdmin = roleOf(profile) === ROLES.LGU_ADMIN;
+  const inTraining = Boolean(profile?.is_training);
   const fence = isLguAdmin ? lgu?.name ?? null : null;
 
   const hall =
@@ -44,7 +47,7 @@ export default function MenroMap() {
         mode="admin"
         fence={fence}
         hall={hall}
-        canPinHall={isLguAdmin && Boolean(lgu)}
+        canPinHall={isLguAdmin && Boolean(lgu) && !inTraining}
         onPinHall={pinHall}
       />
     </>

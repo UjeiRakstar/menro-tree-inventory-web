@@ -119,6 +119,20 @@ describe('seatsTaken', () => {
     expect(taken).toBe(3);
   });
 
+  it('gives training accounts and training codes no seat', () => {
+    const taken = seatsTaken(
+      {
+        admins: [
+          { role: 'lgu_admin', status: 'active' },
+          { role: 'lgu_admin', status: 'active', is_training: true },
+        ],
+        codes: [{ expires_at: FUTURE }, { expires_at: FUTURE, is_training: true }],
+      },
+      NOW
+    );
+    expect(taken).toBe(2);
+  });
+
   it('uses the same limit as the database', () => {
     expect(SEAT_LIMIT).toBe(5);
   });
