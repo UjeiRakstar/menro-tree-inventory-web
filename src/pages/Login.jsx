@@ -142,8 +142,10 @@ export default function Login() {
             >
               Forgot password?
             </button>
-            <Link to="/signup" className="text-green-700 hover:text-green-800 font-medium">
-              Create account
+            {/* There is no open sign-up: an LGU account is set up with a code
+                PGENRO issues, and field officers register in the mobile app. */}
+            <Link to="/activate" className="text-green-700 hover:text-green-800 font-medium">
+              Have an account code?
             </Link>
           </div>
         </div>

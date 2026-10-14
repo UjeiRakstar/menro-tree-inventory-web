@@ -26,7 +26,21 @@ function createSupabaseMock() {
   const calls = [];
   const responses = new Map();
 
+  // Who signInAs() signed in, if anyone.
+  let signedIn = null;
+
   function resolveFor(record) {
+    if (signedIn && record.op === 'select') {
+      const filtersOn = (column, value) =>
+        record.filters.some(([name, given]) => name === column && given === value);
+      if (record.table === 'profiles' && filtersOn('id', signedIn.profile.id)) {
+        return { data: signedIn.profile, error: null };
+      }
+      if (record.table === 'lgus' && signedIn.lgu && filtersOn('psgc', signedIn.lgu.psgc)) {
+        return { data: signedIn.lgu, error: null };
+      }
+    }
+
     const configured = responses.get(`${record.table}:${record.op}`);
     const result =
       typeof configured === 'function' ? configured(record) : configured;
@@ -84,6 +98,9 @@ function createSupabaseMock() {
   // Postgres functions exposed over PostgREST, e.g. is_menro_admin().
   const rpc = vi.fn();
 
+  // Supabase Edge Functions, e.g. manage-account.
+  const functions = { invoke: vi.fn() };
+
   const auth = {
     getUser: vi.fn(),
     signUp: vi.fn(),
@@ -97,6 +114,8 @@ function createSupabaseMock() {
   function resetAuthDefaults() {
     rpc.mockReset();
     rpc.mockResolvedValue({ data: false, error: null });
+    functions.invoke.mockReset();
+    functions.invoke.mockResolvedValue({ data: { ok: true }, error: null });
     auth.getUser.mockReset();
     auth.getUser.mockResolvedValue({
       data: { user: { id: 'menro-admin', email: 'menro@example.gov.ph' } },
@@ -131,6 +150,7 @@ function createSupabaseMock() {
       from,
       auth,
       rpc,
+      functions,
       channel: vi.fn(() => channel),
       removeChannel: vi.fn(),
     },
@@ -158,9 +178,24 @@ function createSupabaseMock() {
       responses.set(key, value);
     },
 
+    /**
+     * Sign in as this profile: a session for it, and its own profile row (and
+     * LGU row) whenever the app reads them by id. Every other read of
+     * `profiles` or `lgus` still gets whatever the test configured, so a page
+     * that lists profiles is not handed the signed-in one by mistake.
+     */
+    signInAs(profile, lgu = null) {
+      signedIn = { profile, lgu };
+      auth.getSession.mockResolvedValue({
+        data: { session: { user: { id: profile.id, email: profile.email } } },
+        error: null,
+      });
+    },
+
     reset() {
       calls.length = 0;
       responses.clear();
+      signedIn = null;
       resetAuthDefaults();
     },
   };

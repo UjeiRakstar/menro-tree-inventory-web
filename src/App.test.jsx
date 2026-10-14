@@ -33,13 +33,18 @@ vi.mock('./supabaseClient.js', async () => {
 });
 
 import { supabaseMock } from './test/supabaseMock.js';
+import { PGENRO_ADMIN, SANTA_CRUZ, SANTA_CRUZ_ADMIN } from './test/accounts.js';
 import App from './App.jsx';
 
-const SESSION = { user: { id: 'menro-admin', email: 'menro@example.gov.ph' } };
-
-/** Sign in, or stay signed out, before rendering. */
-function signedIn(session = SESSION) {
-  supabaseMock.supabase.auth.getSession.mockResolvedValue({ data: { session }, error: null });
+/**
+ * Sign in as the Santa Cruz MENRO before rendering.
+ *
+ * With a profile, as a real sign-in has: a session alone is no longer enough
+ * to reach the dashboard, because the website now asks who the account
+ * belongs to before letting it in.
+ */
+function signedIn(profile = SANTA_CRUZ_ADMIN, lgu = SANTA_CRUZ) {
+  supabaseMock.signInAs(profile, lgu);
 }
 
 function renderAt(path) {
@@ -186,5 +191,58 @@ describe('App shell and routing', () => {
     unmount();
 
     await waitFor(() => expect(unsubscribe).toHaveBeenCalled());
+  });
+});
+
+describe('who the signed-in side is for', () => {
+  // Signed in is not enough any more. Each kind of account the website turns
+  // away is told why, instead of getting a dashboard the database would then
+  // refuse to fill.
+
+  it('sends a field officer to the mobile app', async () => {
+    signedIn({ ...SANTA_CRUZ_ADMIN, role: 'field_officer' });
+    renderAt('/map');
+    expect(await screen.findByRole('heading', { name: 'Field officers use the mobile app' })).toBeInTheDocument();
+    expect(adminHeader()).not.toBeInTheDocument();
+  });
+
+  it('tells a field officer still waiting that they are waiting', async () => {
+    signedIn({ ...SANTA_CRUZ_ADMIN, role: 'field_officer', is_approved: false });
+    renderAt('/map');
+    expect(await screen.findByRole('heading', { name: 'Waiting for approval' })).toBeInTheDocument();
+  });
+
+  it('keeps a locked account out, whatever its role', async () => {
+    signedIn({ ...SANTA_CRUZ_ADMIN, status: 'locked' });
+    renderAt('/map');
+    expect(await screen.findByRole('heading', { name: 'This account is locked' })).toBeInTheDocument();
+    expect(adminHeader()).not.toBeInTheDocument();
+  });
+
+  it('lets a turned-away account sign out', async () => {
+    signedIn({ ...SANTA_CRUZ_ADMIN, status: 'archived' });
+    renderAt('/map');
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(supabaseMock.supabase.auth.signOut).toHaveBeenCalled());
+  });
+
+  it('keeps the Accounts page to PGENRO', async () => {
+    signedIn();
+    renderAt('/accounts');
+    // The same answer as a page that does not exist: an LGU admin has no
+    // reason to learn that it does.
+    expect(await screen.findByRole('heading', { name: 'Page Not Found' })).toBeInTheDocument();
+  });
+
+  it('opens the Accounts page for PGENRO', async () => {
+    signedIn(PGENRO_ADMIN, null);
+    supabaseMock.setResponse('lgus:select', { data: [SANTA_CRUZ], error: null });
+    renderAt('/accounts');
+    expect(await screen.findByRole('heading', { level: 1, name: /Accounts/ })).toBeInTheDocument();
+  });
+
+  it('sends the old sign-up address to account activation', async () => {
+    renderAt('/signup');
+    expect(await screen.findByRole('heading', { name: 'Activate your LGU account' })).toBeInTheDocument();
   });
 });

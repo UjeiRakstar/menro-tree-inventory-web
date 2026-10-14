@@ -14,6 +14,8 @@ vi.mock('../supabaseClient.js', async () => {
 });
 
 import { supabaseMock } from '../test/supabaseMock.js';
+import { CALAMBA, PGENRO_ADMIN, SANTA_CRUZ, SANTA_CRUZ_ADMIN } from '../test/accounts.js';
+import { AuthProvider } from '../context/AuthContext.jsx';
 import Header from './Header.jsx';
 
 /** Where the admin can go from the header, and what each tab is called. */
@@ -27,7 +29,9 @@ const NAV = [
 function renderHeader() {
   return render(
     <MemoryRouter>
-      <Header />
+      <AuthProvider>
+        <Header />
+      </AuthProvider>
     </MemoryRouter>
   );
 }
@@ -87,5 +91,37 @@ describe('Header', () => {
     expect(supabaseMock.supabase.auth.signOut).toHaveBeenCalledTimes(1);
     finish({ error: null });
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith('/login'));
+  });
+});
+
+describe('Header, for whoever is signed in', () => {
+  // It used to say "MENRO Santa Cruz" for every account. With one account per
+  // LGU it names the office actually signed in.
+
+  it('names the LGU an admin belongs to', async () => {
+    supabaseMock.signInAs(SANTA_CRUZ_ADMIN, SANTA_CRUZ);
+    renderHeader();
+    expect(await screen.findByAltText('Santa Cruz seal')).toBeInTheDocument();
+    expect(screen.getByText('Tree Inventory System of MENRO Santa Cruz')).toBeInTheDocument();
+  });
+
+  it('calls a city’s office the CENRO', async () => {
+    supabaseMock.signInAs({ ...SANTA_CRUZ_ADMIN, id: 'calamba-admin', lgu_psgc: CALAMBA.psgc }, CALAMBA);
+    renderHeader();
+    expect(await screen.findByText('Tree Inventory System of CENRO Calamba City')).toBeInTheDocument();
+  });
+
+  it('names PGENRO for PGENRO, and gives it the Accounts page', async () => {
+    supabaseMock.signInAs(PGENRO_ADMIN);
+    renderHeader();
+    expect(await screen.findByText('Tree Inventory System of PGENRO Laguna')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Accounts' })).toHaveAttribute('href', '/accounts');
+  });
+
+  it('does not offer an LGU admin the Accounts page', async () => {
+    supabaseMock.signInAs(SANTA_CRUZ_ADMIN, SANTA_CRUZ);
+    renderHeader();
+    await screen.findByAltText('Santa Cruz seal');
+    expect(screen.queryByRole('link', { name: 'Accounts' })).not.toBeInTheDocument();
   });
 });

@@ -58,27 +58,44 @@ stale and two claims in my own write-ups turned out not to be true.
   a module that imports seven small icons. Something is being pulled in that
   should not be. Not investigated.
 
-## The logged-in side, which the account ticket will collide with
+## The logged-in side — what phase 1 left for phase 2
 
-None of these are new; all of them are in the way of one account per LGU.
+Phase 1 (accounts and roles) is written and tested; see ACCOUNTS_AND_MAPPING.md.
+It does nothing until **`supabase/accounts.sql` is run**. These are what it
+deliberately did not touch, and they belong to phase 2, the MENRO map:
 
-- **One global admin.** `public.profiles.role` is `'arborist'` or `'admin'`,
-  set in `supabase/admin_approval_policy.sql`, and the only admin is promoted
-  by email address in that file. There is no LGU on a profile, no PGENRO role,
-  and no way for RLS to keep Santa Cruz's records away from Pakil's editors.
-- **Field officer accounts are created from the browser.**
-  `ManageArborists.jsx` calls `supabase.auth.signUp` with the anon key to make
-  another person's account. Depending on the project's email-confirmation
-  setting, that either does nothing visible or signs the admin in AS the new
-  arborist. Creating someone else's account is a server job — a Supabase Edge
-  Function holding the service key and calling `auth.admin.createUser`.
+- **Tree changes are not scoped to an LGU yet.** Any *active* signed-in
+  account can still update any tree in Laguna — a Santa Cruz MENRO could
+  dispatch a Calamba tree. Locked and archived accounts can no longer write at
+  all; the LGU fence comes with the map that does the dispatching, so both can
+  be tested together, and so the field app's sync (which writes trees as a
+  field officer) is changed once, knowingly.
+- **A MENRO can create a field officer in any municipality.** The Arborists
+  page lets them pick any of the thirty. The new officer then lands in that
+  LGU — out of sight of the MENRO who created them. The list should be their
+  own LGU only.
+- **Field officer accounts are still created from the browser.**
+  `ManageArborists.jsx` calls `supabase.auth.signUp` to make another person's
+  account. With email confirmation on, as it is, that works, but the MENRO
+  chooses the officer's first password. Since field officers already register
+  themselves in the app, the cleaner fix may be to remove the form, not move it
+  to a server.
 - **Two lists of arborists.** `public.arborists` (the task-assignment table)
-  and `public.profiles` with `role = 'arborist'` both say who the arborists
-  are, and nothing keeps them in step.
-- **Anyone can sign up.** The public Sign Up page creates an account for any
-  email, which then waits on approval. Under one-account-per-LGU with five
-  admins each, who approves whom has to be decided before that page means
-  anything.
+  and `public.profiles` with `role = 'field_officer'` both say who the field
+  officers are, and nothing keeps them in step.
+
+Resolved by phase 1: the single global admin (now PGENRO, with LGU admins
+under it), and open sign-up (the web page is now account-code activation;
+field officers still register in the app, by design). Found and closed on the
+way: **any signed-in arborist could make themselves an admin** by updating the
+`role` column of their own profile row. `accounts.sql` section 5.
+
+- **The SQL was checked against real Postgres, not just parsed.** A harness
+  ran `accounts.sql` in PGlite (Postgres compiled to WebAssembly) with stand-ins
+  for Supabase's `auth` schema and roles, then tried everything it forbids: 43
+  of 43 checks passed. The harness lives in this session's scratch folder, not
+  the repo. Worth adding to the repo before phase 3 writes the area tables —
+  it is the only way to test a policy before it is live.
 
 ## Waiting on another system
 

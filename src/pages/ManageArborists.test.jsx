@@ -25,6 +25,7 @@ vi.mock('../supabaseClient.js', async () => {
 });
 
 import { supabaseMock } from '../test/supabaseMock.js';
+import { SANTA_CRUZ, SANTA_CRUZ_ADMIN } from '../test/accounts.js';
 import App from '../App.jsx';
 import ManageArborists from './ManageArborists.jsx';
 
@@ -88,11 +89,9 @@ function formFields() {
 describe('ManageArborists', () => {
   it('renders inside the App shell with Sidebar, Header, and p-6 padding when routed to /arborists', async () => {
     // /arborists sits behind ProtectedRoute, so without a session App
-    // redirects to /login and the page never renders.
-    supabaseMock.supabase.auth.getSession.mockResolvedValue({
-      data: { session: { user: { id: 'menro-admin' } } },
-      error: null,
-    });
+    // redirects to /login and the page never renders — and without a profile
+    // saying whose account it is, it is turned away at the door.
+    supabaseMock.signInAs(SANTA_CRUZ_ADMIN, SANTA_CRUZ);
 
     const { container } = render(
       <MemoryRouter initialEntries={['/arborists']}>
@@ -236,6 +235,9 @@ describe('ManageArborists', () => {
         password: 'TempPass!234',
       }),
     );
+    // The municipality rides along with the sign-up itself: that is the only
+    // moment the database reads it to place the officer in an LGU.
+    expect(supabaseMock.supabase.auth.signUp.mock.calls[0][0].options.data.municipality).toBe('Santa Cruz');
     expect(supabaseMock.writesTo('arborists', 'insert')[0].payload).toMatchObject({
       name: 'Maria Santos',
       email: 'maria.santos@menro.local',

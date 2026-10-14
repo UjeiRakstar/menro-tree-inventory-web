@@ -306,7 +306,13 @@ export default function ManageArborists() {
       email,
       password: temporaryPassword,
       options: {
-        data: { full_name: name, role: 'arborist' },
+        // The municipality is what places a field officer in an LGU (see
+        // lgu_named() in supabase/accounts.sql), and it is only read as the
+        // account is created. Written to the profile afterwards, as below, it
+        // is too late: the officer would belong to no LGU, and the MENRO who
+        // just created them could not see them. The role in here is ignored;
+        // the database decides that.
+        data: { full_name: name, role: 'arborist', municipality },
       },
     });
 

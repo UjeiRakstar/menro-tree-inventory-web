@@ -209,9 +209,11 @@ this replaces them.
 
 1. **Accounts and roles.** The database (roles, LGUs, codes, account status,
    activity log, access rules), the server function, activation, PGENRO's
-   account management, sign-in that knows the role. *In progress.*
+   account management, sign-in that knows the role. *Built and tested; waits
+   on `accounts.sql` being run.*
 2. **The MENRO map.** The public map plus the Command Center's controls,
-   masked to the LGU.
+   masked to the LGU — and tree changes fenced to the LGU in the database,
+   which phase 1 deliberately left for here (see PARKED.md).
 3. **Drawing.** Draw, measure live, close, review the system-generated
    details, choose a class (with the suggestion), attach a document, save.
    Edit, delete, and PGENRO proposals.

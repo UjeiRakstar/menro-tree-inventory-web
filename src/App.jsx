@@ -1,10 +1,12 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import PublicNavbar from './components/PublicNavbar.jsx';
+import AccountBlocked from './components/AccountBlocked.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
-import { supabase } from './supabaseClient.js';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { accessFor, isPgenro } from './lib/roles.js';
 
 /**
  * Every page but the landing one is fetched when it is first opened.
@@ -20,7 +22,8 @@ import { supabase } from './supabaseClient.js';
 const PublicDashboard = lazy(() => import('./pages/public/PublicDashboard.jsx'));
 const PublicMap = lazy(() => import('./pages/public/PublicMap.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
-const Signup = lazy(() => import('./pages/Signup.jsx'));
+const Activate = lazy(() => import('./pages/Activate.jsx'));
+const Accounts = lazy(() => import('./pages/pgenro/Accounts.jsx'));
 const CommandCenter = lazy(() => import('./pages/CommandCenter.jsx'));
 const BiodiversityHub = lazy(() => import('./pages/BiodiversityHub.jsx'));
 const ActionBoard = lazy(() => import('./pages/ActionBoard.jsx'));
@@ -98,31 +101,42 @@ function PublicShell() {
   );
 }
 
-function ProtectedRoute({ session }) {
-  if (!session) {
-    return <Navigate to="/login" replace />;
+/**
+ * The signed-in side, for the people it is for.
+ *
+ * Signed in is not enough any more. A field officer has an account but works
+ * from the mobile app; a locked or archived account has a session but no
+ * business using it. Each is told which, instead of being handed a dashboard
+ * the database would then refuse to fill.
+ */
+function ProtectedRoute() {
+  const { session, profile } = useAuth();
+  if (!session) return <Navigate to="/login" replace />;
+  if (profile === undefined) return <PageLoading />;
+
+  const access = accessFor(profile);
+  if (access.kind !== 'web') {
+    return <AccountBlocked access={access} email={session.user?.email} />;
   }
   return <Shell />;
 }
 
+/** PGENRO's pages. Anyone else gets the same Not Found an unknown page would. */
+function PgenroOnly({ children }) {
+  const { profile } = useAuth();
+  return isPgenro(profile) ? children : <NotFound />;
+}
+
 export default function App() {
-  const [session, setSession] = useState(undefined); // undefined = loading, null = no session
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
+  );
+}
 
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-    });
-
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, s) => {
-        setSession(s);
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
+function AppRoutes() {
+  const { session } = useAuth();
 
   // Show nothing while checking auth state
   if (session === undefined) {
@@ -140,7 +154,11 @@ export default function App() {
       <Routes>
       {/* Auth routes */}
       <Route path="/login" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Login />} />
-      <Route path="/signup" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Signup />} />
+      {/* No open sign-up any more: an LGU account is set up with a code from
+          PGENRO, and field officers register from the mobile app. The old
+          address still lands somewhere useful. */}
+      <Route path="/activate" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Activate />} />
+      <Route path="/signup" element={<Navigate to="/activate" replace />} />
 
       {/* Public-facing routes with PublicNavbar */}
       <Route element={<PublicShell />}>
@@ -151,7 +169,8 @@ export default function App() {
       </Route>
 
       {/* Protected routes */}
-      <Route element={<ProtectedRoute session={session} />}>
+      <Route element={<ProtectedRoute />}>
+        <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
         <Route path="map" element={<CommandCenter />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />

@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { isPgenro, roleLabel } from '../lib/roles.js';
+import { PROVINCE_LOGO, logoFor } from '../lib/lguLogos.js';
+import pgenroLogo from '../assets/lgu-thumbs/PGENRO_LGU_logo.png';
 import santaCruzLogo from '../assets/Santa Cruz Logo.png';
 import menroLogo from '../assets/MENRO Santa Cruz logo.png';
 
@@ -11,12 +15,54 @@ const NAV_ITEMS = [
   { to: '/arborists',              label: 'Arborist' },
 ];
 
+/** PGENRO's own page, at the end, where it does not push the daily ones aside. */
+const PGENRO_ITEMS = [{ to: '/accounts', label: 'Accounts' }];
+
+/**
+ * Whose dashboard this is, in the header.
+ *
+ * It used to say "MENRO Santa Cruz" whoever signed in. With an account per
+ * LGU it names the office actually signed in, with that office's seal. The
+ * Santa Cruz seals stay as the fallback for an account the database has not
+ * placed in an LGU yet — which, before accounts.sql runs, is every account.
+ */
+function useOffice() {
+  const { profile, lgu } = useAuth();
+  if (isPgenro(profile)) {
+    return {
+      title: 'Tree Inventory System of PGENRO Laguna',
+      logos: [
+        { src: PROVINCE_LOGO, alt: 'Province of Laguna seal' },
+        { src: pgenroLogo, alt: 'PGENRO Laguna logo' },
+      ],
+    };
+  }
+  if (lgu) {
+    const office = roleLabel('lgu_admin', { isCity: lgu.is_city, short: true });
+    const seal = logoFor(lgu.name);
+    return {
+      title: `Tree Inventory System of ${office} ${lgu.label}`,
+      logos: seal ? [{ src: seal, alt: `${lgu.label} seal` }] : [],
+    };
+  }
+  return {
+    title: 'Tree Inventory System of MENRO Santa Cruz',
+    logos: [
+      { src: santaCruzLogo, alt: 'Santa Cruz logo' },
+      { src: menroLogo, alt: 'MENRO Santa Cruz logo' },
+    ],
+  };
+}
+
 const LOGOUT_TIMEOUT_MS = 5000;
 
 export default function Header() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
+  const { profile } = useAuth();
+  const office = useOffice();
+  const navItems = isPgenro(profile) ? [...NAV_ITEMS, ...PGENRO_ITEMS] : NAV_ITEMS;
 
   async function handleLogout() {
     setLogoutError(false);
@@ -46,24 +92,15 @@ export default function Header() {
       <div className="flex items-center justify-between gap-6">
         {/* Left: Logos + Title */}
         <div className="flex items-center gap-3">
-          <img
-            src={santaCruzLogo}
-            alt="Santa Cruz logo"
-            className="h-10 w-auto"
-          />
-          <img
-            src={menroLogo}
-            alt="MENRO Santa Cruz logo"
-            className="h-10 w-auto"
-          />
-          <span className="font-bold text-lg whitespace-nowrap text-white">
-            Tree Inventory System of MENRO Santa Cruz
-          </span>
+          {office.logos.map((logo) => (
+            <img key={logo.alt} src={logo.src} alt={logo.alt} className="h-10 w-auto" />
+          ))}
+          <span className="font-bold text-lg whitespace-nowrap text-white">{office.title}</span>
         </div>
 
         {/* Right: Navigation + Logout */}
         <nav className="flex items-center gap-1">
-          {NAV_ITEMS.map(({ to, label }) => (
+          {navItems.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}
