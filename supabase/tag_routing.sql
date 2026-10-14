@@ -101,14 +101,16 @@ grant execute on function public.can_manage_tag(bigint) to authenticated;
 
 alter table public.pending_trees enable row level security;
 
--- Clear whatever was there, keeping accounts.sql's lock.
+-- Clear whatever was there, keeping accounts.sql's lock and, if
+-- training_sandbox.sql has already run, its wall between training and real
+-- tags.
 do $$
 declare p record;
 begin
   for p in
     select policyname from pg_policies
     where schemaname = 'public' and tablename = 'pending_trees'
-      and policyname <> 'only active accounts'
+      and policyname not in ('only active accounts', 'training stays in training')
   loop
     execute format('drop policy %I on public.pending_trees', p.policyname);
   end loop;
