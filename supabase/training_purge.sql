@@ -25,9 +25,10 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['permits', 'phenology_records', 'pending_trees', 'trees', 'arborists', 'activity_log']
+  foreach t in array array['permits', 'phenology_records', 'pending_trees', 'trees', 'arborists', 'map_areas', 'activity_log']
   loop
-    if to_regclass('public.' || t) is not null then
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = t and column_name = 'is_training') then
       execute format('delete from public.%I where is_training', t);
     end if;
   end loop;
