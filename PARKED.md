@@ -2,47 +2,153 @@
 
 Work that is deliberately not being done yet, so it does not get lost.
 
-Last read through: 10 October 2026.
+Last read through: 14 October 2026. Everything below was checked against the
+repo that day, not copied forward from the last list — three entries had gone
+stale and two claims in my own write-ups turned out not to be true.
+
+## Before the account ticket touches anything
+
+- **The field app's work is still uncommitted.** 17 modified files and three
+  new ones in `C:\dev\projects\tree_inventory`, sitting on top of `10eee37`.
+  Among them are `login_screen.dart`, `signup_screen.dart` and
+  `pending_approval_screen.dart` — exactly the screens the MENRO/CENRO account
+  work will rewrite. Commit them first, as they are, so the account changes
+  land on a known state and can be told apart from what was already there.
+- **Did the crowdsourced path run?** You ran `flutter run` and saved a mock
+  tree with no errors (October). What that does not show is the path a
+  *resident's* tag takes: the sync in `inventory_screen.dart` that calls
+  `promote_pending_tree` and puts the tag on the public map. Tag one from the
+  public map on a phone, sync it in the app, and see whether it appears.
 
 ## Needs you — and only you
 
-- **The field app on a device.** Step 8 of `supabase/RUNBOOK.md`. This is the
-  one that matters: until it runs, the app in your hands is still the old
-  build, still naming barangays from OpenStreetMap, and new bad rows keep
-  arriving. The changes are written and `dart analyze` is clean, but they have
-  never run on a phone, and they sit **uncommitted** in
-  `C:\dev\projects\tree_inventory` alongside other in-flight work.
-  - What to watch: the sync path in `inventory_screen.dart` that calls
-    `promote_pending_tree` after a tree uploads. That is what finally puts a
-    resident's tag on the public map, and it has never been exercised.
-  - `flutter test` could not run here — no CMake for native assets.
-- **One tree at 0,0.** A Mahogany with no usable coordinates. Invisible on
-  every map, uncounted in every area, and the only tree the barangay backfill
-  could not place. It needs someone to stand next to it, not a query.
+- **The tree at 0,0.** You decided to delete it. `supabase/delete_unplaceable_tree.sql`
+  (id `663077f0-9961-48a8-95fe-9e3304f61e01`). Not yet run.
 - **`supabase/drop_trees_backup.sql`.** Look at section 1, then uncomment the
   drop. Nothing in either repo reads that table.
+- **Two decisions left hanging.** Neither was answered, so both stand as built
+  until you say otherwise:
+  - Carbon stored and carbon sequestered stayed in the BioDashboard headline
+    when timber volume and MAI moved to the Forestry tab. You had listed carbon
+    with the technical figures.
+  - The Forestry tab sits last. MENRO may want it first among the tabs.
+
+## Mine to fix — found in this sweep
+
+- **The planting site panel says less than it should about what is invented.**
+  The amber note reads "everything carrying an amber dot below is invented",
+  and the recommended species, the planting window, the seedling spacing, the
+  access note, the contact line and the record date are all invented and carry
+  no dot. So they read as real. This is the one to fix first: it is the exact
+  failure the amber marking exists to prevent.
+- **`loadMapSites()` does not exist.** I described it twice as "the one seam"
+  the PGENRO uploads come in through. The actual seam today is the
+  `MAP_SITES` constant in `src/lib/mapSites.js`, which is assigned straight
+  from the mock. The comment at the top of `src/data/mockMapSites.js` repeats
+  the claim. The function should be written when the uploads are — an async
+  loader, which means the map has to learn to wait for areas the way it
+  already waits for trees.
+- **The tree panel still clips its ⓘ.** `TreeDetailPanel.jsx` has its own
+  `Tooltip` and `InfoHint` (lines 68 and 112), and is the fourth copy of the
+  bug the shared `InfoHint` fixed in the other three. I said three; there were
+  four.
+- **Two panels open at once only works on a desktop.** The tree panel opens on
+  the left and the area panel on the right so a visitor can hold both. On a
+  phone both are full width at the same z-index, so the second simply covers
+  the first. Never seen on a phone. Probably: on a phone, opening one closes
+  the other.
+- **Nothing is linted.** ESLint 10 is installed and there is no
+  `eslint.config.*`, so `npx eslint` refuses to run and nothing checks the
+  code. The `eslint-disable` comments in `PublicMap.jsx` and `SitePanel.jsx`
+  are currently decorative.
+- **No `.gitattributes`.** Every commit warns that LF will become CRLF. Harmless
+  today; a repo that changes line endings under people is how a one-line diff
+  becomes a whole-file one.
+- **A 365 kB chunk named `treeTraits`.** Larger than the whole of Leaflet, for
+  a module that imports seven small icons. Something is being pulled in that
+  should not be. Not investigated.
+
+## The logged-in side, which the account ticket will collide with
+
+None of these are new; all of them are in the way of one account per LGU.
+
+- **One global admin.** `public.profiles.role` is `'arborist'` or `'admin'`,
+  set in `supabase/admin_approval_policy.sql`, and the only admin is promoted
+  by email address in that file. There is no LGU on a profile, no PGENRO role,
+  and no way for RLS to keep Santa Cruz's records away from Pakil's editors.
+- **Field officer accounts are created from the browser.**
+  `ManageArborists.jsx` calls `supabase.auth.signUp` with the anon key to make
+  another person's account. Depending on the project's email-confirmation
+  setting, that either does nothing visible or signs the admin in AS the new
+  arborist. Creating someone else's account is a server job — a Supabase Edge
+  Function holding the service key and calling `auth.admin.createUser`.
+- **Two lists of arborists.** `public.arborists` (the task-assignment table)
+  and `public.profiles` with `role = 'arborist'` both say who the arborists
+  are, and nothing keeps them in step.
+- **Anyone can sign up.** The public Sign Up page creates an account for any
+  email, which then waits on approval. Under one-account-per-LGU with five
+  admins each, who approves whom has to be decided before that page means
+  anything.
 
 ## Waiting on another system
 
-- **The mapping feature.** Forest / Tree Cover Area and Mean Annual Increment
-  of Above Ground Biomass read "Not available yet" on the BioDashboard because
-  there is no source for them. When the mapping work lands, set
-  `available: true` on those two entries in `src/lib/dashboardMetrics.js` and
-  feed the figures in.
-- **The emissions feed.** Total Carbon Emission, same treatment — it comes from
-  outside this system (Greenhouse Gases Quantification Sheet, CCC).
-- **Downloads.** The data request form collects who is asking and what for, and
-  then says the downloads are not ready. The exports themselves — tables,
-  spreadsheets, maps, images — are still to be built.
-- **Species write-ups.** Every species on the map whose Description tab says
-  nothing has been published yet. Mango has one; the rest do not. Query 5 of
+- **The mapping feature.** Now being specified — it is the MENRO/CENRO
+  drawing work. Two things on the BioDashboard are waiting on it:
+  - Forest / Tree Cover Area, still "Awaiting data".
+  - MAI per hectare: the forestry figures are totals for the tagged trees, and
+    become Mg/ha/yr once there is cover area to divide by.
+- **The emissions feed.** Total Carbon Emission comes from outside this system
+  (Greenhouse Gases Quantification Sheet, Climate Change Commission).
+- **Downloads.** The data request form collects who is asking and what for,
+  then says the downloads are not ready. The exports themselves are unbuilt.
+- **Species write-ups.** Mango has one; the rest do not. Query 5 of
   `supabase/data_checks.sql` is the PGENRO to-do list.
+- **A cloud-free satellite basemap.** You have a Copernicus API for a
+  cloudless mosaic, to sit beside Esri as the satellite option. After the
+  PGENRO account is set up.
 
-## In progress
+### Waiting on the PGENRO account
 
-- **The BioDashboard rebuild.** Five items, written up in **BIODASHBOARD.md**:
-  the species layer, the barangay leaderboard and planting gap, the diameter-class
-  distribution, freshness, and the climate figures. Each is independent.
+The map draws land cover and tree planting sites, read out of
+`src/data/mockMapSites.js` — real polygons in real barangays, placeholder
+figures, marked in amber. These turn it real; each needs the PGENRO account
+that can upload a layer.
+
+- **The uploads.** Elevation (Copernicus DEM), soil series (BSWM shapefile),
+  rainfall and temperature (DOST-PAGASA CLIRAM, per LGU), flood and landslide
+  extents (UPRI NOAH GeoJSON). The NOAH layer will supply
+  `hazards.{kind}.areaM2` outright; the sample records carry a `share` of the
+  polygon instead, and `hazardAreaM2` already reads either.
+- **Unlocking the rest of the land cover table.** All 29 published rows are in
+  `src/lib/landCover.js`; four are `publicVisible`. The other 25 should become a
+  PGENRO toggle rather than a second table — one table cannot drift from itself.
+- **Encoding the species recommendations.** From DENR RISE, matched against a
+  site's elevation, soil, rainfall and hazard exposure.
+- **Soil series names.** The sample ones are plausible for lowland Laguna, not
+  verified against the BSWM sheet.
+
+### Waiting on a measurement
+
+- **The growth rate.** `ANNUAL_DBH_GROWTH_CM` is 0.5 cm a year, chosen rather
+  than measured, and the whole mean annual increment scales off it. It is
+  amber on the Forestry tab. Replace it with, in order of preference: a
+  re-measurement of the same tree at two dates, a published per-species figure
+  from PGENRO or ERDB, or a figure somebody there will put their name to.
+- **Merchantable height in the field app.** Four of the forestry and carbon
+  figures need it; the app does not ask for it. You have said this gets done
+  no matter what. Until it does, every one of those figures speaks for only the
+  trees that happen to have one.
+- **The 30% family threshold.** Santamour's rule has three thresholds and the
+  page checks two. The third needs a species-to-family list.
+
+## Elsewhere
+
+- **Odd columns in public.trees.** A column named `trees` that nothing reads,
+  `heightClass` beside `height_class`, `photo_url` beside `imageUrl`, and
+  `is_tagged`, which nothing touches. Query 8 of `supabase/data_checks.sql`
+  counts the non-null values in each: empty everywhere is safe to drop.
+- **Phone-width screenshots.** The About page, the BioDashboard and both map
+  panels have only ever been seen on a desktop.
 
 ## Finding this stuff on the page
 
@@ -58,85 +164,34 @@ and the distinction is the point — they clear in different ways:
 | **Awaiting data** | no figure at all yet | another system supplies one |
 
 Everything unmarked is live: counted from the tagged trees on every load, and
-already right the moment a tree is tagged. `grep -rn 'data-provisional'
-src/` lists every marked figure on the site, and the key explaining the colour
-is at the foot of the BioDashboard.
+already right the moment a tree is tagged. `grep -rn 'data-provisional' src/`
+lists every marked figure on the site, and the key explaining the colour is at
+the foot of the BioDashboard.
 
 Do NOT mark something amber because it reads like a caveat. "From 103 of 110
 trees measured", "no tagged trees in Pila yet" and "2 not yet identified" are
 all live figures that move by themselves. Amber only means something while it
 stays reserved for the four kinds above.
 
-## Still open here
-
-### Waiting on the PGENRO account
-
-The map now draws land cover and tree planting sites, and the panel reads every
-one of them out of `src/data/mockMapSites.js` — real polygons in real barangays,
-placeholder figures, with a "Sample data" badge saying so on the panel's face.
-These are what turns it real. None of them is web work alone; each needs the
-PGENRO account that can upload a layer.
-
-- **The uploads themselves.** `loadMapSites()` in `src/lib/mapSites.js` is the
-  one seam. When the layers land it fetches them and `mockMapSites.js` is
-  deleted; no component changes, because the components only ever see the
-  feature shape documented at the top of that file.
-  - elevation — Copernicus DEM
-  - soil series — the BSWM shapefile
-  - rainfall and temperature — the DOST-PAGASA CLIRAM table, per LGU
-  - flood and landslide extents — the UPRI NOAH GeoJSON, which will supply
-    `hazards.{kind}.areaM2` outright; the sample records carry a `share` of the
-    polygon instead, and `hazardAreaM2` already reads either.
-- **Unlocking the rest of the land cover table.** All 29 published rows are in
-  `src/lib/landCover.js`; four are marked `publicVisible` because they are what
-  grows in Laguna. The other 25 are species plantations and should become a
-  PGENRO toggle rather than a second table — one table cannot drift from itself.
-- **Encoding the species recommendations.** The sample sites carry a hand-written
-  `recommended` list. The real one comes from DENR RISE, matched against the
-  site's elevation, soil, rainfall and hazard exposure.
-- **Soil series names.** The sample ones are plausible for lowland Laguna, not
-  verified against the BSWM sheet. They go when the shapefile lands; until then
-  the badge is what stops anyone quoting them.
-
-### Elsewhere
-
-- **Odd columns in public.trees.** The table has 43 columns and a few look
-  like accidents: one named `trees` that nothing reads, `heightClass`
-  beside `height_class` for one fact, `photo_url` beside `imageUrl` for one
-  photograph, and `is_tagged` which nothing in either repo touches. Query 8
-  of `supabase/data_checks.sql` counts the non-null values in each: empty
-  everywhere is safe to drop, anything else is somebody’s data.
-
-- **Phone-width screenshots.** The About page, the BioDashboard and the map's
-  area panel have only ever been seen on a desktop. The area panel is the one
-  to check: six figures and a barangay list is more than one tree's details,
-  and on a phone that panel is the whole screen.
-- **The JavaScript bundle, 2.5 MB.** The largest single thing in the build now,
-  larger than every image put together. It is one chunk because nothing is
-  split by route, so a visitor who only wants the map also downloads the admin
-  console. Worth doing if the first paint ever feels slow.
-- **The carbon estimate.** Still a DBH proxy at 2.5 kg CO₂ per cm, labelled as
-  an estimate everywhere it appears. A species-specific allometric equation
-  would make it a real figure rather than a stand-in.
-
 ## Done
 
+- ~~The BioDashboard rebuild.~~ All five items in BIODASHBOARD.md, and the
+  layout revamp after them.
+- ~~The JavaScript bundle, 2.5 MB.~~ Split by route. The landing page is 118 kB
+  gzipped; the spreadsheet library and the confetti arrive only when used.
+- ~~The carbon estimate.~~ No longer 2.5 kg CO₂ per cm of diameter, which had no
+  source. It is the DENR volume equation for Southern Luzon (FMB Technical
+  Bulletin No. 3), with every constant shown on the Forestry tab.
+- ~~Tooltips cut off.~~ One shared `InfoHint`, portalled to the page body so no
+  `overflow` can clip it. (Three of the four copies — see above.)
 - ~~Image weight.~~ 160 MB → 6.7 MB of built assets.
-  `tools/make-logo-thumbnails.mjs` and `tools/optimise-images.mjs` regenerate
-  them; no image in the build is over half a megabyte.
-- ~~Marker clustering.~~ Pins within about 64 screen pixels group into a bubble
-  with a count, which comes apart as the map zooms in. No bubble survives the
-  furthest zoom any more: up there the pins are grouped by how far apart they
-  are actually drawn rather than by grid cell, and anything still on top of
+- ~~Marker clustering.~~ Pins group into bubbles that come apart as the map
+  zooms in, and no bubble survives the furthest zoom: anything still on top of
   itself fans out into a ring on legs.
-- ~~Barangay names.~~ 111 of 112 trees linked to a real PSA barangay, the field
-  app no longer asks OpenStreetMap, and `public.barangays` is the list to check
-  against. The web app only downloads the boundary index if some tree still
-  lacks a code — which, as things stand, means never.
-- ~~RLS audit.~~ `public.trees` had row level security off, so the anon key
-  that ships in the website could change and delete the inventory. Closed,
-  along with `arborists`, the backup table, and three storage policies that let
-  anyone delete the photos.
-- ~~Phenology for the public.~~ Every policy on `phenology_records` was
-  authenticated-only while the public map reads it, so the leaf, flower and
-  fruit state was blank for every visitor. Fixed in the same pass.
+- ~~Barangay names.~~ 111 of 112 trees linked to a real PSA barangay; the field
+  app no longer asks OpenStreetMap.
+- ~~RLS audit.~~ `public.trees` had row level security off, so the website's
+  anon key could change and delete the inventory. Closed, along with
+  `arborists`, the backup table, and three storage policies.
+- ~~Phenology for the public.~~ The policies were authenticated-only, so leaf,
+  flower and fruit state was blank for every visitor.
