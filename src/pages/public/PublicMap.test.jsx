@@ -121,7 +121,7 @@ vi.mock('../../supabaseClient.js', async () => {
 import { supabaseMock } from '../../test/supabaseMock.js';
 import { boundsOfMunicipality, LAGUNA_BOUNDS } from '../../lib/lagunaBoundaries.js';
 import { loadBarangayIndex } from '../../lib/barangayLookup.js';
-import PublicMap from './PublicMap.jsx';
+import PublicMap, { TreeMap } from './PublicMap.jsx';
 
 // Two trees in Santa Cruz, one in Pila, so the per-area count has something to
 // be wrong about.
@@ -854,5 +854,236 @@ describe('on a phone, one panel at a time', () => {
         screen.queryByRole('complementary', { name: 'Labuin Tree Planting Site' })
       ).not.toBeInTheDocument()
     );
+  });
+});
+
+// =============================================================================
+// The office's map: the public map with an LGU office's tools on it.
+// =============================================================================
+
+/** One of each colour, a tree in Pila, a stump, in Santa Cruz otherwise. */
+const OFFICE_TREES = [
+  { id: 'red', species: 'Narra', latitude: 14.2823, longitude: 121.4163, is_leaning: true, assigned_to: null },
+  { id: 'orange', species: 'Mango', latitude: 14.2795, longitude: 121.4121, is_decayed: true, assigned_to: 'juan@field.ph' },
+  { id: 'yellow', species: 'Acacia', latitude: 14.284, longitude: 121.418, has_cutting_permit: true },
+  { id: 'green', species: 'Santol', latitude: 14.281, longitude: 121.415 },
+  { id: 'pila', species: 'Narra', latitude: 14.2325, longitude: 121.3666, is_leaning: true },
+  { id: 'cut', species: 'Gmelina', latitude: 14.2815, longitude: 121.4155, task_status: 'Cut' },
+];
+const OUT_FOR_CHECKING = { id: 7, species: 'Duhat', latitude: 14.283, longitude: 121.417, status: 'dispatched', assigned_to: 'ana@field.ph' };
+
+const at = (tree) => JSON.stringify([tree.latitude, tree.longitude]);
+const officePin = (tree) => markers().find((m) => m.dataset.center === at(tree));
+
+function renderOffice({ fence = null, path = '/' } = {}) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <TreeMap mode="admin" fence={fence} />
+    </MemoryRouter>
+  );
+}
+
+/** Click the map, the way Leaflet hands the page a click. */
+function clickMap(lat, lng) {
+  act(() => mapEventHandlers.click({ latlng: { lat, lng } }));
+}
+
+describe('the office map', () => {
+  beforeEach(() => {
+    supabaseMock.setResponse('trees:select', { data: OFFICE_TREES, error: null });
+    supabaseMock.setResponse('pending_trees:select', { data: [OUT_FOR_CHECKING], error: null });
+    delete mapEventHandlers.click;
+  });
+
+  it('colours each tree by what it needs, as the Command Center did', async () => {
+    renderOffice();
+    await waitFor(() => expect(officePin(OFFICE_TREES[0])).toBeTruthy());
+
+    expect(officePin(OFFICE_TREES[0]).dataset.fill).toBe('#dc2626'); // hazard, nobody sent
+    expect(officePin(OFFICE_TREES[1]).dataset.fill).toBe('#f97316'); // hazard, dispatched
+    expect(officePin(OFFICE_TREES[2]).dataset.fill).toBe('#eab308'); // permit issued
+    expect(officePin(OFFICE_TREES[3]).dataset.fill).toBe('#16a34a'); // healthy
+  });
+
+  it('shows the tags out for field checking in grey, and leaves stumps off', async () => {
+    renderOffice();
+    await waitFor(() => expect(officePin(OUT_FOR_CHECKING)).toBeTruthy());
+    expect(officePin(OUT_FOR_CHECKING).dataset.fill).toBe('#94a3b8');
+    // A tree already cut is not something to send anybody to.
+    expect(officePin(OFFICE_TREES[5])).toBeUndefined();
+  });
+
+  it('reads every column, which the public map does not', async () => {
+    renderOffice();
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    // Hazards, assignment and permits are what the colours are made of.
+    expect(supabaseMock.queryFiltering('pending_trees', 'status')).toBeTruthy();
+  });
+
+  it('fences an LGU account to its own LGU', async () => {
+    renderOffice({ fence: 'Santa Cruz' });
+    await waitFor(() => expect(officePin(OFFICE_TREES[0])).toBeTruthy());
+
+    // Pila's tree is outside the fence, so it is not on the map at all.
+    expect(officePin(OFFICE_TREES[4])).toBeUndefined();
+    // One LGU: nothing to choose between.
+    expect(screen.queryByLabelText('Zoom to a city or municipality')).not.toBeInTheDocument();
+    expect(screen.getByText('Outside Santa Cruz')).toBeInTheDocument();
+  });
+
+  it('gives PGENRO the whole province', async () => {
+    renderOffice();
+    await waitFor(() => expect(officePin(OFFICE_TREES[4])).toBeTruthy());
+    expect(screen.getByLabelText('Zoom to a city or municipality')).toBeInTheDocument();
+  });
+
+  it('centres the map on the office’s own area', async () => {
+    renderOffice({ fence: 'Santa Cruz' });
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    flyToBoundsSpy.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Centre the map on Santa Cruz' }));
+    expect(flyToBoundsSpy).toHaveBeenCalledWith(boundsOfMunicipality('Santa Cruz'), expect.any(Object));
+
+    // And again: pressing it twice flies twice.
+    fireEvent.click(screen.getByRole('button', { name: 'Centre the map on Santa Cruz' }));
+    expect(flyToBoundsSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('what an office can do to a tree', () => {
+  beforeEach(() => {
+    supabaseMock.setResponse('trees:select', { data: OFFICE_TREES, error: null });
+    supabaseMock.setResponse('pending_trees:select', { data: [OUT_FOR_CHECKING], error: null });
+  });
+
+  async function open(tree) {
+    renderOffice();
+    await waitFor(() => expect(officePin(tree)).toBeTruthy());
+    fireEvent.click(officePin(tree));
+    return screen.findByRole('complementary', { name: new RegExp(tree.species, 'i') });
+  }
+
+  it('dispatches someone to a hazard nobody is on', async () => {
+    const panel = await open(OFFICE_TREES[0]);
+    expect(within(panel).getByText('Hazard — needs dispatching')).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Dispatch' }));
+    expect(await screen.findByRole('heading', { name: 'Dispatch Field Worker' })).toBeInTheDocument();
+  });
+
+  it('re-assigns a hazard somebody is already on, and says who', async () => {
+    const panel = await open(OFFICE_TREES[1]);
+    expect(within(panel).getByRole('button', { name: 'Re-assign' })).toBeEnabled();
+    expect(within(panel).getByText(/juan@field\.ph/)).toBeInTheDocument();
+  });
+
+  it('will not dispatch anyone to a healthy tree, and says why', async () => {
+    const panel = await open(OFFICE_TREES[3]);
+    const dispatch = within(panel).getByRole('button', { name: 'Dispatch' });
+    expect(dispatch).toBeDisabled();
+    expect(dispatch).toHaveAccessibleDescription('Only a tree with a hazard is dispatched.');
+  });
+
+  it('issues a permit once', async () => {
+    const panel = await open(OFFICE_TREES[2]);
+    expect(within(panel).getByRole('button', { name: 'Permit issued' })).toBeDisabled();
+  });
+
+  it('opens the permit form for a tree without one', async () => {
+    const panel = await open(OFFICE_TREES[0]);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Issue permit' }));
+    expect(await screen.findByRole('heading', { name: 'Issue Cutting Permit' })).toBeInTheDocument();
+  });
+
+  it('offers nothing on a resident’s tag until it has been checked', async () => {
+    const panel = await open(OUT_FOR_CHECKING);
+    expect(within(panel).getByText('Crowdsourced — awaiting field check')).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Dispatch' })).not.toBeInTheDocument();
+  });
+
+  it('opens a tree sent over from the Action Board', async () => {
+    renderOffice({ path: '/?tree=green&lat=14.281&lng=121.415' });
+    expect(await screen.findByRole('complementary', { name: /Santol/i })).toBeInTheDocument();
+  });
+});
+
+describe('drawing and measuring an area', () => {
+  beforeEach(() => {
+    supabaseMock.setResponse('trees:select', { data: OFFICE_TREES, error: null });
+    delete mapEventHandlers.click;
+  });
+
+  const vertices = () => clusters().filter((m) => /click to remove|close the shape/.test(m.dataset.label ?? ''));
+
+  async function startDrawing(fence = 'Santa Cruz') {
+    renderOffice({ fence });
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw and measure an area' }));
+    return screen.getByRole('region', { name: 'Measure area' });
+  }
+
+  it('opens a measure box that says what to do next', async () => {
+    const box = await startDrawing();
+    expect(box).toHaveTextContent('Click on the map to place the first point.');
+  });
+
+  it('places points where the map is clicked, and closes on the first', async () => {
+    const box = await startDrawing();
+    clickMap(14.2823, 121.4163);
+    clickMap(14.2823, 121.4173);
+    clickMap(14.2832, 121.4173);
+
+    expect(vertices()).toHaveLength(3);
+    expect(box).toHaveTextContent('Click the first point to close the shape');
+    expect(within(box).getByText('Close the shape to measure')).toBeInTheDocument();
+
+    const first = vertices().find((m) => m.dataset.label === 'Click to close the shape');
+    fireEvent.click(first);
+
+    // Closed: an area, in square metres, and the perimeter.
+    expect(within(box).getByText(/^[\d,.]+ m²$/)).toBeInTheDocument();
+    expect(within(box).getByText('Perimeter')).toBeInTheDocument();
+  });
+
+  it('refuses a point outside the LGU, and says why', async () => {
+    const box = await startDrawing('Santa Cruz');
+    clickMap(14.2325, 121.3666); // Pila
+    expect(vertices()).toHaveLength(0);
+    expect(within(box).getByRole('alert')).toHaveTextContent('outside Santa Cruz');
+  });
+
+  it('takes the last point back', async () => {
+    const box = await startDrawing();
+    clickMap(14.2823, 121.4163);
+    clickMap(14.2823, 121.4173);
+    fireEvent.click(within(box).getByRole('button', { name: /Undo/ }));
+    expect(vertices()).toHaveLength(1);
+  });
+
+  it('stops drawing and clears the shape', async () => {
+    await startDrawing();
+    clickMap(14.2823, 121.4163);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop drawing', pressed: true }));
+    expect(screen.queryByRole('region', { name: 'Measure area' })).not.toBeInTheDocument();
+    expect(vertices()).toHaveLength(0);
+  });
+});
+
+describe('the public map stays the public map', () => {
+  it('has none of the office’s tools', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    expect(screen.queryByRole('button', { name: 'Draw and measure an area' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Centre the map/ })).not.toBeInTheDocument();
+
+    fireEvent.click(markerFor(TREES[0]));
+    const panel = await screen.findByRole('complementary', { name: /Narra/i });
+    expect(within(panel).queryByRole('button', { name: 'Dispatch' })).not.toBeInTheDocument();
+    // A resident is shown trees, not a work queue: none of the office's
+    // red, orange or yellow reaches the public map.
+    for (const marker of markers()) {
+      expect(['#dc2626', '#f97316', '#eab308']).not.toContain(marker.dataset.fill);
+    }
   });
 });

@@ -58,18 +58,17 @@ stale and two claims in my own write-ups turned out not to be true.
   a module that imports seven small icons. Something is being pulled in that
   should not be. Not investigated.
 
-## The logged-in side — what phase 1 left for phase 2
+## The logged-in side — what is left after phases 1 and 2
 
-Phase 1 (accounts and roles) is written and tested; see ACCOUNTS_AND_MAPPING.md.
-It does nothing until **`supabase/accounts.sql` is run**. These are what it
-deliberately did not touch, and they belong to phase 2, the MENRO map:
+Phases 1 (accounts) and 2 (the office map) are written and tested; see
+ACCOUNTS_AND_MAPPING.md. Neither changes the database until it is run, in this
+order: **`supabase/accounts.sql`**, then **`supabase/lgu_fence.sql`** — and
+after the second, **sync one tree from the field app**. The fence is the one
+change in either file that the mobile app could feel, and it has been tested
+against real Postgres but never against the app. Its section 4 undoes it in
+one statement.
 
-- **Tree changes are not scoped to an LGU yet.** Any *active* signed-in
-  account can still update any tree in Laguna — a Santa Cruz MENRO could
-  dispatch a Calamba tree. Locked and archived accounts can no longer write at
-  all; the LGU fence comes with the map that does the dispatching, so both can
-  be tested together, and so the field app's sync (which writes trees as a
-  field officer) is changed once, knowingly.
+Still open:
 - **A MENRO can create a field officer in any municipality.** The Arborists
   page lets them pick any of the thirty. The new officer then lands in that
   LGU — out of sight of the MENRO who created them. The list should be their

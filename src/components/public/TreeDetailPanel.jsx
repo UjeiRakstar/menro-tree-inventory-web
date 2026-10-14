@@ -310,6 +310,7 @@ export default function TreeDetailPanel({
   onHighlight,
   onClose,
   onCollapsedChange,
+  footer = null,
 }) {
   const [activeTab, setActiveTab] = useState('description');
   const [slide, setSlide] = useState(0);
@@ -487,6 +488,10 @@ export default function TreeDetailPanel({
             />
           )}
         </div>
+
+        {/* Pinned under the scrolling body: on the LGU map, what the tree needs
+            and the buttons to do it. Nothing on the public map. */}
+        {footer}
       </aside>
 
       {/* Collapse handle. It rides the panel's edge, so it moves with it. */}

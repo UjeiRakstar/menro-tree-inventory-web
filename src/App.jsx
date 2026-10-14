@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Header from './components/Header.jsx';
 import PublicNavbar from './components/PublicNavbar.jsx';
 import AccountBlocked from './components/AccountBlocked.jsx';
+import AdminFooter from './components/AdminFooter.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
@@ -24,7 +25,7 @@ const PublicMap = lazy(() => import('./pages/public/PublicMap.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Activate = lazy(() => import('./pages/Activate.jsx'));
 const Accounts = lazy(() => import('./pages/pgenro/Accounts.jsx'));
-const CommandCenter = lazy(() => import('./pages/CommandCenter.jsx'));
+const MenroMap = lazy(() => import('./pages/MenroMap.jsx'));
 const BiodiversityHub = lazy(() => import('./pages/BiodiversityHub.jsx'));
 const ActionBoard = lazy(() => import('./pages/ActionBoard.jsx'));
 const ManageArborists = lazy(() => import('./pages/ManageArborists.jsx'));
@@ -64,8 +65,10 @@ function ScrollToTop() {
 function Shell() {
   const location = useLocation();
   const isMapRoute = location.pathname === '/map';
+  // The map fills the space between header and footer exactly; `relative`
+  // so its panels and controls are placed against it, not the window.
   const mainClassName = isMapRoute
-    ? 'flex-1 overflow-auto'
+    ? 'relative flex-1 overflow-hidden'
     : 'flex-1 overflow-auto p-6';
   return (
     <div className="h-screen flex flex-col">
@@ -76,6 +79,7 @@ function Shell() {
           <Outlet />
         </Suspense>
       </main>
+      <AdminFooter />
     </div>
   );
 }
@@ -171,7 +175,7 @@ function AppRoutes() {
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
-        <Route path="map" element={<CommandCenter />} />
+        <Route path="map" element={<MenroMap />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />

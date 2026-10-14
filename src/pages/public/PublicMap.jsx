@@ -14,7 +14,8 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Loader2, Locate, Smartphone, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Crosshair, Loader2, Locate, PencilRuler, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   LAGUNA_BOUNDS,
@@ -24,9 +25,17 @@ import {
   OUTSIDE_LAGUNA_MASK,
   boundsOfMunicipality,
   containsPoint,
+  maskOutsideMunicipality,
   municipalityAt,
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
+import { BASEMAPS, basemapById } from '../../lib/basemaps.js';
+import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../lib/adminPins.js';
+import { PIN_COLOR } from '../../lib/pinColor.js';
+import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
+import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
+import DrawLayer from '../../components/map/DrawLayer.jsx';
+import MeasureBox from '../../components/map/MeasureBox.jsx';
 import { labelOf } from '../../lib/lguOptions.js';
 import { logoFor } from '../../lib/lguLogos.js';
 import { matchesHighlight } from '../../lib/treeTraits.js';
@@ -56,6 +65,10 @@ import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
 import AreaDetailPanel from '../../components/public/AreaDetailPanel.jsx';
 import SitePanel from '../../components/public/SitePanel.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
+// The LGU map's two action dialogs: nobody on the public map can reach them,
+// so the public map never downloads them.
+const DispatchModal = lazy(() => import('../../components/DispatchModal.jsx'));
+const IssuePermitModal = lazy(() => import('../../components/IssuePermitModal.jsx'));
 
 /** Every tagged tree reads as one thing on this map, so they all share one colour. */
 const MARKER_COLOR = '#16a34a';
@@ -117,6 +130,8 @@ const PANES = [
   // Above the points: wherever the visitor is standing, that dot is the one
   // thing that must stay tappable — it is how tagging starts.
   ['user-location', 460],
+  // The shape being drawn sits over everything it is drawn across.
+  ['map-drawing', 470],
 ];
 
 function MapPanes() {
@@ -168,11 +183,25 @@ function getLatLng(tree) {
   return [lat, lng];
 }
 
-/** Map tile options */
-const TILE_LAYERS = [
-  { label: 'Standard Street Map (Fastest)', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png' },
-  { label: 'Satellite (Esri)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' },
-];
+/** The middle of a [[south, west], [north, east]] box. */
+const centreOf = ([[south, west], [north, east]]) => [(south + north) / 2, (west + east) / 2];
+
+/** The public map's single colour, as a pin-colour function. */
+const ONE_COLOUR = () => MARKER_COLOR;
+
+/** The LGU map's colours: each tree by its state, each bubble by its worst. */
+const adminPinFill = (pin) => PIN_FILL[pinColorOf(pin.tree)];
+const adminBubbleFill = (pins) => PIN_FILL[mostUrgent(pins.map((pin) => pinColorOf(pin.tree)))];
+
+/** Flies to one point — a tree opened from "View on map" elsewhere. */
+function FlyToPoint({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    map.flyTo(target, 19, { duration: 1.2 });
+  }, [target, map]);
+  return null;
+}
 
 /**
  * Moves the camera when, and only when, something asks it to.
@@ -182,8 +211,10 @@ const TILE_LAYERS = [
  * who has zoomed into their barangay and then dismisses the focus card wants
  * the card gone, not the whole province back.
  */
-function FocusController({ target }) {
+function FocusController({ target, nonce = 0 }) {
   const map = useMap();
+  // `nonce` makes asking twice for the same place fly twice: the LGU map's
+  // centre button asks for the same LGU every time it is pressed.
   useEffect(() => {
     if (!target) return;
     const bounds = target === 'province' ? LAGUNA_BOUNDS : boundsOfMunicipality(target);
@@ -193,7 +224,7 @@ function FocusController({ target }) {
       maxZoom: target === 'province' ? 12 : 15,
       duration: 1.1,
     });
-  }, [target, map]);
+  }, [target, nonce, map]);
   return null;
 }
 
@@ -261,8 +292,13 @@ function SiteLayer({ sites, selectedId, onSelect }) {
   );
 }
 
-/** The city and municipality outlines inside Laguna; click one to focus it. */
-function MunicipalityLayer({ selected, onSelect }) {
+/**
+ * The city and municipality outlines inside Laguna; click one to focus it.
+ *
+ * `data` narrows it: an LGU account's map draws its own LGU's outline only,
+ * since everything outside it is covered over anyway.
+ */
+function MunicipalityLayer({ selected, onSelect, data = LAGUNA_MUNICIPALITIES }) {
   const groupRef = useRef(null);
   const selectedRef = useRef(selected);
   const onSelectRef = useRef(onSelect);
@@ -286,7 +322,7 @@ function MunicipalityLayer({ selected, onSelect }) {
   return (
     <GeoJSON
       ref={groupRef}
-      data={LAGUNA_MUNICIPALITIES}
+      data={data}
       pane="laguna-boundaries"
       style={(feature) => styleFor(feature.properties.municipality)}
       onEachFeature={(feature, layer) => {
@@ -308,8 +344,10 @@ function MunicipalityLayer({ selected, onSelect }) {
  * Tracks the visitor's location and draws the blue dot.
  *
  * Tapping it is how a resident starts tagging the tree they are standing at.
+ * Without `onTagAttempt` — the LGU map, whose staff tag from the field app —
+ * it is only the dot.
  */
-function UserLocationMarker({ onTagAttempt }) {
+function UserLocationMarker({ onTagAttempt = null }) {
   const [position, setPosition] = useState(null);
   const [accuracy, setAccuracy] = useState(0);
 
@@ -357,7 +395,7 @@ function UserLocationMarker({ onTagAttempt }) {
           fillColor: '#4285f4',
           fillOpacity: 0.15,
         }}
-        eventHandlers={{ click: () => onTagAttempt(position) }}
+        eventHandlers={{ click: () => onTagAttempt?.(position) }}
       />
       {/* Inner blue dot */}
       <CircleMarker
@@ -370,18 +408,22 @@ function UserLocationMarker({ onTagAttempt }) {
           fillColor: '#4285f4',
           fillOpacity: 1,
         }}
-        eventHandlers={{ click: () => onTagAttempt(position) }}
+        eventHandlers={{ click: () => onTagAttempt?.(position) }}
       >
         <Popup>
           <div className="text-center p-1">
             <p className="text-sm font-semibold text-gray-800">You are here</p>
-            <p className="text-[11px] text-gray-500 mb-2">Tap below to tag a nearby tree</p>
-            <button
-              onClick={() => onTagAttempt(position)}
-              className="w-full bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg hover:bg-green-800 transition"
-            >
-              🌳 Tag a Tree Here
-            </button>
+            {onTagAttempt && (
+              <>
+                <p className="text-[11px] text-gray-500 mb-2">Tap below to tag a nearby tree</p>
+                <button
+                  onClick={() => onTagAttempt(position)}
+                  className="w-full bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded-lg hover:bg-green-800 transition"
+                >
+                  🌳 Tag a Tree Here
+                </button>
+              </>
+            )}
           </div>
         </Popup>
       </CircleMarker>
@@ -437,7 +479,15 @@ function bubbleIcon(count, color) {
  * The open tree is always drawn as itself, never folded into a bubble —
  * otherwise opening a pin could make it disappear under a number.
  */
-function TreePins({ pins, openTreeId, highlighting, onSelect }) {
+function TreePins({
+  pins,
+  openTreeId,
+  highlighting,
+  onSelect,
+  pinFill = ONE_COLOUR,
+  bubbleFill = ONE_COLOUR,
+  stateColours = false,
+}) {
   const map = useMap();
   const [zoom, setZoom] = useState(() => map.getZoom?.() ?? 11);
   useMapEvents({ zoomend: () => setZoom(map.getZoom?.() ?? zoom) });
@@ -478,9 +528,13 @@ function TreePins({ pins, openTreeId, highlighting, onSelect }) {
           // A pin that has just come out of a bubble is a new element, so this
           // plays once, there, and not on pins that were already standing alone.
           className: 'tree-pin',
-          color: '#ffffff',
+          // On the LGU map an open tree keeps its colour — turning a red
+          // hazard dark green the moment it is opened would hide the very
+          // thing it was opened for — and is marked by a dark ring instead.
+          color: isOpen && stateColours ? '#0f172a' : '#ffffff',
           weight: isOpen ? 3 : 2,
-          fillColor: isOpen ? MARKER_SELECTED_COLOR : muted ? MARKER_MUTED_COLOR : MARKER_COLOR,
+          fillColor:
+            isOpen && !stateColours ? MARKER_SELECTED_COLOR : muted ? MARKER_MUTED_COLOR : pinFill(pin),
           fillOpacity: muted ? 0.55 : 0.95,
         }}
         eventHandlers={{ click: () => onSelect(pin.tree) }}
@@ -529,7 +583,7 @@ function TreePins({ pins, openTreeId, highlighting, onSelect }) {
             key={cluster.key}
             position={cluster.position}
             pane="tree-clusters"
-            icon={bubbleIcon(cluster.count, muted ? MARKER_MUTED_COLOR : MARKER_COLOR)}
+            icon={bubbleIcon(cluster.count, muted ? MARKER_MUTED_COLOR : bubbleFill(cluster.pins))}
             title={label}
             alt={label}
             eventHandlers={{
@@ -585,8 +639,100 @@ function FlyToUserButton({ mapRef }) {
   );
 }
 
+/**
+ * What an open tree needs, and the buttons to do it — the Command Center's
+ * Dispatch / Re-assign and Permit, at the foot of the tree panel.
+ *
+ * The rules are the Command Center's: only a hazard is dispatched, a hazard
+ * somebody is already on is re-assigned rather than dispatched twice, and a
+ * permit is issued once. A button that cannot be used says why on hover and to
+ * a screen reader, rather than just greying out.
+ */
+function TreeActions({ tree, onDispatch, onPermit }) {
+  const color = pinColorOf(tree);
+  const hazard = color === PIN_COLOR.RED || color === PIN_COLOR.ORANGE;
+  const permitted = Boolean(tree.has_cutting_permit || tree.hasCuttingPermit);
+  const assignedTo = tree.assigned_to ?? tree.assignedTo ?? null;
+
+  const button =
+    'flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400';
+
+  return (
+    <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3">
+      <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+        <span className="h-3 w-3 shrink-0 rounded-full ring-2 ring-white" style={{ background: PIN_FILL[color] }} />
+        {PIN_MEANING[color]}
+        {assignedTo && <span className="truncate font-normal text-slate-500">· {assignedTo}</span>}
+      </p>
+
+      {tree.__pending ? (
+        <p className="mt-2 text-xs text-slate-500">
+          A resident tagged this. It joins the inventory once the field officer checks it in the app.
+        </p>
+      ) : (
+        <div className="mt-2.5 flex gap-2">
+          <button
+            type="button"
+            onClick={onDispatch}
+            disabled={!hazard}
+            title={hazard ? undefined : 'Only a tree with a hazard is dispatched.'}
+            aria-describedby={hazard ? undefined : 'tree-action-why'}
+            className={`${button} ${
+              color === PIN_COLOR.ORANGE
+                ? 'bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500'
+                : 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600'
+            }`}
+          >
+            {color === PIN_COLOR.ORANGE ? 'Re-assign' : 'Dispatch'}
+          </button>
+          <button
+            type="button"
+            onClick={onPermit}
+            disabled={permitted}
+            className={`${button} bg-green-700 text-white hover:bg-green-800 focus-visible:ring-green-600`}
+          >
+            {permitted ? 'Permit issued' : 'Issue permit'}
+          </button>
+        </div>
+      )}
+      {!tree.__pending && !hazard && (
+        <p id="tree-action-why" className="sr-only">
+          Only a tree with a hazard is dispatched.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The public map: every tagged tree in Laguna, in one colour, for anyone. */
 export default function PublicMap() {
+  return <TreeMap />;
+}
+
+/**
+ * The map, for the public and for the LGU offices.
+ *
+ * One component, so the LGU map behaves exactly as the public one does — the
+ * same panels, the same clustering, the same phone rules — and an improvement
+ * to either is an improvement to both. `mode="admin"` adds what an office
+ * needs on top:
+ *
+ *   - pins coloured by what needs doing, as the Command Center had them;
+ *   - Dispatch / Re-assign and Issue Permit on the tree panel;
+ *   - a button to centre the map on the office's own area;
+ *   - street and satellite as picture buttons;
+ *   - drawing and measuring an area.
+ *
+ * `fence` is the LGU an account belongs to. Everything outside it is covered
+ * over, its trees are not shown, and nothing can be drawn there — the same
+ * treatment the public map gives everything outside Laguna. PGENRO has no
+ * fence: the whole province is its area.
+ */
+export function TreeMap({ mode = 'public', fence = null }) {
+  const admin = mode === 'admin';
   const [trees, setTrees] = useState([]);
+  // Crowdsourced tags a field officer has been sent to check: grey pins.
+  const [pendingTrees, setPendingTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedLgu, setSelectedLgu] = useState('');
@@ -610,7 +756,18 @@ export default function PublicMap() {
   // Which set of trees stands out: the open tree's species, or whatever trait
   // the visitor picked from the panel's badges.
   const [highlight, setHighlight] = useState(null);
-  const [tileIndex, setTileIndex] = useState(0);
+  const [basemapId, setBasemapId] = useState(admin ? 'satellite' : 'street');
+  // Asking the camera to go somewhere it already is: see FocusController.
+  const [focusNonce, setFocusNonce] = useState(0);
+  // A single tree to fly to — one opened from "View on map" elsewhere.
+  const [pointTarget, setPointTarget] = useState(null);
+  // The LGU map's dialogs, and its drawing.
+  const [dispatchTree, setDispatchTree] = useState(null);
+  const [permitTree, setPermitTree] = useState(null);
+  const [drawing, setDrawing] = useState(false);
+  const [shape, setShape] = useState(EMPTY_SHAPE);
+  const [drawNotice, setDrawNotice] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showMobileOnlyNotice, setShowMobileOnlyNotice] = useState(false);
   const [showEthicsModal, setShowEthicsModal] = useState(false);
   const [ethicsAgreed, setEthicsAgreed] = useState(false);
@@ -653,12 +810,24 @@ export default function PublicMap() {
       setLoading(true);
       setLoadError('');
       try {
-        const { data, error } = await selectPublicTrees(supabase, PUBLIC_MAP_COLUMNS);
+        // The office needs every column — hazards, assignment, permit — that
+        // the public map deliberately does not download.
+        const { data, error } = admin
+          ? await supabase.from('trees').select('*')
+          : await selectPublicTrees(supabase, PUBLIC_MAP_COLUMNS);
         if (cancelled) return;
         if (error) {
           setLoadError(error.message || 'The tree data could not be loaded.');
         } else {
           setTrees(Array.isArray(data) ? data : []);
+        }
+
+        if (admin) {
+          const { data: pending } = await supabase
+            .from('pending_trees')
+            .select('*')
+            .eq('status', 'dispatched');
+          if (!cancelled) setPendingTrees(Array.isArray(pending) ? pending : []);
         }
       } catch (e) {
         if (cancelled) return;
@@ -668,7 +837,27 @@ export default function PublicMap() {
     }
     fetchTrees();
     return () => { cancelled = true; };
-  }, [reloadToken]);
+  }, [reloadToken, admin]);
+
+  // The office's map follows the inventory live: a dispatch from another desk,
+  // or a tree a field officer has just finished, changes the pin while it is
+  // being looked at.
+  useEffect(() => {
+    if (!admin || !supabase.channel) return undefined;
+    const channel = supabase
+      .channel('lgu-map-trees')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trees' }, (payload) => {
+        const row = payload?.new;
+        if (!row?.id) return;
+        setTrees((current) =>
+          current.some((tree) => tree.id === row.id)
+            ? current.map((tree) => (tree.id === row.id ? { ...tree, ...row } : tree))
+            : [...current, row]
+        );
+      })
+      .subscribe();
+    return () => supabase.removeChannel?.(channel);
+  }, [admin]);
 
   // The write-up behind the open panel. A species nobody has written up yet —
   // and a database without the table at all — both read as "not published".
@@ -726,16 +915,47 @@ export default function PublicMap() {
     return () => { cancelled = true; };
   }, [selectedTree]);
 
+  // Every tree the map knows about. On the office's map that includes the
+  // crowdsourced tags out for field checking, and leaves out trees already
+  // cut down — a stump is not something to dispatch anybody to.
+  const allTrees = useMemo(() => {
+    if (!admin) return trees;
+    return [
+      ...trees.filter((tree) => tree.task_status !== 'Cut'),
+      ...pendingTrees.map((tag) => ({ ...tag, id: `pending-${tag.id}`, __pending: true })),
+    ];
+  }, [admin, trees, pendingTrees]);
+
+  // Trees carry a barangay but no city or municipality, so the panel's place
+  // line and the species' spread both come from which boundary a point falls
+  // in. Worked out once for the whole set rather than per pin tapped.
+  const treeAreas = useMemo(() => {
+    const areas = new Map();
+    for (const tree of allTrees) {
+      const position = getLatLng(tree);
+      if (!position) continue;
+      const name = municipalityAt(position);
+      if (name) areas.set(tree.id, name);
+    }
+    return areas;
+  }, [allTrees]);
+
+  // What this account may see: everything, or its own LGU and nothing else.
+  const shownTrees = useMemo(
+    () => (fence ? allTrees.filter((tree) => treeAreas.get(tree.id) === fence) : allTrees),
+    [allTrees, treeAreas, fence]
+  );
+
   // Build map pins
   const mapPins = useMemo(() => {
-    return trees
+    return shownTrees
       .map((tree) => {
         const position = getLatLng(tree);
         if (!position) return null;
         return { id: tree.id, position, tree, highlighted: matchesHighlight(tree, highlight) };
       })
       .filter(Boolean);
-  }, [trees, highlight]);
+  }, [shownTrees, highlight]);
 
   const highlightedCount = useMemo(
     () => (highlight ? mapPins.filter((pin) => pin.highlighted).length : 0),
@@ -751,20 +971,6 @@ export default function PublicMap() {
     return mapPins.filter((pin) => containsPoint(selectedFeature.geometry, pin.position)).length;
   }, [selectedFeature, mapPins]);
 
-  // Trees carry a barangay but no city or municipality, so the panel's place
-  // line and the species' spread both come from which boundary a point falls
-  // in. Worked out once for the whole set rather than per pin tapped.
-  const treeAreas = useMemo(() => {
-    const areas = new Map();
-    for (const tree of trees) {
-      const position = getLatLng(tree);
-      if (!position) continue;
-      const name = municipalityAt(position);
-      if (name) areas.set(tree.id, name);
-    }
-    return areas;
-  }, [trees]);
-
   // A tree's barangay is worked out from where it stands rather than from the
   // name someone typed, so the boundaries have to arrive before the panel's
   // list is right. Until then the written names carry it.
@@ -772,7 +978,7 @@ export default function PublicMap() {
   useEffect(() => {
     // Only when some tree still needs working out. Every row the database has
     // settled already carries its barangay, so there is nothing to fetch.
-    if (!needsBarangayIndex(trees)) return undefined;
+    if (!needsBarangayIndex(shownTrees)) return undefined;
     let cancelled = false;
     loadBarangayIndex()
       .then(() => !cancelled && setBarangaysReady(true))
@@ -780,14 +986,14 @@ export default function PublicMap() {
         // Nothing to say: the written names still work.
       });
     return () => { cancelled = true; };
-  }, [trees]);
+  }, [shownTrees]);
 
   // What the area panel reports. Same module as the BioDashboard, so the two
   // surfaces cannot drift apart, and the same geometry-derived LGU as the rest
   // of this page.
   const areaTrees = useMemo(
-    () => (selectedLgu ? trees.filter((tree) => treeAreas.get(tree.id) === selectedLgu) : []),
-    [trees, treeAreas, selectedLgu]
+    () => (selectedLgu ? shownTrees.filter((tree) => treeAreas.get(tree.id) === selectedLgu) : []),
+    [shownTrees, treeAreas, selectedLgu]
   );
   const areaTotals = useMemo(() => summarise(areaTrees), [areaTrees]);
   const areaBarangays = useMemo(
@@ -807,7 +1013,7 @@ export default function PublicMap() {
     const species = selectedTree?.species?.trim();
     if (!species) return [];
     const counts = new Map();
-    for (const tree of trees) {
+    for (const tree of shownTrees) {
       if ((tree.species || '').trim() !== species) continue;
       const name = treeAreas.get(tree.id);
       if (!name) continue;
@@ -816,7 +1022,7 @@ export default function PublicMap() {
     return [...counts.entries()]
       .map(([name, count]) => ({ name, label: labelOf(name), count }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [selectedTree, trees, treeAreas]);
+  }, [selectedTree, shownTrees, treeAreas]);
 
   /** Opening a tree picks out the rest of its species. */
   function handleSelectTree(tree) {
@@ -958,11 +1164,115 @@ export default function PublicMap() {
   const selectedSite = useMemo(() => siteById(selectedSiteId), [selectedSiteId]);
   const sitePanelShowing = Boolean(selectedSite) && !sitePanelCollapsed;
 
+  // ---- The fence ----------------------------------------------------------
+  const fenceFeature = useMemo(() => (fence ? municipalityNamed(fence) : null), [fence]);
+  const fenceLabel = fenceFeature?.properties.municipality_label ?? '';
+  const mask = useMemo(
+    () => (fence ? maskOutsideMunicipality(fence) ?? OUTSIDE_LAGUNA_MASK : OUTSIDE_LAGUNA_MASK),
+    [fence]
+  );
+  const initialBounds = useMemo(
+    () => (fence ? boundsOfMunicipality(fence) ?? LAGUNA_BOUNDS : LAGUNA_BOUNDS),
+    [fence]
+  );
+  const municipalityData = useMemo(
+    () => (fenceFeature ? { type: 'FeatureCollection', features: [fenceFeature] } : LAGUNA_MUNICIPALITIES),
+    [fenceFeature]
+  );
+  const sites = useMemo(
+    () =>
+      fence
+        ? { ...MAP_SITES, features: MAP_SITES.features.filter((f) => f.properties.municipality === fence) }
+        : MAP_SITES,
+    [fence]
+  );
+
+  /** Back to the office's own area: its LGU, or the province for PGENRO. */
+  function handleCentre() {
+    setFocusTarget(fence || 'province');
+    setFocusNonce((n) => n + 1);
+  }
+
+  // ---- Drawing --------------------------------------------------------------
+  /**
+   * Whether a point may go where it was put, and if not, why not — in words,
+   * because a click that silently does nothing reads as a click that did not
+   * register.
+   */
+  function refusePoint(point) {
+    if (fenceFeature && !containsPoint(fenceFeature.geometry, point)) {
+      return `That is outside ${fenceLabel}. An LGU account draws only inside its own LGU.`;
+    }
+    if (!fenceFeature && !containsPoint(LAGUNA_PROVINCE.features[0].geometry, point)) {
+      return 'That is outside Laguna.';
+    }
+    return null;
+  }
+
+  function handleShapeChange(next) {
+    setShape(next);
+    setDrawNotice('');
+  }
+
+  function startDrawing() {
+    setDrawing(true);
+    setDrawNotice('');
+    // A phone has room for the map or a panel, and drawing needs the map.
+    if (isMobileView) {
+      closeLeftPanels();
+      clearSelectedSite();
+    }
+  }
+
+  function stopDrawing() {
+    setDrawing(false);
+    setShape(EMPTY_SHAPE);
+    setDrawNotice('');
+  }
+
+  // ---- "View on map" ----------------------------------------------------------
+  // The Action Board and the inventory send a tree here as ?tree=…&lat=…&lng=…:
+  // fly to it and open it, once the trees are in, then tidy the address.
+  const targetTreeId = admin ? searchParams.get('tree') : null;
+  useEffect(() => {
+    if (!targetTreeId || loading) return;
+    const tree = allTrees.find((candidate) => String(candidate.id) === targetTreeId);
+    if (tree) {
+      handleSelectTree(tree);
+      const position = getLatLng(tree);
+      if (position) setPointTarget(position);
+    }
+    setSearchParams({}, { replace: true });
+    // Once per request: the handlers and setSearchParams are fresh every
+    // render, and re-running on them would re-open the tree after it closed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetTreeId, loading]);
+
+  /** Shown under an open tree on the office's map: what it needs, and the buttons to do it. */
+  const treeActions =
+    admin && selectedTree ? (
+      <TreeActions
+        tree={selectedTree}
+        onDispatch={() => setDispatchTree(selectedTree)}
+        onPermit={() => setPermitTree(selectedTree)}
+      />
+    ) : null;
+
+  /** Keep the open tree and the list in step after a dispatch or a permit. */
+  function updateTree(id, changes) {
+    setTrees((current) => current.map((tree) => (tree.id === id ? { ...tree, ...changes } : tree)));
+    setSelectedTree((current) => (current?.id === id ? { ...current, ...changes } : current));
+  }
+
   return (
     <div
-      className={`relative w-full h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)] ${
-        panelShowing ? 'panel-open' : ''
-      } ${sitePanelShowing ? 'site-panel-open' : ''}`}
+      className={`relative w-full ${
+        // The office map fills whatever its shell leaves; the public one
+        // knows its own navbar's height.
+        admin ? 'h-full' : 'h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)]'
+      } ${panelShowing ? 'panel-open' : ''} ${sitePanelShowing ? 'site-panel-open' : ''} ${
+        drawing ? 'map-drawing-on' : ''
+      }`}
     >
       {/* Loading overlay */}
       {loading && (
@@ -1049,6 +1359,19 @@ export default function PublicMap() {
           animation: spider-leg-in 300ms cubic-bezier(0.2, 0, 0, 1) both;
         }
 
+        /* While drawing, every click belongs to the drawing. Trees, areas and
+           town outlines stop taking them, so a point placed on top of a tree
+           is a point, not the tree opening. */
+        .map-drawing-on .leaflet-tree-points-pane .leaflet-interactive,
+        .map-drawing-on .leaflet-tree-clusters-pane .leaflet-interactive,
+        .map-drawing-on .leaflet-map-sites-pane .leaflet-interactive,
+        .map-drawing-on .leaflet-laguna-boundaries-pane .leaflet-interactive {
+          pointer-events: none !important;
+        }
+        .map-drawing-on .leaflet-container {
+          cursor: crosshair;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .leaflet-top.leaflet-left,
           .map-side-control,
@@ -1065,7 +1388,7 @@ export default function PublicMap() {
 
       {/* Map */}
       <MapContainer
-        bounds={LAGUNA_BOUNDS}
+        bounds={initialBounds}
         boundsOptions={{ padding: [32, 32] }}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
@@ -1076,33 +1399,49 @@ export default function PublicMap() {
         <MapPanes />
 
         <TileLayer
-          url={TILE_LAYERS[tileIndex].url}
-          attribution="&copy; OpenStreetMap contributors"
+          // Keyed so a change of basemap swaps the layer rather than leaving
+          // the old tiles under the new attribution.
+          key={basemapId}
+          url={basemapById(basemapId).url}
+          attribution={basemapById(basemapId).attribution}
           maxZoom={MAX_MAP_ZOOM}
           maxNativeZoom={MAX_NATIVE_ZOOM}
         />
 
-        {/* Everything outside Laguna is covered over, not detailed */}
+        {/* Everything outside the area of responsibility is covered over, not
+            detailed: outside Laguna for the public and PGENRO, outside the
+            LGU for an LGU account. */}
         <Polygon
-          positions={OUTSIDE_LAGUNA_MASK}
+          positions={mask}
           pathOptions={MASK_STYLE}
           pane="laguna-mask"
           interactive={false}
         />
 
         {/* Cities and municipalities inside Laguna */}
-        <MunicipalityLayer selected={selectedLgu} onSelect={handleSelectLgu} />
+        <MunicipalityLayer data={municipalityData} selected={selectedLgu} onSelect={handleSelectLgu} />
 
         {/* Land cover and tree planting sites — the spaces, as against the points */}
-        <SiteLayer sites={MAP_SITES} selectedId={selectedSiteId} onSelect={handleSelectSite} />
+        <SiteLayer sites={sites} selectedId={selectedSiteId} onSelect={handleSelectSite} />
 
         {/* Province outline, drawn over the municipal lines */}
         <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} pane="laguna-boundaries" interactive={false} />
 
-        <FocusController target={focusTarget} />
+        <FocusController target={focusTarget} nonce={focusNonce} />
+        <FlyToPoint target={pointTarget} />
 
-        {/* User location blue dot */}
-        <UserLocationMarker onTagAttempt={handleTagAttempt} />
+        {/* User location blue dot. Tagging from it is for residents; the
+            office's staff tag in the field app. */}
+        <UserLocationMarker onTagAttempt={admin ? null : handleTagAttempt} />
+
+        {drawing && (
+          <DrawLayer
+            shape={shape}
+            onChange={handleShapeChange}
+            refusePoint={refusePoint}
+            onRefused={setDrawNotice}
+          />
+        )}
 
         {/* Tagged trees — tapping one opens the side panel, and the ones that
             would overlap are grouped into a bubble until the map zooms in */}
@@ -1111,6 +1450,7 @@ export default function PublicMap() {
           openTreeId={selectedTree?.id}
           highlighting={Boolean(highlight)}
           onSelect={handleSelectTree}
+          {...(admin && { pinFill: adminPinFill, bubbleFill: adminBubbleFill, stateColours: true })}
         />
       </MapContainer>
 
@@ -1134,6 +1474,19 @@ export default function PublicMap() {
       {/* Fly-to-user button (outside map so clicks always work) */}
       <FlyToUserButton mapRef={mapRef} />
 
+      {/* Back to the office's own area — the Command Center's centre button. */}
+      {admin && (
+        <button
+          type="button"
+          onClick={handleCentre}
+          className="map-side-control absolute bottom-[9.5rem] left-4 z-[400] flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-green-700 shadow-lg hover:bg-green-50 active:scale-95"
+          aria-label={fenceLabel ? `Centre the map on ${fenceLabel}` : 'Centre the map on Laguna'}
+          title={fenceLabel ? `Centre on ${fenceLabel}` : 'Centre on Laguna'}
+        >
+          <Crosshair size={20} />
+        </button>
+      )}
+
       {/* Tree detail panel. It stays mounted while the visitor moves from pin
           to pin, so the contents change without the panel sliding every time. */}
       {selectedTree && (
@@ -1148,6 +1501,7 @@ export default function PublicMap() {
           onHighlight={handleHighlight}
           onClose={handleCloseTree}
           onCollapsedChange={setPanelCollapsed}
+          footer={treeActions}
         />
       )}
 
@@ -1203,53 +1557,119 @@ export default function PublicMap() {
 
       {/* Top-right controls */}
       <div className="map-right-control absolute top-3 right-3 z-[400] flex flex-col gap-2 items-end">
-        {/* City / municipality selector */}
-        <select
-          value={selectedLgu}
-          onChange={(e) => handleLguDropdown(e.target.value)}
-          aria-label="Zoom to a city or municipality"
-          className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm focus:outline-none"
-        >
-          <option value="">All of Laguna</option>
-          {MUNICIPALITY_LIST.map((lgu) => (
-            <option key={lgu.name} value={lgu.name}>{lgu.label}</option>
-          ))}
-        </select>
+        {/* City / municipality selector. An LGU account has one LGU, so
+            there is nothing to choose between. */}
+        {!fence && (
+          <select
+            value={selectedLgu}
+            onChange={(e) => handleLguDropdown(e.target.value)}
+            aria-label="Zoom to a city or municipality"
+            className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm focus:outline-none"
+          >
+            <option value="">All of Laguna</option>
+            {MUNICIPALITY_LIST.map((lgu) => (
+              <option key={lgu.name} value={lgu.name}>{lgu.label}</option>
+            ))}
+          </select>
+        )}
 
-        {/* Tile layer selector */}
-        <select
-          value={tileIndex}
-          onChange={(e) => setTileIndex(Number(e.target.value))}
-          aria-label="Base map"
-          className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm focus:outline-none"
-        >
-          {TILE_LAYERS.map((layer, i) => (
-            <option key={i} value={i}>{layer.label}</option>
-          ))}
-        </select>
+        {/* Tile layer selector — the office's map has picture buttons instead */}
+        {!admin && (
+          <select
+            value={basemapId}
+            onChange={(e) => setBasemapId(e.target.value)}
+            aria-label="Base map"
+            className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm focus:outline-none"
+          >
+            {BASEMAPS.map((basemap) => (
+              <option key={basemap.id} value={basemap.id}>{basemap.longLabel}</option>
+            ))}
+          </select>
+        )}
       </div>
 
+      {/* The office's tools, in the bottom-right corner where Google Maps keeps
+          them: draw above, street and satellite below. */}
+      {admin && (
+        <div className="map-right-control absolute bottom-6 right-3 z-[400] flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={drawing ? stopDrawing : startDrawing}
+            aria-pressed={drawing}
+            aria-label={drawing ? 'Stop drawing' : 'Draw and measure an area'}
+            title={drawing ? 'Stop drawing' : 'Draw and measure an area'}
+            className={`flex h-14 w-14 items-center justify-center rounded-xl shadow-lg transition active:scale-95 sm:h-16 sm:w-16 ${
+              drawing
+                ? 'bg-yellow-300 text-slate-900 ring-[3px] ring-slate-900'
+                : 'bg-yellow-300 text-slate-900 ring-1 ring-yellow-500 hover:bg-yellow-200'
+            }`}
+          >
+            <PencilRuler size={26} aria-hidden="true" />
+          </button>
+          <BasemapSwitcher
+            current={basemapId}
+            onChange={setBasemapId}
+            centre={centreOf((fence && boundsOfMunicipality(fence)) || LAGUNA_BOUNDS)}
+          />
+        </div>
+      )}
+
+      {/* The measurement, live, while an area is drawn */}
+      {admin && drawing && (
+        <div className="absolute bottom-6 left-1/2 z-[650] -translate-x-1/2">
+          <MeasureBox
+            shape={shape}
+            notice={drawNotice}
+            onUndo={() => handleShapeChange(undoLast(shape))}
+            onClear={() => handleShapeChange(EMPTY_SHAPE)}
+            onClose={stopDrawing}
+          />
+        </div>
+      )}
+
       {/* Legend */}
-      <div className="map-right-control absolute bottom-24 right-3 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2">
+      <div
+        className={`map-right-control absolute right-3 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2 ${
+          // Below the selector on the office's map, where the tools have the
+          // bottom corner; above the attribution on the public one.
+          admin ? (fence ? 'top-3' : 'top-14') : 'bottom-24'
+        }`}
+      >
         <p className="text-[10px] font-semibold text-slate-700 mb-1">Legend</p>
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span
-              className="w-3 h-3 rounded-full border-2 border-white shadow-sm flex-shrink-0"
-              style={{ backgroundColor: MARKER_COLOR }}
-            />
-            <span className="text-[10px] text-slate-600">
-              {highlight ? `Highlighted (${highlightedCount})` : 'Tagged tree'}
-            </span>
-          </div>
+          {admin ? (
+            // The Command Center's colours, most urgent first — the order the
+            // eye should take them in.
+            URGENCY.map((color) => (
+              <div key={color} className="flex items-center gap-2">
+                <span
+                  className="w-3 h-3 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+                  style={{ backgroundColor: PIN_FILL[color] }}
+                />
+                <span className="text-[10px] text-slate-600">{PIN_MEANING[color]}</span>
+              </div>
+            ))
+          ) : (
+            <div className="flex items-center gap-2">
+              <span
+                className="w-3 h-3 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+                style={{ backgroundColor: MARKER_COLOR }}
+              />
+              <span className="text-[10px] text-slate-600">
+                {highlight ? `Highlighted (${highlightedCount})` : 'Tagged tree'}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <span
               className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 border-white text-[7px] font-bold text-white shadow-sm"
-              style={{ backgroundColor: MARKER_COLOR }}
+              style={{ backgroundColor: admin ? PIN_FILL[PIN_COLOR.RED] : MARKER_COLOR }}
             >
               9
             </span>
-            <span className="text-[10px] text-slate-600">Several — tap to zoom in</span>
+            <span className="text-[10px] text-slate-600">
+              {admin ? 'Several — coloured by the most urgent' : 'Several — tap to zoom in'}
+            </span>
           </div>
           {highlight && (
             <div className="flex items-center gap-2">
@@ -1284,7 +1704,7 @@ export default function PublicMap() {
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-sm flex-shrink-0 border border-slate-300 bg-slate-200" />
-            <span className="text-[10px] text-slate-600">Outside Laguna</span>
+            <span className="text-[10px] text-slate-600">Outside {fenceLabel || 'Laguna'}</span>
           </div>
         </div>
       </div>
@@ -1381,6 +1801,27 @@ export default function PublicMap() {
 
       {/* Asking for the data behind the place in focus */}
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />
+
+      {/* The office's two actions on a tree, from the Command Center */}
+      {admin && dispatchTree && (
+        <Suspense fallback={null}>
+          <DispatchModal
+            tree={dispatchTree}
+            onClose={() => setDispatchTree(null)}
+            onDispatched={(email) => updateTree(dispatchTree.id, { assigned_to: email })}
+          />
+        </Suspense>
+      )}
+      {admin && permitTree && (
+        <Suspense fallback={null}>
+          <IssuePermitModal
+            isOpen
+            tree={permitTree}
+            onClose={() => setPermitTree(null)}
+            onIssue={(tree) => updateTree(tree.id, { has_cutting_permit: true })}
+          />
+        </Suspense>
+      )}
 
     </div>
   );

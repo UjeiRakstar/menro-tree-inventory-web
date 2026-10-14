@@ -193,17 +193,39 @@ can change them without anyone touching the logic.
 
 ## The MENRO map
 
-The public map's interface, with:
+*Built — phase 2.* The public map itself (`TreeMap` in
+`src/pages/public/PublicMap.jsx`), so the two cannot drift apart, with:
 
-- the **pin colours** from the Command Center — grey crowdsourced, red hazard
-  needing action, orange dispatched, yellow permitted, green healthy;
-- **Dispatch / Re-assign** and **Issue Permit** on the tree panel;
+- the **pin colours** from the Command Center — red hazard needing action,
+  orange dispatched, grey crowdsourced awaiting a field check, yellow
+  permitted, green healthy. A group bubble takes the colour of its **most
+  urgent** tree, so one hazard among forty healthy trees is not hidden in a
+  green bubble;
+- **Dispatch / Re-assign** and **Issue Permit** at the foot of the tree panel,
+  with the Command Center's rules: only a hazard is dispatched, a hazard
+  somebody is on is re-assigned, a permit is issued once;
 - a **centre the map** button;
-- outside the officer's LGU masked and untouchable, as outside Laguna is now;
-- the drawing tools (phase 3).
+- **street and satellite as picture buttons**, bottom right, under the
+  **draw** button;
+- **draw and measure**: Google Maps' gestures, with every edge's length laid
+  along it and a live box giving the area (m² or ha) and the perimeter. A
+  point outside the officer's LGU is refused, and the box says why;
+- outside the officer's LGU covered over, its trees not shown — inaccessible,
+  as asked;
+- "View on map" from the Action Board opens the tree.
 
-The Command Center page and its Biodiversity / Action toggle are retired once
-this replaces them.
+The header and footer follow the public site: Green Tag, then **BioDashboard,
+Action Board, Map, Trees**. Action Board carries a red count of hazards nobody
+has been sent to; the office's seal carries a red "!" when field officers are
+waiting for approval, and opens Field officers, Permit logs, Accounts (PGENRO)
+and Sign out.
+
+The Command Center page, its pin popup and its Biodiversity / Action toggle
+are retired.
+
+In the database, `supabase/lgu_fence.sql` replaces "any signed-in account may
+change any tree": PGENRO any tree; a MENRO / CENRO their own LGU's; a field
+officer their own LGU's and any tree they were dispatched to.
 
 ## Phases
 
@@ -212,11 +234,11 @@ this replaces them.
    account management, sign-in that knows the role. *Built and tested; waits
    on `accounts.sql` being run.*
 2. **The MENRO map.** The public map plus the Command Center's controls,
-   masked to the LGU — and tree changes fenced to the LGU in the database,
-   which phase 1 deliberately left for here (see PARKED.md).
-3. **Drawing.** Draw, measure live, close, review the system-generated
-   details, choose a class (with the suggestion), attach a document, save.
-   Edit, delete, and PGENRO proposals.
+   masked to the LGU — and tree changes fenced to the LGU in the database.
+   *Built and tested; the fence waits on `lgu_fence.sql` being run.*
+3. **Saving what is drawn.** Drawing and measuring are done (phase 2). Left:
+   review the system-generated details, choose a class (with the suggestion),
+   attach a document, save. Edit, delete, and PGENRO proposals.
 4. **PGENRO's layers.** Elevation, soil, CLIRAM climate, NOAH hazards —
    replacing the amber placeholders the review step will show until then.
 5. **Reports.** The GHG inventory table first (trees, DBH, barangay,

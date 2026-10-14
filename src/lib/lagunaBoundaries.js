@@ -43,6 +43,17 @@ const WORLD_RING = [
  */
 export const OUTSIDE_LAGUNA_MASK = [WORLD_RING, ...shellsOf(provinceData.features[0].geometry)];
 
+/**
+ * The same treatment for one city or municipality: everything outside it
+ * covered over. This is what an LGU account sees — its own area of
+ * responsibility detailed, and the rest of the province as out of bounds as
+ * the rest of the world. Null for a name that is not an LGU.
+ */
+export function maskOutsideMunicipality(name) {
+  const feature = municipalityData.features.find((f) => f.properties.municipality === name);
+  return feature ? [WORLD_RING, ...shellsOf(feature.geometry)] : null;
+}
+
 /** Leaflet bounds [[south, west], [north, east]] of a GeoJSON geometry. */
 export function boundsOf(geometry) {
   let south = Infinity;

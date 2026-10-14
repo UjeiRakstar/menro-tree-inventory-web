@@ -111,9 +111,7 @@ describe('ManageArborists', () => {
     // <header> element, so both carry the implicit banner role under
     // @testing-library/dom — query by the app title text, which is unique to
     // the Header component, to disambiguate.
-    expect(
-      screen.getByText('Tree Inventory System of MENRO Santa Cruz'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Green Tag Tree Inventory System')).toBeInTheDocument();
 
     // The shared <main> inherits the default p-6 padding on non-/map routes.
     const main = container.querySelector('main');

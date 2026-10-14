@@ -13,6 +13,7 @@ vi.mock('react-leaflet', () => {
     CircleMarker: passthrough,
     Circle: () => null,
     Polygon: () => null,
+    Polyline: () => null,
     GeoJSON: () => null,
     Popup: passthrough,
     useMapEvents: () => ({}),
@@ -56,7 +57,7 @@ function renderAt(path) {
 }
 
 /** The admin header, which is also the app's navigation. */
-const adminHeader = () => screen.queryByText('Tree Inventory System of MENRO Santa Cruz');
+const adminHeader = () => screen.queryByText('Green Tag Tree Inventory System');
 
 beforeEach(() => {
   supabaseMock.reset();
@@ -120,11 +121,15 @@ describe('App shell and routing', () => {
     expect(screen.getAllByRole('link', { name: 'Map' }).length).toBeGreaterThan(0);
   });
 
-  it('lets a signed-in admin reach the Command Center under the header', async () => {
+  it('lets a signed-in admin reach the map under the header', async () => {
     signedIn();
     renderAt('/map');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Command Center' })).toBeInTheDocument();
+    // The first test to open the map pays for loading it — the boundary
+    // files are large — so it is given longer than the default second.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Map' }, { timeout: 5000 })
+    ).toBeInTheDocument();
     expect(adminHeader()).toBeInTheDocument();
   });
 
@@ -132,9 +137,10 @@ describe('App shell and routing', () => {
     signedIn();
     const { container, unmount } = renderAt('/map');
 
-    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    await screen.findByRole('heading', { level: 1, name: 'Map' });
     const mapMain = container.querySelector('main');
-    expect(mapMain.className).toContain('overflow-auto');
+    // The map is sized to the space it is given, so it must not scroll.
+    expect(mapMain.className).toContain('overflow-hidden');
     expect(mapMain.className).not.toContain('p-6');
 
     unmount();
@@ -149,7 +155,7 @@ describe('App shell and routing', () => {
     signedIn();
     const { container } = renderAt('/map');
 
-    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    await screen.findByRole('heading', { level: 1, name: 'Map' });
     const header = container.querySelector('header');
     const main = container.querySelector('main');
     expect(header.parentElement).toBe(main.parentElement);
@@ -169,10 +175,13 @@ describe('App shell and routing', () => {
     signedIn();
     renderAt('/map');
 
-    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    await screen.findByRole('heading', { level: 1, name: 'Map' });
     const headerBefore = adminHeader().closest('header');
 
-    fireEvent.click(within(headerBefore).getByRole('link', { name: 'Arborist' }));
+    // Field officers live behind the office's seal now, with the other
+    // pages an office visits rather than lives in.
+    fireEvent.click(within(headerBefore).getByRole('button', { name: /account menu/ }));
+    fireEvent.click(within(headerBefore).getByRole('link', { name: /Field officers/ }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Arborists' })).toBeInTheDocument();
     // The same DOM node: a navigation, not a reload.
@@ -187,7 +196,7 @@ describe('App shell and routing', () => {
     signedIn();
     const { unmount } = renderAt('/map');
 
-    await screen.findByRole('heading', { level: 1, name: 'Command Center' });
+    await screen.findByRole('heading', { level: 1, name: 'Map' });
     unmount();
 
     await waitFor(() => expect(unsubscribe).toHaveBeenCalled());
