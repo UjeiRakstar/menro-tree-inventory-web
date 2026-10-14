@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { isPgenro } from '../lib/roles.js';
 import { classifyHazard, HAZARD_STATUS } from '../lib/hazardStatus.js';
 import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import DispatchModal from '../components/DispatchModal.jsx';
@@ -13,7 +15,27 @@ function PermitsLogTab() {
   return <PermitsLog />;
 }
 
+// PGENRO's own board: only PGENRO downloads it.
+const ProvinceBoard = lazy(() => import('./pgenro/ProvinceBoard.jsx'));
+
+/**
+ * The Action Board. An LGU office works its hazards and permits here; PGENRO
+ * watches every LGU's, read-only, because the work itself stays with the
+ * MENRO/CENRO.
+ */
 export default function ActionBoard() {
+  const { profile } = useAuth();
+  if (isPgenro(profile)) {
+    return (
+      <Suspense fallback={<p className="text-sm text-slate-600">Loading the province…</p>}>
+        <ProvinceBoard />
+      </Suspense>
+    );
+  }
+  return <OfficeBoard />;
+}
+
+function OfficeBoard() {
   const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [trees, setTrees] = useState([]);

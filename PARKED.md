@@ -73,6 +73,8 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 
 7. `supabase/species_rise.sql` — the RISE fields on species profiles (any
    time; nothing else depends on it)
+8. `supabase/permit_archive.sql` — PGENRO archiving a permit log (any time
+   after step 1)
 
 **The RISE PDF reader (temporary).** To switch it on: Supabase dashboard →
 Edge Functions → Secrets → add `GEMINI_API_KEY` (the field app's key, from its
@@ -131,12 +133,10 @@ way: **any signed-in arborist could make themselves an admin** by updating the
 
 ## Asked for on 14 October, not built yet
 
-- **PGENRO's Action Board** — an overview of every LGU's hazards, read-only,
-  each count opening the trees behind it. "Code 1" and "code 2" are the field
-  app's stem quality: `stem_quality` is 'Code 1 (Straight/No Defects)',
-  'Code 2 (Little Defects)' or 'Code 3 (Several Defects)'.
-- **PGENRO's permit logs** — grouped by LGU, read-only, with archive and a
-  report.
+- **A permit's LGU is worked out, not stored.** PGENRO's permit logs place a
+  permit by its tree's barangay, or by the point a walk-in permit was issued
+  for. A walk-in permit with neither lands under "Not placed". Storing
+  `lgu_psgc` on `permits` when one is issued would make that exact.
 - **The RISE fields on the public map.** The forester's Species (RISE) tab
   saves family, local names, status, distribution, site needs, flowering and
   fruiting months, propagation, uses and pests. The public tree panel still

@@ -14,6 +14,11 @@ vi.mock('../supabaseClient.js', async () => {
   return { supabase: supabaseMock.supabase };
 });
 
+// The working board is the LGU office's; PGENRO's read-only one is tested in
+// pgenro/ProvinceBoard.test.jsx.
+const auth = vi.hoisted(() => ({ profile: { role: 'lgu_admin', status: 'active', lgu_psgc: 403426000 } }));
+vi.mock('../context/AuthContext.jsx', () => ({ useAuth: () => auth }));
+
 import { supabaseMock } from '../test/supabaseMock.js';
 import ActionBoard from './ActionBoard.jsx';
 import { classifyHazard, HAZARD_STATUS } from '../lib/hazardStatus.js';
