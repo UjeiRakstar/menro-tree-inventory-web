@@ -44,6 +44,19 @@ export function pinColorOf(tree) {
   return classifyPinColor(tree);
 }
 
+/**
+ * The colour a group of trees is drawn in: its most urgent member's.
+ *
+ * A bubble with one hazard among forty healthy trees is red, so a hazard is
+ * never hidden inside a green group at province scale.
+ */
+export function mostUrgent(colors) {
+  for (const color of URGENCY) {
+    if (colors.includes(color)) return color;
+  }
+  return PIN_COLOR.GREEN;
+}
+
 /** How many trees need somebody sent to them — the badge on Action Board. */
 export const needingAction = (trees) =>
   (Array.isArray(trees) ? trees : []).filter((tree) => classifyPinColor(tree) === PIN_COLOR.RED).length;

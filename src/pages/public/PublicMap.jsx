@@ -29,7 +29,8 @@ import {
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
 import { BASEMAPS, basemapById } from '../../lib/basemaps.js';
-import { PIN_FILL, PIN_MEANING, URGENCY, pinColorOf } from '../../lib/adminPins.js';
+import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../lib/adminPins.js';
+import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
 import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
@@ -129,6 +130,8 @@ const PANES = [
   // never swallow a click meant for a tree standing in it.
   ['map-sites', 430],
   ['tree-points', 450],
+  // The group bubbles sit over the pins they stand for.
+  ['tree-clusters', 455],
   // Above the points: wherever the visitor is standing, that dot is the one
   // thing that must stay tappable — it is how tagging starts.
   ['user-location', 460],
@@ -191,8 +194,9 @@ const centreOf = ([[south, west], [north, east]]) => [(south + north) / 2, (west
 /** The public map's single colour, as a pin-colour function. */
 const ONE_COLOUR = () => MARKER_COLOR;
 
-/** The LGU map's colours: each tree by its state. */
+/** The LGU map's colours: each tree by its state, each bubble by its most urgent. */
 const adminPinFill = (pin) => PIN_FILL[pinColorOf(pin.tree)];
+const adminBubbleFill = (pins) => PIN_FILL[mostUrgent(pins.map((pin) => pinColorOf(pin.tree)))];
 
 /**
  * Flies to one point: a tree opened from "View on map" elsewhere, or the
@@ -476,20 +480,51 @@ function UserLocationMarker({ onTagAttempt = null }) {
   );
 }
 
+/** How big a group bubble is: bigger for more trees, without saying how many. */
+function bubbleSize(count) {
+  if (count < 10) return 26;
+  if (count < 50) return 32;
+  return 38;
+}
+
 /**
- * The tagged trees, each exactly where it was tagged.
+ * The bubble drawn in place of trees that would otherwise overlap.
  *
- * There used to be grouping here: pins close together on screen were drawn as
- * one bubble with a count, placed at their average position, and fanned out
- * into a ring at the furthest zoom. Both moved trees away from where they
- * stand — the bubble to the middle of its group, the ring to a circle around
- * it — and on a map whose whole point is WHERE a tree is, that misled more
- * than it helped. So every pin is drawn at its own coordinates, always.
+ * No number on it: the count read as a precise figure on a map that is about
+ * where trees are, not how many. It is still in the bubble's label, for a
+ * screen reader and on hover. The soft halo is what tells a bubble from a
+ * single pin at a glance.
+ */
+function bubbleIcon(count, color) {
+  const size = bubbleSize(count);
+  return L.divIcon({
+    className: 'tree-bubble',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html:
+      `<div style="width:${size}px;height:${size}px;border-radius:9999px;` +
+      `background:${color};border:3px solid #ffffff;` +
+      `box-shadow:0 0 0 5px ${color}55,0 1px 4px rgba(15,23,42,0.35);"></div>`,
+  });
+}
+
+/**
+ * The tagged trees, grouped while they would otherwise sit on top of each
+ * other.
  *
- * Trees that overlap at province scale come apart as the map is zoomed in; the
- * map zooms to 21 for exactly that (see MAX_MAP_ZOOM).
+ * At province scale the trees of a town are one smudge, and the pin a visitor
+ * taps is whichever happens to be on top. Pins within about 64 screen pixels
+ * become one bubble, which comes apart by itself as the map is zoomed in.
+ * Tapping a bubble zooms to what is inside it.
  *
- * The open tree is drawn last, so it sits on top of anything it overlaps.
+ * Grouping was taken out once because the bubble stood at the AVERAGE of its
+ * trees — often empty ground — and the furthest zoom fanned trees into a ring
+ * away from where they stand. Neither is back: a bubble stands on one of its
+ * own trees (see clusterPins), and at the furthest zoom there are no bubbles at
+ * all, every pin at its own coordinates.
+ *
+ * The open tree is always drawn as itself, never folded into a bubble —
+ * otherwise opening a pin could make it disappear into a group.
  */
 function TreePins({
   pins,
@@ -497,8 +532,15 @@ function TreePins({
   highlighting,
   onSelect,
   pinFill = ONE_COLOUR,
+  bubbleFill = ONE_COLOUR,
   stateColours = false,
 }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom?.() ?? 11);
+  useMapEvents({ zoomend: () => setZoom(map.getZoom?.() ?? zoom) });
+
+  const maxZoom = map.getMaxZoom?.() ?? MAX_MAP_ZOOM;
+
   const openPin = useMemo(
     () => (openTreeId ? pins.find((pin) => pin.id === openTreeId) ?? null : null),
     [pins, openTreeId]
@@ -506,6 +548,15 @@ function TreePins({
   const others = useMemo(
     () => (openPin ? pins.filter((pin) => pin.id !== openPin.id) : pins),
     [pins, openPin]
+  );
+  // At the furthest zoom there is nothing left to zoom into, so a bubble would
+  // be a dead end. Every tree stands alone there, where it was tagged.
+  const clusters = useMemo(
+    () =>
+      zoom >= maxZoom
+        ? others.map((pin) => ({ key: pin.id, position: pin.position, pins: [pin], count: 1 }))
+        : clusterPins(others, zoom),
+    [others, zoom, maxZoom]
   );
 
   const drawPin = (pin, isOpen) => {
@@ -534,7 +585,33 @@ function TreePins({
 
   return (
     <>
-      {others.map((pin) => drawPin(pin, false))}
+      {clusters.map((cluster) => {
+        if (cluster.count === 1) return drawPin(cluster.pins[0], false);
+
+        // A group is only faded when nothing inside it is picked out.
+        const muted = highlighting && !cluster.pins.some((pin) => pin.highlighted);
+        const label = `${cluster.count} tagged trees — zoom in to see them`;
+        return (
+          <Marker
+            key={cluster.key}
+            position={cluster.position}
+            pane="tree-clusters"
+            icon={bubbleIcon(cluster.count, muted ? MARKER_MUTED_COLOR : bubbleFill(cluster.pins))}
+            title={label}
+            alt={label}
+            eventHandlers={{
+              click: () => {
+                const bounds = boundsOfCluster(cluster);
+                if (!bounds) return;
+                // Trees tagged on the same spot give bounds with no size, and
+                // Leaflet answers that by going as far in as allowed — where
+                // every tree is drawn on its own.
+                map.fitBounds(bounds, { padding: [48, 48], maxZoom });
+              },
+            }}
+          />
+        );
+      })}
       {openPin && drawPin(openPin, true)}
     </>
   );
@@ -1339,26 +1416,22 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             visibility: hidden;
           }
         }
-        /* The right-hand controls do the same for the area panel, which opens
-           on the other side. The legend and the two selectors would otherwise
-           sit underneath it. */
+        /* The right-hand controls step aside while the area panel is open on
+           that side, at every width. Sliding them out beside the panel left a
+           column of tools floating mid-map over the very area being read;
+           they come back as the panel closes. visibility as well as opacity,
+           so a hidden tile cannot take a click. */
         .map-right-control {
-          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease,
-            visibility 200ms ease;
+          transition: opacity 200ms ease, visibility 200ms ease;
         }
-        @media (min-width: 640px) {
-          .site-panel-open .map-right-control {
-            transform: translateX(-380px);
-          }
-        }
-        @media (max-width: 639px) {
-          .site-panel-open .map-right-control {
-            opacity: 0;
-            visibility: hidden;
-          }
+        .site-panel-open .map-right-control {
+          opacity: 0;
+          visibility: hidden;
         }
 
-        /* Pins grow in as they arrive, rather than all appearing at once. */
+        /* A pin that has just come out of a group is a new element, so this
+           plays exactly when something de-clusters — on the pins that appeared,
+           and not on the ones that were already standing alone. */
         @keyframes tree-pin-in {
           from { opacity: 0; transform: scale(0.3); }
           to   { opacity: 1; transform: scale(1); }
@@ -1368,11 +1441,17 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           transform-origin: center;
           animation: tree-pin-in 260ms cubic-bezier(0.2, 0, 0, 1) both;
         }
+        /* Leaflet positions the icon element with a transform of its own, so
+           the animation goes on the circle inside it. */
+        .tree-bubble > div {
+          animation: tree-pin-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
+        }
 
         /* While drawing, every click belongs to the drawing. Trees, areas and
            town outlines stop taking them, so a point placed on top of a tree
            is a point, not the tree opening. */
         .map-drawing-on .leaflet-tree-points-pane .leaflet-interactive,
+        .map-drawing-on .leaflet-tree-clusters-pane .leaflet-interactive,
         .map-drawing-on .leaflet-map-sites-pane .leaflet-interactive,
         .map-drawing-on .leaflet-laguna-boundaries-pane .leaflet-interactive {
           pointer-events: none !important;
@@ -1387,7 +1466,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           .map-right-control {
             transition: none;
           }
-          .tree-pin {
+          .tree-pin,
+          .tree-bubble > div {
             animation: none;
           }
         }
@@ -1478,7 +1558,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             openTreeId={selectedTree?.id}
             highlighting={Boolean(highlight)}
             onSelect={handleSelectTree}
-            {...(admin && { pinFill: adminPinFill, stateColours: true })}
+            {...(admin && { pinFill: adminPinFill, bubbleFill: adminBubbleFill, stateColours: true })}
           />
         )}
       </MapContainer>

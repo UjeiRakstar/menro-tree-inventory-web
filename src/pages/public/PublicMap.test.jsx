@@ -85,13 +85,15 @@ vi.mock('react-leaflet', () => ({
   ),
   Circle: () => <div data-testid="circle" />,
   Popup: ({ children }) => <div data-testid="popup">{children}</div>,
-  // A grouped set of trees. The icon is a Leaflet divIcon, so what is asserted
-  // is the count the page asked it to carry, not how it was drawn.
-  Marker: ({ position, title, eventHandlers }) => (
+  // A grouped set of trees — and the hall, and a drawing's corners, which are
+  // markers too. The icon is a real Leaflet divIcon, so its markup is kept for
+  // what a bubble is drawn in, and what it does not say.
+  Marker: ({ position, title, icon, eventHandlers }) => (
     <div
       data-testid="tree-cluster"
       data-center={JSON.stringify(position)}
       data-label={title}
+      data-icon={icon?.options?.html}
       onClick={() => eventHandlers?.click?.()}
     />
   ),
@@ -490,18 +492,69 @@ describe('PublicMap', () => {
     });
   });
 
-  it('draws every tree where it was tagged, at every zoom', async () => {
-    // There is no grouping any more. A bubble sat at the average of its
-    // trees, and a fanned-out ring moved them further still; on a map whose
-    // point is WHERE a tree stands, both misled.
-    mapState.zoom = 11;
-    renderMap();
+  describe('grouping', () => {
+    const bubbles = () => clusters().filter((m) => /tagged trees/.test(m.dataset.label ?? ''));
+    const standsOnATree = (bubble) => TREES.some((tree) => bubble.dataset.center === at(tree));
 
-    await waitFor(() => expect(markers()).toHaveLength(5));
-    expect(clusters()).toHaveLength(0);
-    for (const tree of TREES) {
-      expect(markerFor(tree)).toBeDefined();
-    }
+    it('groups trees that would sit on top of each other at province scale', async () => {
+      mapState.zoom = 11;
+      renderMap();
+
+      await waitFor(() => expect(bubbles().length).toBeGreaterThan(0));
+      // Everything is accounted for: the bubbles' trees plus the lone pins.
+      const grouped = bubbles().reduce((sum, b) => sum + Number(b.dataset.label.match(/^\d+/)[0]), 0);
+      expect(grouped + screen.queryAllByTestId('tree-marker').length).toBe(TREES.length);
+    });
+
+    it('stands each bubble on one of its own trees, not on empty ground between them', async () => {
+      mapState.zoom = 11;
+      renderMap();
+
+      await waitFor(() => expect(bubbles().length).toBeGreaterThan(0));
+      for (const bubble of bubbles()) expect(standsOnATree(bubble)).toBe(true);
+    });
+
+    it('carries no number on the bubble; the count is in its label only', async () => {
+      mapState.zoom = 11;
+      renderMap();
+
+      await waitFor(() => expect(bubbles().length).toBeGreaterThan(0));
+      for (const bubble of bubbles()) {
+        expect(bubble.dataset.icon).not.toMatch(/>\s*\d+\s*</);
+        expect(bubble.dataset.label).toMatch(/^\d+ tagged trees/);
+      }
+    });
+
+    it('zooms into a bubble when it is tapped', async () => {
+      mapState.zoom = 11;
+      renderMap();
+
+      await waitFor(() => expect(bubbles().length).toBeGreaterThan(0));
+      fitBoundsSpy.mockClear();
+      fireEvent.click(bubbles()[0]);
+      expect(fitBoundsSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets the groups come apart as the map zooms in', async () => {
+      mapState.zoom = 11;
+      renderMap();
+      await waitFor(() => expect(bubbles().length).toBeGreaterThan(0));
+
+      mapState.zoom = 18;
+      act(() => mapEventHandlers.zoomend());
+      expect(bubbles()).toHaveLength(0);
+      expect(markers()).toHaveLength(5);
+    });
+
+    it('draws every tree where it was tagged at the furthest zoom, with nothing fanned out', async () => {
+      mapState.zoom = 21;
+      renderMap();
+
+      await waitFor(() => expect(markers()).toHaveLength(5));
+      expect(bubbles()).toHaveLength(0);
+      expect(screen.queryAllByTestId('spider-leg')).toHaveLength(0);
+      for (const tree of TREES) expect(markerFor(tree)).toBeDefined();
+    });
   });
 
   it('keeps the tree points in a pane above the boundaries, so they stay clickable', async () => {
@@ -820,6 +873,17 @@ describe('the office map', () => {
     expect(officePin(OFFICE_TREES[1]).dataset.fill).toBe('#f97316'); // hazard, dispatched
     expect(officePin(OFFICE_TREES[2]).dataset.fill).toBe('#eab308'); // permit issued
     expect(officePin(OFFICE_TREES[3]).dataset.fill).toBe('#16a34a'); // healthy
+  });
+
+  it('draws a group in its most urgent colour, so a hazard is never hidden in green', async () => {
+    mapState.zoom = 11;
+    renderOffice();
+
+    const groups = () => clusters().filter((m) => /tagged trees/.test(m.dataset.label ?? ''));
+    await waitFor(() => expect(groups().length).toBeGreaterThan(0));
+    // Santa Cruz's group is mostly orange, yellow and green, with one
+    // undispatched hazard in it: the red Narra.
+    for (const group of groups()) expect(group.dataset.icon).toContain('#dc2626');
   });
 
   it('shows the tags out for field checking in grey, and leaves stumps off', async () => {
