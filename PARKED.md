@@ -71,6 +71,18 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 6. `supabase/training_seed.sql` — the dummy Siniloan data (run again any time
    to reset it; `node tools/make-training-seed.mjs` regenerates it)
 
+7. `supabase/species_rise.sql` — the RISE fields on species profiles (any
+   time; nothing else depends on it)
+
+**The RISE PDF reader (temporary).** To switch it on: Supabase dashboard →
+Edge Functions → Secrets → add `GEMINI_API_KEY` (the field app's key, from its
+`.env`), then deploy `supabase/functions/rise-extract/index.ts` as a function
+named `rise-extract`. To remove it when the backlog is done: delete
+`src/components/pgenro/RiseAutofill.jsx` and its one line in
+`SpeciesEditor.jsx` (and the reader tests in `SpeciesLibrary.test.jsx`), and
+delete the function and the secret in the dashboard. The species form stays.
+Profiles filled in with it keep `autofilled = true`.
+
 When a training batch is done: `supabase/training_purge.sql`. It deletes every
 training row and leaves real rows alone; its section 3, commented out, also
 archives the training accounts.
@@ -125,13 +137,11 @@ way: **any signed-in arborist could make themselves an admin** by updating the
   'Code 2 (Little Defects)' or 'Code 3 (Several Defects)'.
 - **PGENRO's permit logs** — grouped by LGU, read-only, with archive and a
   report.
-- **Species from the RISE publication** — a Trees sub-tab where the PGENRO
-  forester enters what an ERDB RISE issue says about a species.
-- **Reading a RISE PDF automatically** — Gemini, or a script, filling that form
-  in for the forester to check. There is a Gemini key — the field app already
-  reads `GEMINI_API_KEY` from its `.env` — but on the web it would have to sit
-  in a Supabase secret behind a server function, never in the website. Still
-  waiting on whether sending the RISE PDFs to Google is acceptable.
+- **The RISE fields on the public map.** The forester's Species (RISE) tab
+  saves family, local names, status, distribution, site needs, flowering and
+  fruiting months, propagation, uses and pests. The public tree panel still
+  shows only the description. Showing the rest is a design question: which of
+  them a resident wants.
 - **Google sign-in for the public, and a leaderboard** of who tagged the most
   trees. Counts registered residents and their tags, for the City Biodiversity
   Index later.

@@ -1,6 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { isPgenro } from '../lib/roles.js';
 import { classifyPinColor } from '../lib/pinColor.js';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { X, Image, ArrowUpDown, MapPin, Download, Search, Printer } from 'lucide-react';
@@ -16,7 +18,13 @@ const BARANGAYS = [
 
 const PIE_COLORS = ['#16a34a', '#dc2626', '#f97316', '#eab308', '#06b6d4'];
 
+// PGENRO's forester keeps the RISE write-ups; nobody else opens the tab, so
+// nobody else downloads it.
+const SpeciesLibrary = lazy(() => import('../components/pgenro/SpeciesLibrary.jsx'));
+
 export default function BiodiversityHub() {
+  const { profile } = useAuth();
+  const forester = isPgenro(profile);
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('inventory');
@@ -142,9 +150,19 @@ export default function BiodiversityHub() {
           className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'analytics' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           📊 Carbon Sink & Biodiversity
         </button>
+        {forester && (
+          <button onClick={() => setActiveTab('species')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'species' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            📘 Species (RISE)
+          </button>
+        )}
       </div>
 
-      {activeTab === 'inventory' ? (
+      {activeTab === 'species' && forester ? (
+        <Suspense fallback={<p className="text-sm text-slate-500">Loading species…</p>}>
+          <SpeciesLibrary trees={trees} />
+        </Suspense>
+      ) : activeTab === 'inventory' ? (
         <>
           {/* Search */}
           <div className="relative max-w-sm">
