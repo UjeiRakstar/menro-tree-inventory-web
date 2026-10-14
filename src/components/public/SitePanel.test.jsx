@@ -165,3 +165,19 @@ describe('closing', () => {
     vi.useRealTimers();
   });
 });
+
+describe('a planting site says what it made up', () => {
+  it('marks the species list and every line of what to do', () => {
+    // The amber note promises that everything invented carries a dot. These
+    // were invented and carried none, so they read as real.
+    render(<SitePanel feature={siteById('ps-labuin')} onClose={() => {}} />);
+
+    const species = screen.getByText('Santol').closest('section');
+    expect(species.querySelector('[data-provisional="placeholder"]')).toBeTruthy();
+
+    for (const label of ['When:', 'Room for:', 'Getting there:', 'Ask:']) {
+      const row = screen.getByText(label).closest('div');
+      expect(row.querySelector('[data-provisional="placeholder"]'), label).toBeTruthy();
+    }
+  });
+});

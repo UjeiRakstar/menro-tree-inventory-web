@@ -33,6 +33,17 @@ import { ProvisionalNote, ProvisionalTag } from './Provisional.jsx';
 /** In step with the slide class below, and with the other two panels'. */
 const SLIDE_MS = 300;
 
+/** One line of what to do at a planting site, with its amber dot while it is invented. */
+function ActionRow({ label, sample = false, children }) {
+  return (
+    <div className="flex items-start gap-2">
+      <dt className="shrink-0 font-bold text-slate-700">{label}</dt>
+      <dd className="flex-1 text-slate-600">{children}</dd>
+      {sample && <ProvisionalTag kind="placeholder" compact className="mt-1.5" />}
+    </div>
+  );
+}
+
 /** The thin green rule the mockup puts under every section heading. */
 function SectionHeading({ children }) {
   return (
@@ -359,7 +370,11 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
           {/* The thing a planting site exists for */}
           {isPlantingSite && (
             <section className="mt-4">
-              <SectionHeading>Recommended Trees to Plant in the Area</SectionHeading>
+              <div className="flex items-end justify-between gap-2">
+                <SectionHeading>Recommended Trees to Plant in the Area</SectionHeading>
+                {/* Hand-written, not matched: DENR RISE is not encoded yet. */}
+                {SITES_ARE_SAMPLE && <ProvisionalTag kind="placeholder" />}
+              </div>
               <ul className="mt-2 flex flex-wrap gap-1.5">
                 {(props.recommended ?? []).map((tree) => (
                   <li key={tree.common}>
@@ -382,33 +397,30 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
                 DENR RISE species list. Hover a name for why it suits the ground here.
               </p>
 
-              {/* What to do about it. A site nobody can act on is a map pin. */}
+              {/* What to do about it. A site nobody can act on is a map pin.
+                  Every row is invented while the sites are samples — including
+                  the seedling count, which is real arithmetic on a real area
+                  divided by a spacing somebody made up. */}
               <dl className="mt-3 space-y-1.5 rounded-xl border border-slate-200 px-3 py-2.5 text-[12px] leading-snug">
                 {props.plantingWindow && (
-                  <div className="flex gap-2">
-                    <dt className="shrink-0 font-bold text-slate-700">When:</dt>
-                    <dd className="text-slate-600">{props.plantingWindow}</dd>
-                  </div>
+                  <ActionRow label="When:" sample={SITES_ARE_SAMPLE}>
+                    {props.plantingWindow}
+                  </ActionRow>
                 )}
                 {seedlings !== null && (
-                  <div className="flex gap-2">
-                    <dt className="shrink-0 font-bold text-slate-700">Room for:</dt>
-                    <dd className="text-slate-600">
-                      about {seedlings.toLocaleString('en-US')} seedlings at {props.spacingM} m spacing
-                    </dd>
-                  </div>
+                  <ActionRow label="Room for:" sample={SITES_ARE_SAMPLE}>
+                    about {seedlings.toLocaleString('en-US')} seedlings at {props.spacingM} m spacing
+                  </ActionRow>
                 )}
                 {props.accessNote && (
-                  <div className="flex gap-2">
-                    <dt className="shrink-0 font-bold text-slate-700">Getting there:</dt>
-                    <dd className="text-slate-600">{props.accessNote}</dd>
-                  </div>
+                  <ActionRow label="Getting there:" sample={SITES_ARE_SAMPLE}>
+                    {props.accessNote}
+                  </ActionRow>
                 )}
                 {props.contact && (
-                  <div className="flex gap-2">
-                    <dt className="shrink-0 font-bold text-slate-700">Ask:</dt>
-                    <dd className="text-slate-600">{props.contact}</dd>
-                  </div>
+                  <ActionRow label="Ask:" sample={SITES_ARE_SAMPLE}>
+                    {props.contact}
+                  </ActionRow>
                 )}
               </dl>
             </section>
@@ -417,7 +429,10 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
           <SourceCredits />
 
           {props.updatedAt && (
-            <p className="mt-3 text-[10.5px] text-slate-400">Record last updated {props.updatedAt}.</p>
+            <p className="mt-3 flex items-center gap-1.5 text-[10.5px] text-slate-400">
+              Record last updated {props.updatedAt}.
+              {SITES_ARE_SAMPLE && <ProvisionalTag kind="placeholder" compact />}
+            </p>
           )}
         </div>
       </aside>

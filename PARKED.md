@@ -35,12 +35,6 @@ stale and two claims in my own write-ups turned out not to be true.
 
 ## Mine to fix — found in this sweep
 
-- **The planting site panel says less than it should about what is invented.**
-  The amber note reads "everything carrying an amber dot below is invented",
-  and the recommended species, the planting window, the seedling spacing, the
-  access note, the contact line and the record date are all invented and carry
-  no dot. So they read as real. This is the one to fix first: it is the exact
-  failure the amber marking exists to prevent.
 - **`loadMapSites()` does not exist.** I described it twice as "the one seam"
   the PGENRO uploads come in through. The actual seam today is the
   `MAP_SITES` constant in `src/lib/mapSites.js`, which is assigned straight
@@ -48,15 +42,11 @@ stale and two claims in my own write-ups turned out not to be true.
   the claim. The function should be written when the uploads are — an async
   loader, which means the map has to learn to wait for areas the way it
   already waits for trees.
-- **The tree panel still clips its ⓘ.** `TreeDetailPanel.jsx` has its own
-  `Tooltip` and `InfoHint` (lines 68 and 112), and is the fourth copy of the
-  bug the shared `InfoHint` fixed in the other three. I said three; there were
-  four.
-- **Two panels open at once only works on a desktop.** The tree panel opens on
-  the left and the area panel on the right so a visitor can hold both. On a
-  phone both are full width at the same z-index, so the second simply covers
-  the first. Never seen on a phone. Probably: on a phone, opening one closes
-  the other.
+- **Two hover tooltips in the tree panel can still clip.** The ⓘ there now
+  uses the shared, portalled `InfoHint`. The trait-badge and phenology
+  tooltips in `TreeDetailPanel.jsx` are not ⓘ buttons and still use the old
+  absolutely-positioned `Tooltip`, so near the bottom of the panel's scroll
+  they can be cut off. A portalled hover-tip for any trigger would close it.
 - **Nothing is linted.** ESLint 10 is installed and there is no
   `eslint.config.*`, so `npx eslint` refuses to run and nothing checks the
   code. The `eslint-disable` comments in `PublicMap.jsx` and `SitePanel.jsx`

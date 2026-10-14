@@ -617,6 +617,25 @@ export default function PublicMap() {
   const [showTaggingForm, setShowTaggingForm] = useState(false);
   const [userTagPosition, setUserTagPosition] = useState(null);
   const isMobileView = useIsMobileView();
+  // Which side opened most recently, so a window narrowed to phone width with
+  // both panels open keeps the one the visitor reached for last.
+  const lastPanelSide = useRef(null);
+  useEffect(() => {
+    if (!isMobileView) return;
+    const leftOpen = Boolean(selectedTree) || areaPanelOpen;
+    if (!leftOpen || !selectedSiteId) return;
+    if (lastPanelSide.current === 'right') {
+      setSelectedTree(null);
+      setPanelCollapsed(false);
+      setHighlight(null);
+      setAreaPanelOpen(false);
+    } else {
+      setSelectedSiteId(null);
+    }
+    // Only a change of viewport should trigger this; the handlers keep the
+    // rule themselves once the page is already at phone width.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileView]);
   const mapRef = useRef(null);
   // One lookup per species, not one per pin the visitor taps.
   const profileCache = useRef(new Map());
@@ -806,6 +825,24 @@ export default function PublicMap() {
     // One panel at a time: the tree takes the strip, and the place it stands in
     // stays highlighted on the map behind it.
     setAreaPanelOpen(false);
+    lastPanelSide.current = 'left';
+    if (isMobileView) clearSelectedSite();
+  }
+
+  /**
+   * A phone has room for one panel, not two.
+   *
+   * On a desktop the tree or city opens on the left and a drawn area on the
+   * right, so a visitor can hold a tree and the forest it stands in at once.
+   * On a phone every panel is the full width of the screen, so the second one
+   * simply lay on top of the first. There, opening one closes the other.
+   */
+  function closeLeftPanels() {
+    setSelectedTree(null);
+    setPanelCollapsed(false);
+    setHighlight(null);
+    setAreaPanelOpen(false);
+    setAreaPanelCollapsed(false);
   }
 
   function handleCloseTree() {
@@ -852,6 +889,10 @@ export default function PublicMap() {
    * its panel. Clicking the one already in focus clears it, and stays put.
    */
   function handleSelectLgu(name) {
+    if (selectedLgu !== name) {
+      lastPanelSide.current = 'left';
+      if (isMobileView) clearSelectedSite();
+    }
     setSelectedLgu((current) => {
       const next = current === name ? '' : name;
       setFocusTarget(next || null);
@@ -867,6 +908,10 @@ export default function PublicMap() {
 
   /** The dropdown: picking an area flies to it, picking "All of Laguna" flies out. */
   function handleLguDropdown(name) {
+    if (name) {
+      lastPanelSide.current = 'left';
+      if (isMobileView) clearSelectedSite();
+    }
     setSelectedLgu(name);
     setFocusTarget(name || 'province');
     setAreaPanelOpen(Boolean(name));
@@ -882,8 +927,13 @@ export default function PublicMap() {
    * every other selection on this map behaves.
    */
   function handleSelectSite(id) {
-    setSelectedSiteId((current) => (current === id ? null : id));
+    const opening = selectedSiteId !== id;
+    setSelectedSiteId(opening ? id : null);
     setSitePanelCollapsed(false);
+    if (opening) {
+      lastPanelSide.current = 'right';
+      if (isMobileView) closeLeftPanels();
+    }
   }
 
   function clearSelectedSite() {

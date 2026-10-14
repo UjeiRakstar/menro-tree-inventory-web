@@ -792,3 +792,67 @@ describe('groups that zooming cannot pull apart', () => {
     expect(clusters()[0].dataset.label).toContain('2 tagged trees');
   });
 });
+
+describe('on a phone, one panel at a time', () => {
+  // Every panel is the full width of a phone screen, so two open at once is
+  // one lying on top of the other. On a desktop the two sides coexist.
+  let realMatchMedia;
+  beforeEach(() => {
+    realMatchMedia = globalThis.matchMedia;
+    globalThis.matchMedia = (query) => ({
+      media: query,
+      matches: true,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+  });
+  afterEach(() => {
+    globalThis.matchMedia = realMatchMedia;
+  });
+
+  it('closes the tree when an area is opened', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(markerFor(TREES[0]));
+    await screen.findByRole('complementary', { name: /Narra/i });
+
+    act(() => siteHandlers.get('ps-labuin').click());
+    await screen.findByRole('complementary', { name: 'Labuin Tree Planting Site' });
+    await waitFor(() =>
+      expect(screen.queryByRole('complementary', { name: /Narra/i })).not.toBeInTheDocument()
+    );
+  });
+
+  it('closes the area when a tree is opened', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    act(() => siteHandlers.get('ps-labuin').click());
+    await screen.findByRole('complementary', { name: 'Labuin Tree Planting Site' });
+
+    fireEvent.click(markerFor(TREES[0]));
+    await screen.findByRole('complementary', { name: /Narra/i });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Labuin Tree Planting Site' })
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it('closes the area when a city is opened', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    act(() => siteHandlers.get('ps-labuin').click());
+    await screen.findByRole('complementary', { name: 'Labuin Tree Planting Site' });
+
+    act(() => featureHandlers.get('Santa Cruz').click());
+    await screen.findByRole('complementary', { name: /Santa Cruz/ });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Labuin Tree Planting Site' })
+      ).not.toBeInTheDocument()
+    );
+  });
+});

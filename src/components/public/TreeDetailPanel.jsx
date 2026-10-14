@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Info, Loader2, TreePine, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, TreePine, X } from 'lucide-react';
 import { traitsOf, biodiversityTrait, categoryTrait, highlightForTrait } from '../../lib/treeTraits.js';
 import { DBH_EXPLAINER, dbhOf, heightOf, observedOn, phenologyOf } from '../../lib/treeDetails.js';
 import { barangayLabel } from '../../lib/barangayNames.js';
 import { barangayForTree } from '../../lib/barangayLookup.js';
+// The shared ⓘ: portalled to the page body, so the panel's scrolling cannot
+// clip it the way it clipped the copy that used to live in this file.
+import InfoHint from './InfoHint.jsx';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
 import dbhIcon from '../../assets/DBH_icon.png';
@@ -104,25 +107,6 @@ function TraitBadge({ trait, active = false, onHighlight }) {
           {active ? 'Highlighted on the map.' : 'Tap to highlight these on the map.'}
         </span>
       </Tooltip>
-    </span>
-  );
-}
-
-/** The ⓘ beside "Diameter at Breast Height" — hover on a mouse, tap on a phone. */
-function InfoHint({ label, text }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative group inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={label}
-        aria-expanded={open}
-        className="text-slate-400 hover:text-slate-600 transition"
-      >
-        <Info size={14} />
-      </button>
-      <Tooltip open={open}>{text}</Tooltip>
     </span>
   );
 }
