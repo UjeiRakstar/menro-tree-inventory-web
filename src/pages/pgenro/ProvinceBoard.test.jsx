@@ -15,7 +15,7 @@ import { PGENRO_ADMIN } from '../../test/accounts.js';
 import ActionBoard from '../ActionBoard.jsx';
 
 const SCZ = 403426000;
-const PILA = 403424000;
+const PILA = 403422000;
 
 const LGUS = [
   { psgc: PILA, name: 'Pila', label: 'Pila' },
@@ -25,7 +25,7 @@ const LGUS = [
 const TREES = [
   { id: 'a', species: 'Narra', tree_id: 'SCZ-1', barangay: 'Labuin', barangay_psgc: 403426001, isLeaning: true, stem_quality: 'Code 3 (Several Defects)' },
   { id: 'b', species: 'Mango', barangay: 'Labuin', barangay_psgc: 403426001, isLeaning: true },
-  { id: 'c', species: 'Acacia', barangay: 'Pansol', barangay_psgc: 403424005, isDecayed: true, assigned_to: 'ana@field.ph', stem_quality: 'Code 2 (Little Defects)' },
+  { id: 'c', species: 'Acacia', barangay: 'Pansol', barangay_psgc: 403422005, isDecayed: true, assigned_to: 'ana@field.ph', stem_quality: 'Code 2 (Little Defects)' },
 ];
 
 const PERMITS = [

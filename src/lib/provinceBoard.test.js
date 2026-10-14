@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BOARD_METRICS, mapLinkFor, rowsBehind, tallyBoard } from './provinceBoard.js';
 
 const SCZ = 403426000;
-const PILA = 403424000;
+const PILA = 403422000;
 
 const TREES = [
   // Santa Cruz: a hazard nobody is on, one somebody is on, a Code 2 and a Code 3.
@@ -10,7 +10,7 @@ const TREES = [
   { id: 'b', barangay_psgc: 403426002, is_decayed: true, assigned_to: 'ana@field.ph', stem_quality: 'Code 2 (Little Defects)' },
   { id: 'c', barangay_psgc: 403426002, stem_quality: 'Code 1 (Straight/No Defects)', has_cutting_permit: true },
   // Pila: one hazard.
-  { id: 'd', barangay_psgc: 403424005, hasPowerlineConflict: true, stem_quality: 'Code 2 (Little Defects)' },
+  { id: 'd', barangay_psgc: 403422005, hasPowerlineConflict: true, stem_quality: 'Code 2 (Little Defects)' },
   // A stump, which needs nobody.
   { id: 'cut', barangay_psgc: 403426001, isLeaning: true, task_status: 'Cut' },
   // Not placed in any LGU.

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { lguOfPermit, permitsBetween, summarisePermits, treesCovered } from './permitLogs.js';
 
 const SCZ = 403426000;
-const PILA = 403424000;
+const PILA = 403422000;
 
 const context = {
   treesById: new Map([['t1', { id: 't1', barangay_psgc: 403426001 }]]),
