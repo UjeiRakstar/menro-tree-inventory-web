@@ -75,6 +75,14 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
    time; nothing else depends on it)
 8. `supabase/permit_archive.sql` — PGENRO archiving a permit log (any time
    after step 1)
+9. `supabase/map_areas.sql` — saving drawn areas, proposals, and the public
+   'area-documents' bucket (after step 1; after step 5 if training is in use)
+
+**As of 15 October** the live database has steps 1, 2, 5, 6, 7 and 8 — not
+**3 (`municipal_halls.sql`) or 4 (`tag_routing.sql`)**. Run 3 then 4 next.
+Until step 3 runs, activating a *training* code fails: the training file
+expects the hall columns that step adds. Step 4 is safe to run after the
+sandbox (`ada72b0`). Then step 9.
 
 **The RISE PDF reader (temporary).** To switch it on: Supabase dashboard →
 Edge Functions → Secrets → add `GEMINI_API_KEY` (the field app's key, from its

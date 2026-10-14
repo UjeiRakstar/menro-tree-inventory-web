@@ -236,9 +236,15 @@ officer their own LGU's and any tree they were dispatched to.
 2. **The MENRO map.** The public map plus the Command Center's controls,
    masked to the LGU — and tree changes fenced to the LGU in the database.
    *Built and tested; the fence waits on `lgu_fence.sql` being run.*
-3. **Saving what is drawn.** Drawing and measuring are done (phase 2). Left:
-   review the system-generated details, choose a class (with the suggestion),
-   attach a document, save. Edit, delete, and PGENRO proposals.
+3. **Saving what is drawn.** *Built and tested; waits on `map_areas.sql`
+   being run.* After drawing, **Save this area** opens a form: what the map
+   measured (area, perimeter, barangay, the tagged trees inside), the
+   suggestion with its reason, the NAMRIA class, an optional legal designation
+   with its PDF (warned first that it is published), or a planting site's
+   details. Saved areas replace the samples on both maps. The office that drew
+   an area edits it, moving its points on the map, or deletes it. PGENRO's
+   change to an office's area is a proposal, shown to that MENRO / CENRO in
+   the area's panel with what would change, to approve or decline.
 4. **PGENRO's layers.** Elevation, soil, CLIRAM climate, NOAH hazards —
    replacing the amber placeholders the review step will show until then.
 5. **Reports.** The GHG inventory table first (trees, DBH, barangay,

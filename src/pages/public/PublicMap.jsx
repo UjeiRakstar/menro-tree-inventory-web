@@ -33,6 +33,10 @@ import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../li
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
+import { areaPermission, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
+import { ROLES, roleOf } from '../../lib/roles.js';
+import { useMapAreas } from '../../hooks/useMapAreas.js';
+import AreaActions from '../../components/map/AreaActions.jsx';
 import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
 import LayersPanel from '../../components/map/LayersPanel.jsx';
 import ToolTile from '../../components/map/ToolTile.jsx';
@@ -66,6 +70,7 @@ import DataRequestModal from '../../components/public/DataRequestModal.jsx';
 // so the public map never downloads them.
 const DispatchModal = lazy(() => import('../../components/DispatchModal.jsx'));
 const IssuePermitModal = lazy(() => import('../../components/IssuePermitModal.jsx'));
+const AreaForm = lazy(() => import('../../components/map/AreaForm.jsx'));
 
 /** Every tagged tree reads as one thing on this map, so they all share one colour. */
 const MARKER_COLOR = '#16a34a';
@@ -301,11 +306,11 @@ function SiteLayer({ sites, selectedId, onSelect }) {
       style={styleFor}
       bubblingMouseEvents={false}
       onEachFeature={(feature, layer) => {
-        const { id, kind, coverId } = feature.properties;
+        const { id, kind, coverId, coverLabel } = feature.properties;
         const what =
           kind === 'planting-site'
             ? 'Tree planting site'
-            : landCoverById(coverId)?.label ?? 'Land cover';
+            : coverLabel ?? landCoverById(coverId)?.label ?? 'Land cover';
         layer.bindTooltip(`${siteTitle(feature)} — ${what}`, {
           sticky: true,
           direction: 'top',
@@ -738,8 +743,11 @@ export default function PublicMap() {
  * over, its trees are not shown, and nothing can be drawn there — the same
  * treatment the public map gives everything outside Laguna. PGENRO has no
  * fence: the whole province is its area.
+ *
+ * `profile` is the signed-in office's, on the LGU map: it decides whether a
+ * drawn area can be saved, and what the office may do to a saved one.
  */
-export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall = false, onPinHall = null }) {
+export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall = false, onPinHall = null, profile = null }) {
   const admin = mode === 'admin';
   const [trees, setTrees] = useState([]);
   // Crowdsourced tags a field officer has been sent to check: grey pins.
@@ -778,6 +786,10 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const [drawing, setDrawing] = useState(false);
   const [shape, setShape] = useState(EMPTY_SHAPE);
   const [drawNotice, setDrawNotice] = useState('');
+  // Saving what is drawn: { mode: 'new' | 'edit' | 'propose', featureId }.
+  const [areaEditor, setAreaEditor] = useState(null);
+  // Areas offices have saved; the samples stand in until there are some.
+  const savedAreas = useMapAreas({ withProposals: admin });
   // What is drawn over the base map, and which corner panel is open.
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [openTool, setOpenTool] = useState(null);
@@ -1184,9 +1196,6 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const areaPanelShowing = areaPanelOpen && Boolean(selectedLgu) && !areaPanelCollapsed;
   const panelShowing = treePanelShowing || areaPanelShowing;
 
-  const selectedSite = useMemo(() => siteById(selectedSiteId), [selectedSiteId]);
-  const sitePanelShowing = Boolean(selectedSite) && !sitePanelCollapsed;
-
   // ---- The fence ----------------------------------------------------------
   const fenceFeature = useMemo(() => (fence ? municipalityNamed(fence) : null), [fence]);
   const fenceLabel = fenceFeature?.properties.municipality_label ?? '';
@@ -1202,13 +1211,22 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     () => (fenceFeature ? { type: 'FeatureCollection', features: [fenceFeature] } : LAGUNA_MUNICIPALITIES),
     [fenceFeature]
   );
-  const sites = useMemo(
-    () =>
-      fence
-        ? { ...MAP_SITES, features: MAP_SITES.features.filter((f) => f.properties.municipality === fence) }
-        : MAP_SITES,
-    [fence]
+  // Saved areas once there are any; until then the samples, marked as such.
+  const sites = useMemo(() => {
+    const all = savedAreas.features.length > 0
+      ? { type: 'FeatureCollection', features: savedAreas.features }
+      : MAP_SITES;
+    return fence ? { ...all, features: all.features.filter((f) => f.properties.municipality === fence) } : all;
+  }, [fence, savedAreas.features]);
+
+  const sitesKey = useMemo(
+    () => sites.features.map((f) => `${f.properties.id}@${f.properties.version ?? ''}`).join('|'),
+    [sites]
   );
+  const selectedSite = useMemo(() => siteById(selectedSiteId, sites), [selectedSiteId, sites]);
+  // The save form opens where the area panel does, and moves the same controls.
+  const sitePanelShowing = (Boolean(selectedSite) && !sitePanelCollapsed) || Boolean(areaEditor);
+  const canSaveAreas = admin && [ROLES.PGENRO, ROLES.LGU_ADMIN].includes(roleOf(profile));
 
   const hallLabel = fenceFeature?.properties.is_city ? 'City Hall' : 'Municipal Hall';
 
@@ -1286,7 +1304,42 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     setDrawing(false);
     setShape(EMPTY_SHAPE);
     setDrawNotice('');
+    setAreaEditor(null);
   }
+
+  // ---- Saving what is drawn ------------------------------------------------------
+  /**
+   * The save form. A new area takes what is drawn now; editing or proposing
+   * puts the saved boundary back on the map to be moved, and the form opens
+   * with the saved details.
+   */
+  function openAreaEditor(editMode, feature = null) {
+    if (feature) {
+      setShape(geometryToShape(feature.geometry));
+      setDrawing(true);
+      setDrawNotice('');
+    }
+    setAreaEditor({ mode: editMode, featureId: feature?.properties.id ?? null });
+    clearSelectedSite();
+    lastPanelSide.current = 'right';
+    if (isMobileView) closeLeftPanels();
+  }
+
+  function cancelAreaEditor() {
+    // A new drawing stays on the map to keep working on; an edit puts the
+    // saved boundary back as it was.
+    if (areaEditor?.mode === 'new') setAreaEditor(null);
+    else stopDrawing();
+  }
+
+  async function handleAreaSaved({ id }) {
+    await savedAreas.reload();
+    stopDrawing();
+    setSelectedSiteId(id);
+    setSitePanelCollapsed(false);
+  }
+
+  const editingRow = areaEditor?.featureId ? savedAreas.rowsById.get(areaEditor.featureId) ?? null : null;
 
   // ---- "View on map" ----------------------------------------------------------
   // The Action Board and the inventory send a tree here as ?tree=…&lat=…&lng=…:
@@ -1518,7 +1571,14 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
 
         {/* Land cover and tree planting sites — the spaces, as against the points */}
         {(!admin || layers.sites) && (
-          <SiteLayer sites={sites} selectedId={selectedSiteId} onSelect={handleSelectSite} />
+          <SiteLayer
+            // Leaflet's GeoJSON layer is drawn once from its data; a new key
+            // redraws it when an area is saved, edited or deleted.
+            key={sitesKey}
+            sites={sites}
+            selectedId={selectedSiteId}
+            onSelect={handleSelectSite}
+          />
         )}
 
         {/* Province outline, drawn over the municipal lines */}
@@ -1635,12 +1695,45 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
       )}
 
       {/* The drawn area in focus: land cover, or somewhere to plant */}
-      {selectedSite && (
+      {selectedSite && !areaEditor && (
         <SitePanel
           feature={selectedSite}
           onClose={clearSelectedSite}
           onCollapsedChange={setSitePanelCollapsed}
+          footer={
+            admin && areaPermission(profile, selectedSite) ? (
+              <AreaActions
+                feature={selectedSite}
+                row={savedAreas.rowsById.get(selectedSite.properties.id)}
+                permission={areaPermission(profile, selectedSite)}
+                proposal={savedAreas.proposals.get(selectedSite.properties.id) ?? null}
+                onEdit={() => openAreaEditor('edit', selectedSite)}
+                onPropose={() => openAreaEditor('propose', selectedSite)}
+                onChanged={() => savedAreas.reload()}
+                onDeleted={() => {
+                  clearSelectedSite();
+                  savedAreas.reload();
+                }}
+              />
+            ) : null
+          }
         />
+      )}
+
+      {/* Saving what is drawn: the form opens where the area panel does */}
+      {admin && areaEditor && (
+        <Suspense fallback={null}>
+          <AreaForm
+            key={areaEditor.featureId ?? 'new'}
+            mode={areaEditor.mode}
+            initial={editingRow ? formFromRow(editingRow) : emptyAreaForm()}
+            existing={editingRow}
+            shape={shape}
+            trees={trees}
+            onSaved={handleAreaSaved}
+            onCancel={cancelAreaEditor}
+          />
+        </Suspense>
       )}
 
       {/* Area in focus — the short badge, for when its panel is out of the way */}
@@ -1781,6 +1874,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             onUndo={() => handleShapeChange(undoLast(shape))}
             onClear={() => handleShapeChange(EMPTY_SHAPE)}
             onClose={stopDrawing}
+            onSave={canSaveAreas ? () => openAreaEditor('new') : null}
+            saving={Boolean(areaEditor)}
           />
         </div>
       )}

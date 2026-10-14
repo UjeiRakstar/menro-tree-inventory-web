@@ -48,6 +48,7 @@ export default function MenroMap() {
         fence={fence}
         hall={hall}
         canPinHall={isLguAdmin && Boolean(lgu) && !inTraining}
+        profile={profile}
         onPinHall={pinHall}
       />
     </>

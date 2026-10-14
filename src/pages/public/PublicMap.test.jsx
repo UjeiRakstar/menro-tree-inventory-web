@@ -126,6 +126,7 @@ import { supabaseMock } from '../../test/supabaseMock.js';
 import { boundsOfMunicipality, LAGUNA_BOUNDS } from '../../lib/lagunaBoundaries.js';
 import { loadBarangayIndex } from '../../lib/barangayLookup.js';
 import PublicMap, { TreeMap } from './PublicMap.jsx';
+import { PGENRO_ADMIN, SANTA_CRUZ_ADMIN } from '../../test/accounts.js';
 
 // Two trees in Santa Cruz, one in Pila, so the per-area count has something to
 // be wrong about.
@@ -845,10 +846,10 @@ const OUT_FOR_CHECKING = { id: 7, species: 'Duhat', latitude: 14.283, longitude:
 const at = (tree) => JSON.stringify([tree.latitude, tree.longitude]);
 const officePin = (tree) => markers().find((m) => m.dataset.center === at(tree));
 
-function renderOffice({ fence = null, path = '/' } = {}) {
+function renderOffice({ fence = null, path = '/', profile = null } = {}) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <TreeMap mode="admin" fence={fence} />
+      <TreeMap mode="admin" fence={fence} profile={profile} />
     </MemoryRouter>
   );
 }
@@ -1182,5 +1183,252 @@ describe('the public map, round three', () => {
     await waitFor(() =>
       expect(screen.queryByRole('complementary', { name: 'Labuin Tree Planting Site' })).not.toBeInTheDocument()
     );
+  });
+});
+
+// =============================================================================
+// Saving what is drawn — phase 3.
+// =============================================================================
+
+describe('saving an area', () => {
+  // Ten tagged trees of six species, all inside the triangle drawn below.
+  const SPECIES = ['Narra', 'Molave', 'Banaba', 'Balete', 'Duhat', 'Santol'];
+  const STAND = Array.from({ length: 10 }, (_, i) => ({
+    id: `s${i}`,
+    species: SPECIES[i % SPECIES.length],
+    latitude: 14.2824 + (i % 3) * 0.00005,
+    longitude: 121.417 + (i % 4) * 0.00004,
+  }));
+  const SAVED = {
+    id: 'area-1',
+    kind: 'land-cover',
+    name: 'Labuin Secondary Forest',
+    cover_class: 'open-forest',
+    municipality: 'Santa Cruz',
+    barangay: 'Labuin',
+    lgu_psgc: 403426000,
+    created_by_role: 'lgu_admin',
+    updated_at: '2026-10-15T08:00:00Z',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[[121.4163, 14.2823], [121.4173, 14.2823], [121.4173, 14.2832], [121.4163, 14.2823]]],
+    },
+  };
+
+  beforeEach(() => {
+    supabaseMock.setResponse('trees:select', { data: STAND, error: null });
+    supabaseMock.setResponse('map_areas:insert', { data: { id: 'new-area' }, error: null });
+    delete mapEventHandlers.click;
+  });
+
+  const vertices = () => clusters().filter((m) => /click to remove|close the shape/.test(m.dataset.label ?? ''));
+
+  async function drawTriangle(profile = SANTA_CRUZ_ADMIN) {
+    renderOffice({ fence: profile?.role === 'lgu_admin' ? 'Santa Cruz' : null, profile });
+    // The stand is grouped into one bubble at this zoom, so wait for the map, not a pin.
+    await waitFor(() => expect(screen.queryByText('Loading map data…')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Draw and measure an area' }));
+    clickMap(14.2823, 121.4163);
+    clickMap(14.2823, 121.4173);
+    clickMap(14.2832, 121.4173);
+    fireEvent.click(vertices().find((m) => m.dataset.label === 'Click to close the shape'));
+    return screen.getByRole('region', { name: 'Measure area' });
+  }
+
+  async function openForm(profile) {
+    const box = await drawTriangle(profile);
+    fireEvent.click(within(box).getByRole('button', { name: /Save this area/ }));
+    return screen.findByRole('form', { name: 'Save this area' });
+  }
+
+  it('offers saving only to an office, and only once there is an area', async () => {
+    const box = await drawTriangle(null);
+    expect(within(box).queryByRole('button', { name: /Save this area/ })).not.toBeInTheDocument();
+  });
+
+  it('reviews what the map measured, and suggests a class from the trees inside', async () => {
+    const form = await openForm();
+    const measured = within(form).getByRole('region', { name: 'What the map measured' });
+    expect(measured).toHaveTextContent(/Area[\d,.]+ m²/);
+    expect(measured).toHaveTextContent('10 inside, 6 species');
+    expect(within(form).getByRole('region', { name: 'Suggestion' })).toHaveTextContent('Suggested: Open forest');
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Use this' }));
+    expect(within(form).getByLabelText(/Land cover \(NAMRIA\)/)).toHaveValue('open-forest');
+  });
+
+  it('says what is missing before saving', async () => {
+    const form = await openForm();
+    fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
+    expect(await within(form).findByText('Give the area a name.')).toBeInTheDocument();
+    expect(within(form).getByText('Choose its land cover.')).toBeInTheDocument();
+    expect(supabaseMock.writesTo('map_areas', 'insert')).toHaveLength(0);
+  });
+
+  it('saves the polygon, its class and where it is', async () => {
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(/^Name/), { target: { value: 'Labuin Forest' } });
+    fireEvent.change(within(form).getByLabelText(/Land cover \(NAMRIA\)/), { target: { value: 'closed-forest' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
+
+    await waitFor(() => expect(supabaseMock.writesTo('map_areas', 'insert')).toHaveLength(1));
+    const [insert] = supabaseMock.writesTo('map_areas', 'insert');
+    expect(insert.payload).toMatchObject({
+      kind: 'land-cover',
+      name: 'Labuin Forest',
+      cover_class: 'closed-forest',
+      suggested_class: 'open-forest',
+      trees_inside: 10,
+      municipality: 'Santa Cruz',
+      designation: null,
+    });
+    expect(insert.payload.geometry.coordinates[0]).toHaveLength(4);
+    expect(insert.payload.area_m2).toBeGreaterThan(0);
+    // Saved: the drawing and the form close.
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Save this area' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: 'Measure area' })).not.toBeInTheDocument();
+  });
+
+  it('will not claim a legal designation without its document', async () => {
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(/^Name/), { target: { value: 'Protected' } });
+    fireEvent.change(within(form).getByLabelText(/Land cover \(NAMRIA\)/), { target: { value: 'closed-forest' } });
+    fireEvent.change(within(form).getByLabelText('Legal designation'), { target: { value: 'protected-area' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
+    expect(await within(form).findByText('A legal designation needs its document (PDF).')).toBeInTheDocument();
+  });
+
+  it('warns that a document is published before taking one, then uploads it with the area', async () => {
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(/^Name/), { target: { value: 'Zoned' } });
+    fireEvent.change(within(form).getByLabelText(/Land cover \(NAMRIA\)/), { target: { value: 'open-forest' } });
+    fireEvent.change(within(form).getByLabelText('Legal designation'), { target: { value: 'zoning' } });
+    fireEvent.change(within(form).getByLabelText(/Kind of document/), { target: { value: 'Municipal Ordinance' } });
+    fireEvent.change(within(form).getByLabelText(/^Title/), { target: { value: 'Zoning Ordinance of Santa Cruz' } });
+
+    fireEvent.click(within(form).getByRole('button', { name: /Attach the PDF/ }));
+    const notice = screen.getByRole('dialog', { name: 'Before you upload' });
+    expect(notice).toHaveTextContent('published on the website for anyone to read');
+    fireEvent.click(within(notice).getByRole('button', { name: /I understand/ }));
+
+    const pdf = new File(['%PDF-1.4'], 'zoning.pdf', { type: 'application/pdf' });
+    fireEvent.change(within(form).getByLabelText('Document PDF'), { target: { files: [pdf] } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
+
+    await waitFor(() => expect(supabaseMock.writesTo('map_areas', 'insert')).toHaveLength(1));
+    const [bucket, path] = supabaseMock.supabase.storage.upload.mock.calls[0];
+    expect(bucket).toBe('area-documents');
+    expect(path).toMatch(/^santa-cruz\/.+\.pdf$/);
+    expect(supabaseMock.writesTo('map_areas', 'insert')[0].payload).toMatchObject({
+      designation: 'zoning',
+      doc_type: 'Municipal Ordinance',
+      doc_title: 'Zoning Ordinance of Santa Cruz',
+      doc_url: expect.stringMatching(/^https:\/\/storage\.test\/area-documents\/santa-cruz\//),
+    });
+  });
+
+  it('says which file to run when areas cannot be saved yet', async () => {
+    supabaseMock.setResponse('map_areas:insert', {
+      data: null,
+      error: { code: 'PGRST205', message: "Could not find the table 'public.map_areas'" },
+    });
+    const form = await openForm();
+    fireEvent.change(within(form).getByLabelText(/^Name/), { target: { value: 'A' } });
+    fireEvent.change(within(form).getByLabelText(/Land cover \(NAMRIA\)/), { target: { value: 'open-forest' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
+    expect(await within(form).findByRole('alert')).toHaveTextContent('map_areas.sql');
+  });
+
+  describe('a saved area', () => {
+    beforeEach(() => {
+      supabaseMock.setResponse('map_areas:select', { data: [SAVED], error: null });
+      supabaseMock.setResponse('lgus:select', { data: [{ psgc: 403426000, label: 'Santa Cruz' }], error: null });
+    });
+
+    async function openSaved(profile) {
+      if (profile) renderOffice({ fence: profile.role === 'lgu_admin' ? 'Santa Cruz' : null, profile });
+      else renderMap();
+      await waitFor(() => expect(siteHandlers.has('area-1')).toBe(true));
+      act(() => siteHandlers.get('area-1').click());
+      return screen.getByRole('complementary', { name: 'Labuin Secondary Forest' });
+    }
+
+    it('replaces the samples on the public map, real and planning-only', async () => {
+      const panel = await openSaved(null);
+      // One layer, drawing only the saved area: the samples are gone.
+      expect(screen.getByTestId('site-layer').dataset.featureCount).toBe('1');
+      expect(panel).toHaveTextContent('Open forest');
+      expect(panel).toHaveTextContent('For planning purposes only. Not a land title');
+      expect(panel).not.toHaveTextContent('everything but the area');
+      expect(within(panel).queryByRole('button', { name: /Edit|Delete|Propose/ })).not.toBeInTheDocument();
+    });
+
+    it('can be edited and deleted by the office that drew it', async () => {
+      const panel = await openSaved(SANTA_CRUZ_ADMIN);
+      expect(within(panel).getByRole('button', { name: /Edit/ })).toBeInTheDocument();
+
+      fireEvent.click(within(panel).getByRole('button', { name: /Delete/ }));
+      fireEvent.click(within(screen.getByRole('alertdialog', { name: /Delete Labuin/ })).getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(supabaseMock.writesTo('map_areas', 'delete')).toHaveLength(1));
+      expect(supabaseMock.writesTo('map_areas', 'delete')[0].filters).toContainEqual(['id', 'area-1']);
+    });
+
+    it('opens for editing with its boundary back on the map and its details filled in', async () => {
+      const panel = await openSaved(SANTA_CRUZ_ADMIN);
+      fireEvent.click(within(panel).getByRole('button', { name: /Edit/ }));
+
+      const form = await screen.findByRole('form', { name: 'Edit this area' });
+      expect(within(form).getByLabelText(/^Name/)).toHaveValue('Labuin Secondary Forest');
+      expect(within(form).getByLabelText(/Land cover \(NAMRIA\)/)).toHaveValue('open-forest');
+      expect(vertices()).toHaveLength(3);
+
+      fireEvent.change(within(form).getByLabelText(/^Name/), { target: { value: 'Labuin Forest' } });
+      fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
+      await waitFor(() => expect(supabaseMock.writesTo('map_areas', 'update')).toHaveLength(1));
+      const [update] = supabaseMock.writesTo('map_areas', 'update');
+      expect(update.payload.name).toBe('Labuin Forest');
+      expect(update.filters).toContainEqual(['id', 'area-1']);
+    });
+
+    it('takes PGENRO’s change to an office’s area as a proposal, not an edit', async () => {
+      const panel = await openSaved(PGENRO_ADMIN);
+      expect(within(panel).queryByRole('button', { name: /^Edit/ })).not.toBeInTheDocument();
+      fireEvent.click(within(panel).getByRole('button', { name: /Propose a change/ }));
+
+      const form = await screen.findByRole('form', { name: 'Propose a change' });
+      fireEvent.change(within(form).getByLabelText(/Land cover \(NAMRIA\)/), { target: { value: 'closed-forest' } });
+      fireEvent.change(within(form).getByLabelText(/what and why/), { target: { value: 'The canopy is closed.' } });
+      fireEvent.click(within(form).getByRole('button', { name: 'Send the proposal' }));
+
+      await waitFor(() => expect(supabaseMock.writesTo('map_area_proposals', 'insert')).toHaveLength(1));
+      expect(supabaseMock.writesTo('map_areas', 'update')).toHaveLength(0);
+      expect(supabaseMock.writesTo('map_area_proposals', 'insert')[0].payload).toMatchObject({
+        area_id: 'area-1',
+        note: 'The canopy is closed.',
+        changes: expect.objectContaining({ cover_class: 'closed-forest' }),
+      });
+    });
+
+    it('shows the MENRO what PGENRO proposes, to approve or decline', async () => {
+      supabaseMock.setResponse('map_area_proposals:select', {
+        data: [{ id: 'p1', area_id: 'area-1', status: 'pending', note: 'Closed canopy', changes: { ...SAVED, cover_class: 'closed-forest' } }],
+        error: null,
+      });
+      supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
+      const panel = await openSaved(SANTA_CRUZ_ADMIN);
+
+      const proposal = await within(panel).findByRole('region', { name: "PGENRO's proposal" });
+      expect(proposal).toHaveTextContent('Land cover: Open forest → Closed forest');
+      expect(proposal).toHaveTextContent('Closed canopy');
+      fireEvent.click(within(proposal).getByRole('button', { name: 'Approve and apply' }));
+      await waitFor(() =>
+        expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('approve_area_proposal', { p_id: 'p1', p_note: null })
+      );
+    });
+
+    it('gives another LGU’s office nothing to change', async () => {
+      const panel = await openSaved({ ...SANTA_CRUZ_ADMIN, lgu_psgc: 403405000 });
+      expect(within(panel).queryByRole('button', { name: /Edit|Delete|Propose/ })).not.toBeInTheDocument();
+    });
   });
 });

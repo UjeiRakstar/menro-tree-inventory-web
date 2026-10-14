@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, X } from 'lucide-react';
 import areaIcon from '../../assets/Total_Area_icon.png';
 import maiIcon from '../../assets/Total_MAI_icon.png';
 import elevationIcon from '../../assets/Elevation_Type_icon.png';
@@ -27,6 +27,7 @@ import {
   statusOf,
 } from '../../lib/mapSites.js';
 import { DATA_SOURCES, DATA_SOURCE_INTRO } from '../../lib/dataSources.js';
+import { PLANNING_ONLY, designationById, noRateReason } from '../../lib/namriaCover.js';
 import InfoHint from './InfoHint.jsx';
 import { ProvisionalNote, ProvisionalTag } from './Provisional.jsx';
 
@@ -117,7 +118,7 @@ function UnitToggle({ unit, onChange }) {
 }
 
 /** How much of the area a hazard reaches, or that nobody has checked. */
-function HazardBlock({ icon, label, feature, unit }) {
+function HazardBlock({ icon, label, feature, unit, sample = false }) {
   const exposed = hazardAreaM2(feature, label === 'Flooding' ? 'flood' : 'landslide');
   const share = hazardShare(feature, label === 'Flooding' ? 'flood' : 'landslide');
 
@@ -143,7 +144,7 @@ function HazardBlock({ icon, label, feature, unit }) {
       tone={none ? 'slate' : 'red'}
       // The share is invented while the records are samples; the NOAH layer
       // will hand over square metres and this stops being a placeholder.
-      provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
+      provisional={sample ? 'placeholder' : null}
       note={none ? 'None of this area falls inside the hazard extent.' : `${Math.round(share * 100)}% of the area`}
     />
   );
@@ -183,8 +184,14 @@ function SourceCredits() {
  * has read one already knows where to look in the other:
  *   what is here · how big is it · what is the ground like · what can go wrong
  * The planting site then adds the thing it exists for — what to plant.
+ *
+ * An area an office SAVED (supabase/map_areas.sql) is real; only the sample
+ * areas carry the amber "invented" marks. A saved area's ground facts are
+ * marked as awaiting PGENRO's layers instead, until those are uploaded.
+ * `footer` is the office's own controls — edit, propose, delete — which the
+ * public never sees.
  */
-export default function SitePanel({ feature, onClose, onCollapsedChange }) {
+export default function SitePanel({ feature, onClose, onCollapsedChange, footer = null }) {
   const [collapsed, setCollapsed] = useState(false);
   const [entered, setEntered] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -236,6 +243,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
 
   const props = feature.properties ?? {};
   const isPlantingSite = props.kind === 'planting-site';
+  // Invented while it is a sample; real once an office saved it.
+  const sample = SITES_ARE_SAMPLE && !props.saved;
+  // A saved area's ground facts wait on PGENRO's layers (phase 4).
+  const groundMark = sample ? 'placeholder' : props.saved ? 'awaiting' : null;
+  const designation = designationById(props.designation);
+  const noRate = props.saved && props.namriaClass && !props.coverId ? noRateReason(props.namriaClass) : '';
   const title = siteTitle(feature);
   const areaM2 = siteAreaM2(feature);
   const cover = landCoverById(props.coverId);
@@ -265,7 +278,9 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-extrabold leading-tight text-slate-900">{title}</h2>
             <p className="mt-0.5 text-[12px] italic leading-snug text-slate-500">
-              {isPlantingSite ? `Verified by the ${props.verifiedBy}` : cover?.label ?? 'Land cover not yet classified'}
+              {isPlantingSite
+                ? `Verified by the ${props.verifiedBy}`
+                : props.coverLabel ?? cover?.label ?? 'Land cover not yet classified'}
             </p>
             <p className="text-[12px] italic leading-snug text-slate-500">{placeLine(feature)}</p>
           </div>
@@ -282,7 +297,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {/* Nothing below the geometry is a measurement yet, and saying so is
               not optional: these are figures about somebody's land. */}
-          {SITES_ARE_SAMPLE && (
+          {/* Everywhere an area is shown (decision 3). */}
+          <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-medium leading-snug text-slate-600 ring-1 ring-inset ring-slate-200">
+            {PLANNING_ONLY}
+          </p>
+
+          {sample && (
             <ProvisionalNote kind="placeholder" title="everything but the area" className="mb-3">
               The boundary is drawn inside the right barangay and the area is measured from it, so
               that figure is real. Everything carrying an amber dot below is invented, and stays so
@@ -314,12 +334,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
                 icon={maiIcon}
                 label="Estimated Total MAI AGB"
                 value={mai === null ? '—' : `${formatTonnesPerYear(mai)} t/yr`}
-                provisional="borrowed"
-                hint={maiSourceNote(props.coverId)}
+                provisional={mai === null ? null : 'borrowed'}
+                hint={noRate || maiSourceNote(props.coverId)}
                 note={
                   cover
                     ? `${siteAreaHa(feature).toFixed(2)} ha × ${cover.maiTPerHaYear} t/ha/yr`
-                    : 'No land cover classified for this area yet.'
+                    : noRate || 'No land cover classified for this area yet.'
                 }
               />
             )}
@@ -330,7 +350,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
             <FactRow
               icon={elevationIcon}
               label="Elevation Type"
-              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
+              provisional={groundMark}
               value={
                 props.elevationM != null
                   ? `${props.elevationType} — ${props.elevationM} m asl`
@@ -341,12 +361,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
               icon={soilIcon}
               label="Soil Type"
               value={props.soilType ?? 'Not recorded'}
-              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
+              provisional={groundMark}
             />
             <FactRow
               icon={rainfallIcon}
               label="Average Rainfall"
-              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
+              provisional={groundMark}
               value={
                 props.rainfallMmPerYear != null
                   ? `${props.rainfallMmPerYear.toLocaleString('en-US')} mm a year`
@@ -356,16 +376,50 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
             <FactRow
               icon={temperatureIcon}
               label="Average Temperature"
-              provisional={SITES_ARE_SAMPLE ? 'placeholder' : null}
+              provisional={groundMark}
               value={props.temperatureC != null ? `${props.temperatureC} °C` : 'Not recorded'}
             />
           </ul>
 
           {/* What can go wrong with it */}
           <div className="mt-2 divide-y divide-slate-100 border-t border-slate-200">
-            <HazardBlock icon={landslideIcon} label="Landslide" feature={feature} unit={unit} />
-            <HazardBlock icon={floodIcon} label="Flooding" feature={feature} unit={unit} />
+            <HazardBlock icon={landslideIcon} label="Landslide" feature={feature} unit={unit} sample={sample} />
+            <HazardBlock icon={floodIcon} label="Flooding" feature={feature} unit={unit} sample={sample} />
           </div>
+
+          {/* A legal designation, and the document it rests on */}
+          {designation && (
+            <section className="mt-4">
+              <SectionHeading>Legal designation</SectionHeading>
+              <p className="mt-2 text-[12.5px] font-semibold text-slate-700">{designation.label}</p>
+              {props.document?.url && (
+                <a
+                  href={props.document.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 flex items-start gap-2 rounded-xl border border-slate-200 px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50"
+                >
+                  <FileText size={16} className="mt-0.5 shrink-0 text-green-700" aria-hidden="true" />
+                  <span>
+                    <span className="block font-semibold">
+                      {[props.document.type, props.document.number && `No. ${props.document.number}`]
+                        .filter(Boolean)
+                        .join(' ')}
+                    </span>
+                    <span className="block text-slate-500">{props.document.title}</span>
+                    <span className="block text-[11px] font-semibold text-green-700">Open the document (PDF)</span>
+                  </span>
+                </a>
+              )}
+            </section>
+          )}
+
+          {props.notes && (
+            <section className="mt-4">
+              <SectionHeading>Notes</SectionHeading>
+              <p className="mt-2 whitespace-pre-line text-[12.5px] leading-snug text-slate-600">{props.notes}</p>
+            </section>
+          )}
 
           {/* The thing a planting site exists for */}
           {isPlantingSite && (
@@ -373,7 +427,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
               <div className="flex items-end justify-between gap-2">
                 <SectionHeading>Recommended Trees to Plant in the Area</SectionHeading>
                 {/* Hand-written, not matched: DENR RISE is not encoded yet. */}
-                {SITES_ARE_SAMPLE && <ProvisionalTag kind="placeholder" />}
+                {sample && <ProvisionalTag kind="placeholder" />}
               </div>
               <ul className="mt-2 flex flex-wrap gap-1.5">
                 {(props.recommended ?? []).map((tree) => (
@@ -403,22 +457,22 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
                   divided by a spacing somebody made up. */}
               <dl className="mt-3 space-y-1.5 rounded-xl border border-slate-200 px-3 py-2.5 text-[12px] leading-snug">
                 {props.plantingWindow && (
-                  <ActionRow label="When:" sample={SITES_ARE_SAMPLE}>
+                  <ActionRow label="When:" sample={sample}>
                     {props.plantingWindow}
                   </ActionRow>
                 )}
                 {seedlings !== null && (
-                  <ActionRow label="Room for:" sample={SITES_ARE_SAMPLE}>
+                  <ActionRow label="Room for:" sample={sample}>
                     about {seedlings.toLocaleString('en-US')} seedlings at {props.spacingM} m spacing
                   </ActionRow>
                 )}
                 {props.accessNote && (
-                  <ActionRow label="Getting there:" sample={SITES_ARE_SAMPLE}>
+                  <ActionRow label="Getting there:" sample={sample}>
                     {props.accessNote}
                   </ActionRow>
                 )}
                 {props.contact && (
-                  <ActionRow label="Ask:" sample={SITES_ARE_SAMPLE}>
+                  <ActionRow label="Ask:" sample={sample}>
                     {props.contact}
                   </ActionRow>
                 )}
@@ -431,10 +485,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange }) {
           {props.updatedAt && (
             <p className="mt-3 flex items-center gap-1.5 text-[10.5px] text-slate-400">
               Record last updated {props.updatedAt}.
-              {SITES_ARE_SAMPLE && <ProvisionalTag kind="placeholder" compact />}
+              {sample && <ProvisionalTag kind="placeholder" compact />}
             </p>
           )}
         </div>
+
+        {footer && <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-3">{footer}</div>}
       </aside>
 
       {/* Collapse handle, riding the panel's edge so it moves with it. */}

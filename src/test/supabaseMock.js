@@ -146,6 +146,21 @@ function createSupabaseMock() {
     });
   }
 
+  // Storage: uploads succeed and land at a predictable public URL, unless a
+  // test says otherwise with storage.upload.mockResolvedValue(...).
+  const storage = {
+    upload: vi.fn(),
+    from: vi.fn((bucket) => ({
+      upload: (path, file, options) => storage.upload(bucket, path, file, options),
+      getPublicUrl: (path) => ({ data: { publicUrl: `https://storage.test/${bucket}/${path}` } }),
+    })),
+  };
+  const resetStorage = () => {
+    storage.upload.mockReset();
+    storage.upload.mockImplementation(async (bucket, path) => ({ data: { path }, error: null }));
+  };
+  resetStorage();
+
   resetAuthDefaults();
 
   return {
@@ -154,6 +169,7 @@ function createSupabaseMock() {
       auth,
       rpc,
       functions,
+      storage,
       channel: vi.fn(() => channel),
       removeChannel: vi.fn(),
     },
@@ -198,6 +214,7 @@ function createSupabaseMock() {
     reset() {
       calls.length = 0;
       responses.clear();
+      resetStorage();
       signedIn = null;
       resetAuthDefaults();
     },

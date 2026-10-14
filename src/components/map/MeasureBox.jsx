@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Undo2, Trash2, X } from 'lucide-react';
+import { Save, Undo2, Trash2, X } from 'lucide-react';
 import { formatArea } from '../../lib/areaGeometry.js';
 import { areaM2, drawingHint, formatLength, lengthM } from '../../lib/drawing.js';
 
@@ -14,8 +14,12 @@ import { areaM2, drawingHint, formatLength, lengthM } from '../../lib/drawing.js
  * `notice` is the last thing the map refused, said in words — a point dropped
  * outside the LGU does nothing visible on the map, and silence would read as
  * the click not registering.
+ *
+ * `onSave`, when given, is the office saving what it drew: a button that
+ * appears once there is an area to save. `saving` says the form is open, so
+ * the box says so instead of offering it twice.
  */
-export default function MeasureBox({ shape, notice = '', onUndo, onClear, onClose }) {
+export default function MeasureBox({ shape, notice = '', onUndo, onClear, onClose, onSave = null, saving = false }) {
   const [unit, setUnit] = useState('m2');
   const area = areaM2(shape);
   const length = lengthM(shape);
@@ -99,6 +103,22 @@ export default function MeasureBox({ shape, notice = '', onUndo, onClear, onClos
           <Trash2 size={12} aria-hidden="true" /> Clear
         </button>
       </div>
+
+      {onSave && area !== null && (
+        saving ? (
+          <p className="mt-3 rounded-lg bg-green-50 px-2.5 py-1.5 text-xs text-green-900 ring-1 ring-green-200">
+            Saving — fill in the details on the right. You can still move the points.
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={onSave}
+            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-green-700 px-3 py-2 text-sm font-bold text-white hover:bg-green-800"
+          >
+            <Save size={14} aria-hidden="true" /> Save this area
+          </button>
+        )
+      )}
     </div>
   );
 }
