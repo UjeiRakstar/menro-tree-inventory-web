@@ -8,12 +8,11 @@ stale and two claims in my own write-ups turned out not to be true.
 
 ## Before the account ticket touches anything
 
-- **The field app's work is still uncommitted.** 17 modified files and three
-  new ones in `C:\dev\projects\tree_inventory`, sitting on top of `10eee37`.
-  Among them are `login_screen.dart`, `signup_screen.dart` and
-  `pending_approval_screen.dart` — exactly the screens the MENRO/CENRO account
-  work will rewrite. Commit them first, as they are, so the account changes
-  land on a known state and can be told apart from what was already there.
+- **The field app's work is committed, on a branch.** `0733b03` on
+  `feat/field-app-boundaries-and-community-tags` in
+  `C:\dev\projects\tree_inventory`, as it stood — 59 files, nothing rewritten.
+  `main` is still `10eee37`. Merge the branch into `main` once the app has run
+  on a device; until then a build from `main` is the old app.
 - **Did the crowdsourced path run?** You ran `flutter run` and saved a mock
   tree with no errors (October). What that does not show is the path a
   *resident's* tag takes: the sync in `inventory_screen.dart` that calls
@@ -120,8 +119,10 @@ way: **any signed-in arborist could make themselves an admin** by updating the
 - **Species from the RISE publication** — a Trees sub-tab where the PGENRO
   forester enters what an ERDB RISE issue says about a species.
 - **Reading a RISE PDF automatically** — Gemini, or a script, filling that form
-  in for the forester to check. Waiting on whether there is a Gemini key, and
-  whether sending the PDFs to Google is acceptable.
+  in for the forester to check. There is a Gemini key — the field app already
+  reads `GEMINI_API_KEY` from its `.env` — but on the web it would have to sit
+  in a Supabase secret behind a server function, never in the website. Still
+  waiting on whether sending the RISE PDFs to Google is acceptable.
 - **Google sign-in for the public, and a leaderboard** of who tagged the most
   trees. Counts registered residents and their tags, for the City Biodiversity
   Index later.
