@@ -217,6 +217,14 @@ for (let i = 0; i < TAG_COUNT; i += 1) {
 const arborists = ARBORISTS.map((a) => ({ ...a, status: 'Active', is_training: true }));
 
 // ---- The SQL -------------------------------------------------------------------
+// Every key each table is given, for the final check to compare with the
+// columns that exist — computed there, not remembered from earlier in the
+// script.
+const keysOf = (rows) => [...new Set(rows.flatMap((row) => Object.keys(row)))];
+const seededKeys = Object.entries({ arborists, trees, permits, pending_trees: pendingTags })
+  .flatMap(([table, rows]) => keysOf(rows).map((key) => `  ('${table}', '${key}')`))
+  .join(',\n');
+
 // Dollar-quoted, so nothing in the data needs escaping.
 const json = (rows) => `$seed$${JSON.stringify(rows)}$seed$::jsonb`;
 
@@ -260,40 +268,37 @@ begin
   end loop;
 end $$;
 
--- Insert the keys that are columns; return the ones that are not.
-create or replace function pg_temp.seed_into(p_table text, p_rows jsonb)
-returns text language plpgsql as $$
+-- Insert the keys that are columns, and skip the ones that are not.
+--
+-- A plain function, created here and dropped again below — not a temporary
+-- one. The Supabase SQL editor runs the final query on its own, apart from the
+-- rest of the script, so nothing temporary made up here is there for it.
+create or replace function public.training_seed_into(p_table text, p_rows jsonb)
+returns void language plpgsql as $$
 declare
-  v_cols    text;
-  v_missing text;
+  v_cols text;
 begin
   select string_agg(quote_ident(k), ', ') into v_cols
   from (select distinct jsonb_object_keys(r) k from jsonb_array_elements(p_rows) r) keys
   where exists (select 1 from information_schema.columns c
                 where c.table_schema = 'public' and c.table_name = p_table and c.column_name = keys.k);
 
-  select string_agg(k, ', ') into v_missing
-  from (select distinct jsonb_object_keys(r) k from jsonb_array_elements(p_rows) r) keys
-  where not exists (select 1 from information_schema.columns c
-                    where c.table_schema = 'public' and c.table_name = p_table and c.column_name = keys.k);
-
   execute format(
     'insert into public.%I (%s) select %s from jsonb_populate_recordset(null::public.%I, $1)',
     p_table, v_cols, v_cols, p_table) using p_rows;
-
-  return coalesce(v_missing, '');
 end $$;
 
-drop table if exists pg_temp.seed_report;
-create temp table seed_report (tbl text, skipped text);
+revoke all on function public.training_seed_into(text, jsonb) from public, anon, authenticated;
 
-insert into seed_report select 'arborists', pg_temp.seed_into('arborists', ${json(arborists)});
+select public.training_seed_into('arborists', ${json(arborists)});
 
-insert into seed_report select 'trees', pg_temp.seed_into('trees', ${json(trees)});
+select public.training_seed_into('trees', ${json(trees)});
 
-insert into seed_report select 'permits', pg_temp.seed_into('permits', ${json(permits)});
+select public.training_seed_into('permits', ${json(permits)});
 
-insert into seed_report select 'pending_trees', pg_temp.seed_into('pending_trees', ${json(pendingTags)});
+select public.training_seed_into('pending_trees', ${json(pendingTags)});
+
+drop function public.training_seed_into(text, jsonb);
 
 do $$
 begin
@@ -303,7 +308,7 @@ begin
 end $$;
 
 -- ===========================================================================
--- Did it take?
+-- Did it take? Self-contained: it reads only the tables themselves.
 -- ===========================================================================
 select 'training trees' as check,
        (select count(*) from public.trees where is_training) = ${trees.length} as ok,
@@ -321,8 +326,13 @@ union all
 select 'the activity log is paused no longer',
        not exists (select 1 from pg_trigger where tgname = 'log_tree_changes' and tgenabled = 'D'), ''
 union all
-select 'READ: left out of ' || tbl || ' (no such column)', null, skipped
-from seed_report where skipped <> '';
+select 'READ: left out of ' || seeded.tbl || ' (no such column)', null, string_agg(seeded.k, ', ' order by seeded.k)
+from (values
+${seededKeys}
+) seeded(tbl, k)
+where not exists (select 1 from information_schema.columns c
+                  where c.table_schema = 'public' and c.table_name = seeded.tbl and c.column_name = seeded.k)
+group by seeded.tbl;
 `;
 
 writeFileSync(join(root, 'supabase/training_seed.sql'), sql);

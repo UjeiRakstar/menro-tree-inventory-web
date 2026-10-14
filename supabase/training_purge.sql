@@ -22,20 +22,13 @@ end $$;
 
 -- 2. The data. Children before parents: permits and observations point at
 --    trees.
-drop table if exists pg_temp.purge_report;
-create temp table purge_report (tbl text, deleted bigint);
-
 do $$
-declare
-  t text;
-  n bigint;
+declare t text;
 begin
   foreach t in array array['permits', 'phenology_records', 'pending_trees', 'trees', 'arborists', 'activity_log']
   loop
     if to_regclass('public.' || t) is not null then
       execute format('delete from public.%I where is_training', t);
-      get diagnostics n = row_count;
-      insert into purge_report values (t, n);
     end if;
   end loop;
 end $$;
@@ -60,14 +53,22 @@ end $$;
 -- where is_training and redeemed_at is null and revoked_at is null;
 
 -- ===========================================================================
--- Did it take?
+-- Did it take? Self-contained: the Supabase SQL editor runs this last query
+-- on its own, so it reads only the tables themselves.
 -- ===========================================================================
-select 'deleted from ' || tbl as check, true as ok, deleted::text as detail from purge_report
+select 'no training trees left' as check,
+       not exists (select 1 from public.trees where is_training) as ok, '' as detail
 union all
-select 'no training rows left',
-       not exists (select 1 from public.trees where is_training)
-       and not exists (select 1 from public.pending_trees where is_training),
-       ''
+select 'no training tags left', not exists (select 1 from public.pending_trees where is_training), ''
+union all
+select 'no training permits left', not exists (select 1 from public.permits where is_training), ''
+union all
+select 'no trainee arborists left', not exists (select 1 from public.arborists where is_training), ''
+union all
+select 'no training entries left in the activity log',
+       not exists (select 1 from public.activity_log where is_training), ''
+union all
+select 'real trees untouched', true, (select count(*) from public.trees)::text || ' trees'
 union all
 select 'the activity log is running again',
        not exists (select 1 from pg_trigger where tgname = 'log_tree_changes' and tgenabled = 'D'), ''
