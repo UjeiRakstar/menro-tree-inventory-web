@@ -54,7 +54,10 @@ export function AuthProvider({ children }) {
     if (row?.lgu_psgc) {
       const { data: lguData } = await supabase
         .from('lgus')
-        .select('psgc, name, label, is_city, short_code')
+        // Every column, for the same reason as the profile: the hall pin's
+        // columns arrive with municipal_halls.sql, and naming them before then
+        // would fail the whole read.
+        .select('*')
         .eq('psgc', row.lgu_psgc)
         .maybeSingle();
       if (load !== latestLoad.current) return;

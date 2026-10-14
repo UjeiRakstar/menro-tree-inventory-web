@@ -150,6 +150,21 @@ export default function Login() {
           </div>
         </div>
 
+        {/* The way back for a visitor who came to the wrong door. */}
+        <p className="mt-6 text-center text-sm">
+          <Link to="/public-map" className="font-medium text-green-700 hover:text-green-800">
+            ← Back to the public map
+          </Link>
+          <span className="mx-2 text-slate-300" aria-hidden="true">·</span>
+          <Link to="/about" className="font-medium text-green-700 hover:text-green-800">
+            About Green Tag
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-xs text-slate-500">
+          Office accounts are made for a desktop computer. Tablets: most tools work. Phones: use the
+          Green Tag mobile app.
+        </p>
+
         <p className="text-center text-xs text-slate-400 mt-6">
           © 2026 MENRO • Municipal Environment & Natural Resources Office
         </p>

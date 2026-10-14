@@ -2,17 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { MapPin, Camera, Loader2, CheckCircle2, X } from 'lucide-react';
 import Confetti from 'react-confetti';
 import { supabase } from '../../supabaseClient.js';
+import { municipalityAt } from '../../lib/lagunaBoundaries.js';
+import { barangayAt, loadBarangayIndex } from '../../lib/barangayLookup.js';
+import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
+
+/** Postgres's "no such column", or PostgREST's cached form of it. */
+const isMissingColumn = (error) =>
+  error?.code === '42703' || error?.code === 'PGRST204' || /column .* does not exist|Could not find the/i.test(error?.message ?? '');
 
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'YOUR_CLOUD_NAME';
 const CLOUDINARY_UPLOAD_PRESET = 'tree_inventory_mobile';
-
-const BARANGAYS = [
-  'Alipit', 'Bagumbayan', 'Barangay I', 'Barangay II', 'Barangay III',
-  'Barangay IV', 'Barangay V', 'Bubukal', 'Calios', 'Duhat', 'Gatid',
-  'Jasaan', 'Labuin', 'Malinao', 'Oogong', 'Pagsawitan', 'Palasan',
-  'Patimbao', 'San Jose', 'San Juan', 'San Pablo Norte', 'San Pablo Sur',
-  'Santisima Cruz', 'Santo Angel Central', 'Santo Angel Norte', 'Santo Angel Sur',
-];
 
 const COMMON_SPECIES = [
   'Narra', 'Mahogany', 'Mango', 'Coconut', 'Acacia', 'Rambutan',
@@ -72,49 +71,44 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
     }
   }, []);
 
-  // Auto-detect barangay from coordinates via reverse geocoding
+  // Which town and barangay the tag is in, worked out from the PSA boundaries
+  // the rest of the site uses — not asked of OpenStreetMap, whose crowdsourced
+  // names ("Villa Silangan Subdivision", "Unknown Barangay") are what the
+  // barangay clean-up had to undo. The town is what routes the tag to the
+  // LGU that will verify it.
+  const [municipality, setMunicipality] = useState('');
   useEffect(() => {
-    if (!latitude || !longitude) return;
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
     let cancelled = false;
 
-    async function detectBarangay() {
-      setBarangayLoading(true);
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=16&addressdetails=1`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        if (cancelled) return;
-        if (!res.ok) throw new Error('Geocoding failed');
-        const data = await res.json();
-        const addr = data?.address || {};
-        // Nominatim may return the barangay under different keys
-        const detected = addr.suburb || addr.neighbourhood || addr.village || addr.quarter || '';
-
-        if (detected) {
-          // Try to match against our known barangays list
-          const match = BARANGAYS.find(
-            (b) => b.toLowerCase() === detected.toLowerCase() ||
-                   detected.toLowerCase().includes(b.toLowerCase()) ||
-                   b.toLowerCase().includes(detected.toLowerCase())
-          );
-          if (match) {
-            setBarangay(match);
-          } else {
-            // Partial match — set the closest or leave for user to pick
-            setBarangay('');
-          }
-        }
-      } catch {
-        // Silently fail — user can still pick manually
-      } finally {
-        if (!cancelled) setBarangayLoading(false);
-      }
+    const town = municipalityAt([lat, lng]) ?? '';
+    setMunicipality(town);
+    if (!town) {
+      setBarangay('');
+      return undefined;
     }
 
-    detectBarangay();
-    return () => { cancelled = true; };
+    setBarangayLoading(true);
+    loadBarangayIndex()
+      .then(() => {
+        if (cancelled) return;
+        const found = barangayAt([lat, lng]);
+        setBarangay(found?.municipality === town ? found.barangay : '');
+      })
+      .catch(() => {
+        // The resident can still pick from the list.
+      })
+      .finally(() => {
+        if (!cancelled) setBarangayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [latitude, longitude]);
+
+  const barangayOptions = barangaysOf(municipality);
 
   function getGPS() {
     if (!navigator.geolocation) {
@@ -143,6 +137,10 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
       setSubmitError('GPS coordinates are required. Please enable location services.');
       return;
     }
+    if (!municipality) {
+      setSubmitError('This spot is outside Laguna, so there is no LGU to send the tag to.');
+      return;
+    }
     if (!barangay) {
       setSubmitError('Please select a barangay.');
       return;
@@ -166,7 +164,7 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
       ]);
 
       // Insert into pending_trees
-      const { error } = await supabase.from('pending_trees').insert({
+      const tag = {
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
         barangay,
@@ -177,7 +175,21 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
         fruits_url: fruitsUrl,
         status: 'pending',
         submitted_at: new Date().toISOString(),
-      });
+      };
+      // Which city or municipality the resident was standing in. It is what
+      // routes the tag to the LGU whose field team will verify it (see
+      // supabase/tag_routing.sql); outside Laguna there is none, and PGENRO
+      // gets it.
+
+      let { error } = await supabase
+        .from('pending_trees')
+        .insert(municipality ? { ...tag, municipality } : tag);
+      // A database that has not had tag_routing.sql run yet has no such
+      // column. A resident's tag matters more than its routing: send it
+      // without, and the database routes it by barangay once the file runs.
+      if (error && isMissingColumn(error)) {
+        ({ error } = await supabase.from('pending_trees').insert(tag));
+      }
 
       if (error) throw error;
       setSuccess(true);
@@ -278,7 +290,7 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
           {/* Barangay */}
           <div>
             <label htmlFor="tag-barangay" className="block text-sm font-medium text-gray-700 mb-1">
-              Barangay
+              Barangay{municipality && <span className="font-normal text-gray-500">, {labelOf(municipality)}</span>}
               {barangayLoading && (
                 <span className="ml-2 text-xs text-green-600 font-normal">
                   <Loader2 size={10} className="inline animate-spin mr-1" />
@@ -292,13 +304,13 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
               onChange={(e) => setBarangay(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-green-500 focus:ring-2 focus:ring-green-500/20"
             >
-              <option value="">Select barangay…</option>
-              {BARANGAYS.map((b) => (
+              <option value="">{municipality ? 'Select barangay…' : 'Outside Laguna'}</option>
+              {barangayOptions.map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
             {barangay && !barangayLoading && (
-              <p className="text-[11px] text-green-600 mt-1">Auto-detected from your location</p>
+              <p className="text-[11px] text-green-600 mt-1">Worked out from where you are standing</p>
             )}
           </div>
 

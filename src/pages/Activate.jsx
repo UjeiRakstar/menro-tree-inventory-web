@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, KeyRound, Leaf, Lock, Mail, TreePine, User } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { CODE_REASONS, codeProblem, formatCode, normalizeCode } from '../lib/accountCodes.js';
 import { roleLabel } from '../lib/roles.js';
+
+// A map is a heavy thing to load for a page most people see once. It comes
+// only when the hall actually has to be pinned.
+const PinPicker = lazy(() => import('../components/map/PinPicker.jsx'));
 
 const MIN_PASSWORD_LENGTH = 10;
 
@@ -45,6 +49,9 @@ export default function Activate() {
   const [checking, setChecking] = useState(false);
   // What the code unlocks, once the database has said it is good.
   const [unlocks, setUnlocks] = useState(null);
+  // The hall, pinned here when nobody from this LGU has pinned it yet.
+  const [hall, setHall] = useState(null);
+  const [hallConfirmed, setHallConfirmed] = useState(false);
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -76,7 +83,16 @@ export default function Activate() {
       setCodeError(CODE_REASONS[result.reason] ?? CODE_REASONS.not_found);
       return;
     }
-    setUnlocks({ label: result.lgu_label, isCity: Boolean(result.is_city) });
+    setUnlocks({
+      label: result.lgu_label,
+      isCity: Boolean(result.is_city),
+      // Both arrive with municipal_halls.sql. Without them there is no hall
+      // step, and activation works exactly as before.
+      name: result.lgu_name ?? null,
+      hallPinned: result.hall_lat != null,
+    });
+    setHall(null);
+    setHallConfirmed(false);
   }
 
   async function handleCreate(event) {
@@ -96,7 +112,12 @@ export default function Activate() {
       email: email.trim(),
       password,
       options: {
-        data: { full_name: fullName.trim(), account_code: normalizeCode(code) },
+        data: {
+          full_name: fullName.trim(),
+          account_code: normalizeCode(code),
+          // Saved with the account, and only if the LGU has no pin yet.
+          ...(hall && { hall_lat: hall[0], hall_lng: hall[1] }),
+        },
         emailRedirectTo: `${window.location.origin}/login`,
       },
     });
@@ -117,6 +138,9 @@ export default function Activate() {
   }
 
   const role = unlocks ? roleLabel('lgu_admin', { isCity: unlocks.isCity }) : '';
+  const hallLabel = unlocks?.isCity ? 'City Hall' : 'Municipal Hall';
+  // The hall step: this LGU has no pin yet, and this officer has not placed one.
+  const needsHall = Boolean(unlocks?.name) && !unlocks.hallPinned && !hallConfirmed;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-4">
@@ -189,6 +213,33 @@ export default function Activate() {
                 {checking ? 'Checking…' : 'Check code'}
               </button>
             </form>
+          ) : needsHall ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3" role="status">
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-700">This code sets up</p>
+                <p className="text-base font-bold text-green-900">
+                  {unlocks.label} · {role}
+                </p>
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-800">Where is the {unlocks.label} {hallLabel}?</h2>
+                <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                  The office map&apos;s centre button flies here. Nobody from {unlocks.label} has pinned it
+                  yet, so it is yours to place — and you can move it later from the map.
+                </p>
+              </div>
+              <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-slate-100" />}>
+                <PinPicker municipality={unlocks.name} value={hall} onChange={setHall} placeLabel={hallLabel} />
+              </Suspense>
+              <button
+                type="button"
+                onClick={() => setHallConfirmed(true)}
+                disabled={!hall}
+                className="w-full rounded-lg bg-green-700 py-2.5 text-sm font-medium text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Continue
+              </button>
+            </div>
           ) : (
             <form onSubmit={handleCreate} className="space-y-4">
               {/* Whose account this is, before anything else is typed. */}

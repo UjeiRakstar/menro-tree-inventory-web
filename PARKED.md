@@ -61,14 +61,24 @@ stale and two claims in my own write-ups turned out not to be true.
 ## The logged-in side — what is left after phases 1 and 2
 
 Phases 1 (accounts) and 2 (the office map) are written and tested; see
-ACCOUNTS_AND_MAPPING.md. Neither changes the database until it is run, in this
-order: **`supabase/accounts.sql`**, then **`supabase/lgu_fence.sql`** — and
-after the second, **sync one tree from the field app**. The fence is the one
-change in either file that the mobile app could feel, and it has been tested
-against real Postgres but never against the app. Its section 4 undoes it in
-one statement.
+ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
+
+1. `supabase/accounts.sql`
+2. `supabase/lgu_fence.sql` — then **sync one tree from the field app**
+3. `supabase/municipal_halls.sql`
+4. `supabase/tag_routing.sql` — then **open the field app's task list** and
+   check a dispatched tag still shows
+
+Steps 2 and 4 are the only ones the mobile app could feel. Both were tested
+against real Postgres (20 of 20, 24 of 24) but never against the app; step 2's
+section 4 undoes it in one statement.
 
 Still open:
+- **`promote_pending_tree` does not check jurisdiction.** It is SECURITY
+  DEFINER, so it reads `pending_trees` past the new routing rules: a field
+  officer who knew the id of another LGU's tag could publish it. Not reachable
+  from the app's own screens. The fix is one check inside the function, which
+  lives in `supabase/crowdsource_promotion.sql`.
 - **A MENRO can create a field officer in any municipality.** The Arborists
   page lets them pick any of the thirty. The new officer then lands in that
   LGU — out of sight of the MENRO who created them. The list should be their
@@ -95,6 +105,26 @@ way: **any signed-in arborist could make themselves an admin** by updating the
   of 43 checks passed. The harness lives in this session's scratch folder, not
   the repo. Worth adding to the repo before phase 3 writes the area tables —
   it is the only way to test a policy before it is live.
+
+## Asked for on 14 October, not built yet
+
+- **A training account, for Siniloan first.** Dummy data an LGU can practise
+  on and that is purged afterwards. Waiting on one decision: in the live
+  database, walled off, or in a separate Supabase project. See the reply of
+  14 October.
+- **PGENRO's Action Board** — an overview of every LGU's hazards, read-only,
+  each count opening the trees behind it. Waiting on what "code 1" and
+  "code 2" mean.
+- **PGENRO's permit logs** — grouped by LGU, read-only, with archive and a
+  report.
+- **Species from the RISE publication** — a Trees sub-tab where the PGENRO
+  forester enters what an ERDB RISE issue says about a species.
+- **Reading a RISE PDF automatically** — Gemini, or a script, filling that form
+  in for the forester to check. Waiting on whether there is a Gemini key, and
+  whether sending the PDFs to Google is acceptable.
+- **Google sign-in for the public, and a leaderboard** of who tagged the most
+  trees. Counts registered residents and their tags, for the City Biodiversity
+  Index later.
 
 ## Waiting on another system
 
@@ -191,9 +221,14 @@ stays reserved for the four kinds above.
 - ~~Tooltips cut off.~~ One shared `InfoHint`, portalled to the page body so no
   `overflow` can clip it. (Three of the four copies — see above.)
 - ~~Image weight.~~ 160 MB → 6.7 MB of built assets.
-- ~~Marker clustering.~~ Pins group into bubbles that come apart as the map
-  zooms in, and no bubble survives the furthest zoom: anything still on top of
-  itself fans out into a ring on legs.
+- ~~Marker clustering.~~ Built, then **removed on request** (14 October): a
+  bubble sat at the average of its trees and the ring at the furthest zoom
+  moved them further still, which on a map about where trees stand misled more
+  than it helped. Every pin is drawn at its own coordinates.
+- ~~The web tagging form asking OpenStreetMap.~~ It worked out the barangay from
+  Nominatim and offered Santa Cruz's barangays only, so a resident anywhere else
+  could not send a tag. It now uses the PSA boundaries and lists the barangays
+  of whichever town the tag is in.
 - ~~Barangay names.~~ 111 of 112 trees linked to a real PSA barangay; the field
   app no longer asks OpenStreetMap.
 - ~~RLS audit.~~ `public.trees` had row level security off, so the website's

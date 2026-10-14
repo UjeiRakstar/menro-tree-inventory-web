@@ -1,4 +1,5 @@
 import { BASEMAPS, thumbnailTile } from '../../lib/basemaps.js';
+import { TILE_SIZE } from './ToolTile.jsx';
 
 /**
  * Street or satellite, as two small pictures of the map itself.
@@ -21,7 +22,7 @@ export default function BasemapSwitcher({ current, onChange, centre, className =
             aria-checked={selected}
             onClick={() => onChange(basemap.id)}
             title={basemap.longLabel}
-            className={`group relative h-16 w-16 overflow-hidden rounded-xl bg-white shadow-lg transition sm:h-[4.5rem] sm:w-[4.5rem] ${
+            className={`group relative ${TILE_SIZE} overflow-hidden rounded-xl bg-white shadow-lg transition ${
               selected ? 'ring-[3px] ring-lime-400' : 'ring-1 ring-slate-200 hover:ring-2 hover:ring-slate-400'
             }`}
           >

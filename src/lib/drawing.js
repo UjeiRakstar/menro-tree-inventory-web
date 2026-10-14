@@ -1,5 +1,5 @@
 import { ringAreaM2 } from './areaGeometry.js';
-import { projectAt } from './clusterPins.js';
+import { projectAt } from './mercator.js';
 
 /**
  * Drawing an area on the map, the way Google Maps measures one.

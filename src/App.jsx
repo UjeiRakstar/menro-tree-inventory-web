@@ -4,6 +4,7 @@ import Header from './components/Header.jsx';
 import PublicNavbar from './components/PublicNavbar.jsx';
 import AccountBlocked from './components/AccountBlocked.jsx';
 import AdminFooter from './components/AdminFooter.jsx';
+import DesktopNotice from './components/DesktopNotice.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
@@ -73,6 +74,7 @@ function Shell() {
   return (
     <div className="h-screen flex flex-col">
       <Header />
+      <DesktopNotice />
       <main className={mainClassName}>
         {/* Inside the shell, so the header stays while a page arrives. */}
         <Suspense fallback={<PageLoading />}>

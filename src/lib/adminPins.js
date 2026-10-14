@@ -44,21 +44,6 @@ export function pinColorOf(tree) {
   return classifyPinColor(tree);
 }
 
-/**
- * The colour of a group bubble: its most urgent tree.
- *
- * An average would be meaningless, and the majority would be worse: forty
- * green trees around one red hazard would draw a green bubble, and the one
- * tree that needs somebody today would vanish into it until the map was zoomed
- * all the way in.
- */
-export function mostUrgent(colors) {
-  for (const color of URGENCY) {
-    if (colors.includes(color)) return color;
-  }
-  return PIN_COLOR.GREEN;
-}
-
 /** How many trees need somebody sent to them — the badge on Action Board. */
 export const needingAction = (trees) =>
   (Array.isArray(trees) ? trees : []).filter((tree) => classifyPinColor(tree) === PIN_COLOR.RED).length;

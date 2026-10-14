@@ -1,5 +1,22 @@
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+const { mapClick } = vi.hoisted(() => ({ mapClick: {} }));
+
+vi.mock('react-leaflet', () => {
+  const passthrough = ({ children }) => <div>{children}</div>;
+  return {
+    MapContainer: passthrough,
+    TileLayer: () => null,
+    Polygon: () => null,
+    GeoJSON: () => null,
+    CircleMarker: ({ center }) => <div data-testid="hall-pin" data-center={JSON.stringify(center)} />,
+    useMapEvents: (handlers) => {
+      mapClick.handler = handlers.click;
+      return {};
+    },
+  };
+});
 
 vi.mock('../supabaseClient.js', async () => {
   const { supabaseMock } = await import('../test/supabaseMock.js');
@@ -143,5 +160,56 @@ describe('the account', () => {
     await reachAccountForm();
     fireEvent.click(screen.getByRole('button', { name: /Use a different code/ }));
     expect(codeBox()).toBeInTheDocument();
+  });
+});
+
+describe('pinning the hall', () => {
+  /** A click on the PinPicker's map. */
+  const clickMap = (lat, lng) => act(() => mapClick.handler({ latlng: { lat, lng } }));
+
+  async function reachHallStep() {
+    codeAnswers({ ok: true, reason: 'ok', lgu_label: 'Santa Cruz', is_city: false, lgu_name: 'Santa Cruz', hall_lat: null, hall_lng: null });
+    renderPage();
+    typeCode(GOOD_CODE);
+    return screen.findByRole('heading', { name: 'Where is the Santa Cruz Municipal Hall?' });
+  }
+
+  it('asks for the hall when nobody from the LGU has pinned it', async () => {
+    await reachHallStep();
+    // Nothing can be skipped: the office map needs somewhere to fly to.
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  });
+
+  it('takes a pin inside the LGU, and refuses one outside it', async () => {
+    await reachHallStep();
+    await waitFor(() => expect(mapClick.handler).toBeTypeOf('function'));
+
+    clickMap(14.2325, 121.3666); // Pila
+    expect(await screen.findByText('That is outside Santa Cruz.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+
+    clickMap(14.2794, 121.4157);
+    expect(screen.getByTestId('hall-pin').dataset.center).toBe('[14.2794,121.4157]');
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('sends the pin with the sign-up, for the database to save', async () => {
+    await reachHallStep();
+    await waitFor(() => expect(mapClick.handler).toBeTypeOf('function'));
+    clickMap(14.2794, 121.4157);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    fillAccount();
+    await waitFor(() => expect(supabaseMock.supabase.auth.signUp).toHaveBeenCalled());
+    const [request] = supabaseMock.supabase.auth.signUp.mock.calls[0];
+    expect(request.options.data).toMatchObject({ hall_lat: 14.2794, hall_lng: 121.4157 });
+  });
+
+  it('skips the step when the hall is pinned already', async () => {
+    codeAnswers({ ok: true, reason: 'ok', lgu_label: 'Santa Cruz', is_city: false, lgu_name: 'Santa Cruz', hall_lat: 14.2794, hall_lng: 121.4157 });
+    renderPage();
+    typeCode(GOOD_CODE);
+    expect(await screen.findByLabelText('Full name')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Municipal Hall/ })).not.toBeInTheDocument();
   });
 });

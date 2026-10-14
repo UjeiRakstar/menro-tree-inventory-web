@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 // -----------------------------------------------------------------------------
 const {
   flyToBoundsSpy,
+  flyToSpy,
   fitBoundsSpy,
   featureHandlers,
   siteHandlers,
@@ -15,6 +16,7 @@ const {
   mapEventHandlers,
 } = vi.hoisted(() => ({
   flyToBoundsSpy: vi.fn(),
+  flyToSpy: vi.fn(),
   fitBoundsSpy: vi.fn(),
   featureHandlers: new Map(),
   // Drawn areas carry a `municipality` of their own, so keying everything by
@@ -102,7 +104,7 @@ vi.mock('react-leaflet', () => ({
   useMap: () => ({
     flyToBounds: flyToBoundsSpy,
     fitBounds: fitBoundsSpy,
-    flyTo: vi.fn(),
+    flyTo: flyToSpy,
     getZoom: () => mapState.zoom,
     getPane: (name) => panes.get(name),
     createPane: (name) => {
@@ -187,6 +189,7 @@ beforeEach(() => {
   siteHandlers.clear();
   panes.clear();
   flyToBoundsSpy.mockClear();
+  flyToSpy.mockClear();
   fitBoundsSpy.mockClear();
   mapState.zoom = 18;
   supabaseMock.setResponse('trees:select', { data: TREES, error: null });
@@ -487,49 +490,18 @@ describe('PublicMap', () => {
     });
   });
 
-  it('groups trees that would be drawn on top of each other, and counts them', async () => {
-    // Seen from across the province rather than from the street.
+  it('draws every tree where it was tagged, at every zoom', async () => {
+    // There is no grouping any more. A bubble sat at the average of its
+    // trees, and a fanned-out ring moved them further still; on a map whose
+    // point is WHERE a tree stands, both misled.
     mapState.zoom = 11;
     renderMap();
 
-    // Three in Santa Cruz, two in Pila: two bubbles, no loose pins.
-    await waitFor(() => expect(clusters()).toHaveLength(2));
-    expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
-    expect(clusters().map((c) => c.dataset.label).sort()).toEqual([
-      '2 tagged trees — zoom in to see them',
-      '3 tagged trees — zoom in to see them',
-    ]);
-  });
-
-  it('zooms into a group when it is tapped, rather than opening one of them', async () => {
-    mapState.zoom = 11;
-    renderMap();
-    await waitFor(() => expect(clusters()).toHaveLength(2));
-
-    fireEvent.click(clusters()[0]);
-
-    // The corners of what is inside it, not a tree panel.
-    expect(fitBoundsSpy).toHaveBeenCalledWith(
-      expect.any(Array),
-      expect.objectContaining({ maxZoom: expect.any(Number) })
-    );
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
-  });
-
-  it('never hides the open tree inside a group', async () => {
-    renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
-    fireEvent.click(markerFor(TREES[0]));
-    await screen.findByRole('complementary');
-
-    // Zooming out would otherwise fold the open tree under a number, which
-    // looks like the pin you just tapped has gone.
-    mapState.zoom = 11;
-    act(() => mapEventHandlers.zoomend());
-
-    await waitFor(() => expect(clusters().length).toBeGreaterThan(0));
-    expect(markerFor(TREES[0])).toBeDefined();
-    expect(markerFor(TREES[0]).dataset.fill).toBe('#064e3b');
+    expect(clusters()).toHaveLength(0);
+    for (const tree of TREES) {
+      expect(markerFor(tree)).toBeDefined();
+    }
   });
 
   it('keeps the tree points in a pane above the boundaries, so they stay clickable', async () => {
@@ -738,61 +710,6 @@ describe('the spaces on the map, as against the points', () => {
   });
 });
 
-describe('groups that zooming cannot pull apart', () => {
-  /** Two trees tagged a metre and a half from each other, as happens in a yard. */
-  const TOUCHING = [
-    { id: 90, species: 'Narra', latitude: 14.2823, longitude: 121.4163, barangay: 'Poblacion' },
-    { id: 91, species: 'Mango', latitude: 14.28231, longitude: 121.41631, barangay: 'Poblacion' },
-  ];
-
-  it('never leaves a bubble standing at the furthest zoom', async () => {
-    // The visitor zoomed all the way in and was still looking at a number.
-    // There is nothing left to zoom into, so the group has to come apart here.
-    supabaseMock.setResponse('trees:select', { data: TOUCHING, error: null });
-    mapState.zoom = 21;
-    renderMap();
-
-    await waitFor(() => expect(markers()).toHaveLength(2));
-    expect(clusters()).toHaveLength(0);
-  });
-
-  it('fans the pins out so each one can be tapped', async () => {
-    supabaseMock.setResponse('trees:select', { data: TOUCHING, error: null });
-    mapState.zoom = 21;
-    renderMap();
-    await waitFor(() => expect(markers()).toHaveLength(2));
-
-    // Both have been moved off the spot they were stacked on...
-    const drawn = markers().map((m) => JSON.parse(m.dataset.center));
-    for (const tree of TOUCHING) {
-      expect(drawn).not.toContainEqual([tree.latitude, tree.longitude]);
-    }
-    // ...and a leg is drawn back to where the group stood.
-    expect(screen.getAllByTestId('spider-leg')).toHaveLength(2);
-  });
-
-  it('leaves well-spaced pins exactly where they were tagged', async () => {
-    // Fanning pins that already have room would pull them CLOSER together.
-    mapState.zoom = 21;
-    renderMap();
-    await waitFor(() => expect(markers()).toHaveLength(5));
-
-    expect(screen.queryAllByTestId('spider-leg')).toHaveLength(0);
-    for (const tree of TREES) {
-      expect(markerFor(tree)).toBeTruthy();
-    }
-  });
-
-  it('still groups them at a zoom where zooming would help', async () => {
-    supabaseMock.setResponse('trees:select', { data: TOUCHING, error: null });
-    mapState.zoom = 14;
-    renderMap();
-
-    await waitFor(() => expect(clusters()).toHaveLength(1));
-    expect(clusters()[0].dataset.label).toContain('2 tagged trees');
-  });
-});
-
 describe('on a phone, one panel at a time', () => {
   // Every panel is the full width of a phone screen, so two open at once is
   // one lying on top of the other. On a desktop the two sides coexist.
@@ -928,6 +845,8 @@ describe('the office map', () => {
     expect(officePin(OFFICE_TREES[4])).toBeUndefined();
     // One LGU: nothing to choose between.
     expect(screen.queryByLabelText('Zoom to a city or municipality')).not.toBeInTheDocument();
+    // The legend is behind its tile on the office map.
+    fireEvent.click(screen.getByRole('button', { name: 'Show the legend' }));
     expect(screen.getByText('Outside Santa Cruz')).toBeInTheDocument();
   });
 
@@ -1085,5 +1004,119 @@ describe('the public map stays the public map', () => {
     for (const marker of markers()) {
       expect(['#dc2626', '#f97316', '#eab308']).not.toContain(marker.dataset.fill);
     }
+  });
+});
+
+describe('the office map, round three', () => {
+  const HALL = [14.2794, 121.4157];
+
+  function renderOfficeWith(props = {}) {
+    return render(
+      <MemoryRouter>
+        <TreeMap mode="admin" fence="Santa Cruz" {...props} />
+      </MemoryRouter>
+    );
+  }
+
+  beforeEach(() => {
+    supabaseMock.setResponse('trees:select', { data: TREES, error: null });
+    delete mapEventHandlers.click;
+  });
+
+  it('has no "where am I" — the office flies to its hall instead', async () => {
+    renderOfficeWith({ hall: HALL });
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: 'Go to my location' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Centre the map on the Municipal Hall' }));
+    expect(flyToSpy).toHaveBeenCalledWith(HALL, 17, expect.any(Object));
+  });
+
+  it('shows the hall on the map, and lets its own office move it', async () => {
+    renderOfficeWith({ hall: HALL, canPinHall: true, onPinHall: vi.fn() });
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+
+    const hall = clusters().find((m) => m.dataset.label === 'Municipal Hall');
+    fireEvent.click(hall);
+    const card = screen.getByRole('dialog', { name: 'Municipal Hall' });
+    expect(within(card).getByRole('button', { name: 'Move pin' })).toBeInTheDocument();
+  });
+
+  it('asks the office to pin a hall it has not pinned, and saves the click', async () => {
+    const onPinHall = vi.fn().mockResolvedValue({});
+    renderOfficeWith({ canPinHall: true, onPinHall });
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin it now' }));
+    expect(screen.getByText(/Click the map where the Municipal Hall stands/)).toBeInTheDocument();
+
+    // Outside the LGU: refused, with a sentence.
+    await act(async () => mapEventHandlers.click({ latlng: { lat: 14.2325, lng: 121.3666 } }));
+    expect(await screen.findByText(/outside Santa Cruz/)).toBeInTheDocument();
+    expect(onPinHall).not.toHaveBeenCalled();
+
+    await act(async () => mapEventHandlers.click({ latlng: { lat: HALL[0], lng: HALL[1] } }));
+    await waitFor(() => expect(onPinHall).toHaveBeenCalledWith(HALL));
+    await waitFor(() =>
+      expect(screen.queryByText(/Click the map where the Municipal Hall stands/)).not.toBeInTheDocument()
+    );
+  });
+
+  it('does not ask PGENRO to pin a hall', async () => {
+    render(
+      <MemoryRouter>
+        <TreeMap mode="admin" />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: 'Pin it now' })).not.toBeInTheDocument();
+  });
+
+  it('turns layers off and on, and lists the PGENRO ones as not uploaded yet', async () => {
+    renderOfficeWith();
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose map layers' }));
+    const panel = screen.getByRole('dialog', { name: 'Map layers' });
+
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Tagged trees/ }));
+    expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Tagged trees/ }));
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+
+    for (const name of ['Soil type', 'Elevation', 'Flood hazard', 'Rain-induced landslide hazard']) {
+      expect(within(panel).getByRole('checkbox', { name })).toBeDisabled();
+    }
+  });
+
+  it('keeps the legend shut until it is asked for', async () => {
+    renderOfficeWith();
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    expect(screen.queryByRole('dialog', { name: 'Legend' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the legend' }));
+    expect(screen.getByRole('dialog', { name: 'Legend' })).toHaveTextContent('Hazard — needs dispatching');
+  });
+
+  it('puts no green wash over the town, and no "in focus" card', async () => {
+    renderOfficeWith();
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    act(() => featureHandlers.get('Santa Cruz').click());
+    expect(screen.queryByText('In focus')).not.toBeInTheDocument();
+  });
+});
+
+describe('the public map, round three', () => {
+  it('closes a land cover or planting site panel when a town is opened', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+
+    act(() => siteHandlers.get('ps-labuin').click());
+    await screen.findByRole('complementary', { name: 'Labuin Tree Planting Site' });
+
+    act(() => featureHandlers.get('Santa Cruz').click());
+    await screen.findByRole('complementary', { name: /Santa Cruz/ });
+    await waitFor(() =>
+      expect(screen.queryByRole('complementary', { name: 'Labuin Tree Planting Site' })).not.toBeInTheDocument()
+    );
   });
 });
