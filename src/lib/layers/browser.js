@@ -1,4 +1,5 @@
 import { prepareElevation, prepareHazard, prepareSoil, readGeoJson } from './prepare.js';
+import { repaintMap, repaintPixels } from './palette.js';
 
 /**
  * The browser's half of the map layers: files in, files out.
@@ -45,6 +46,38 @@ async function encodePng({ width, height, data }) {
   canvas.height = height;
   canvas.getContext('2d').putImageData(image, 0, 0);
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+}
+
+// ---- Repainting -------------------------------------------------------------------
+
+const repainted = new Map();
+
+/**
+ * A published picture in today's colours (palette.js): the picture itself
+ * when it already is, otherwise a repainted copy, made once per page. Falls
+ * back to the picture as published if the browser cannot repaint it.
+ */
+export function repaintPicture(url, kind, legend) {
+  const map = repaintMap(kind, legend);
+  if (!url || map.size === 0) return Promise.resolve(url);
+  if (!repainted.has(url)) {
+    repainted.set(
+      url,
+      (async () => {
+        const blob = await (await fetch(url)).blob();
+        const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+        const canvas = typeof OffscreenCanvas !== 'undefined'
+          ? new OffscreenCanvas(bitmap.width, bitmap.height)
+          : Object.assign(document.createElement('canvas'), { width: bitmap.width, height: bitmap.height });
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, 0, 0);
+        const image = context.getImageData(0, 0, bitmap.width, bitmap.height);
+        repaintPixels(image.data, map);
+        return URL.createObjectURL(await encodePng({ width: image.width, height: image.height, data: image.data }));
+      })().catch(() => url)
+    );
+  }
+  return repainted.get(url);
 }
 
 // ---- Preparing ----------------------------------------------------------------------

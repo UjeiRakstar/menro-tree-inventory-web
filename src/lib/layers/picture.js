@@ -42,13 +42,6 @@ export function drawPicture(grid, values, colourOf) {
   return { width, height, data, bounds: [[south, grid.west], [grid.north, grid.west + width * grid.cell]] };
 }
 
-/** NOAH's flood hazard colours, as on its own maps. */
-export const HAZARD_COLOURS = Object.freeze({
-  1: [255, 255, 0, 150],
-  2: [255, 153, 0, 170],
-  3: [204, 0, 0, 180],
-});
-
 export const HAZARD_LEGEND = Object.freeze([
   { value: 1, label: 'Low' },
   { value: 2, label: 'Medium' },

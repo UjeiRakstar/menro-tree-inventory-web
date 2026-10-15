@@ -53,11 +53,11 @@ export function elevationGrid(grid, values, raster) {
  * would name, lowland to mountain.
  */
 export const ELEVATION_BANDS = Object.freeze([
-  { upTo: 100, label: 'Below 100 m', colour: [237, 248, 233] },
-  { upTo: 300, label: '100–300 m', colour: [186, 228, 179] },
-  { upTo: 500, label: '300–500 m', colour: [116, 196, 118] },
-  { upTo: 1000, label: '500–1,000 m', colour: [49, 163, 84] },
-  { upTo: Infinity, label: 'Above 1,000 m', colour: [0, 109, 44] },
+  { upTo: 100, label: 'Below 100 m' },
+  { upTo: 300, label: '100–300 m' },
+  { upTo: 500, label: '300–500 m' },
+  { upTo: 1000, label: '500–1,000 m' },
+  { upTo: Infinity, label: 'Above 1,000 m' },
 ]);
 
 /** 1-based band of a height, 0 for no data. */

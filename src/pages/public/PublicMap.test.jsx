@@ -1077,16 +1077,25 @@ describe('drawing and measuring an area', () => {
   });
 });
 
+// Santa Cruz's barangays in src/data/Laguna-Barangays.geojson.
+const SANTA_CRUZ_BARANGAYS = 26;
+
 describe('the public map stays the public map', () => {
   it('has the same layers as the offices, the survey layers marked as coming', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
+
+    fireEvent.click(screen.getByRole('button', { name: /^Survey layer: No layer/ }));
+    const survey = screen.getByRole('radiogroup', { name: 'Survey layer' });
+    expect(within(survey).getByRole('radio', { name: /No layer/ })).toBeChecked();
+    for (const name of ['Soil', 'Elevation', 'Flood', 'Landslide']) {
+      expect(within(survey).getByRole('radio', { name: new RegExp(name) })).toBeDisabled();
+    }
+
     fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
     const panel = screen.getByRole('dialog', { name: 'Map layers' });
     expect(within(panel).getByText('Every tree tagged in Laguna')).toBeInTheDocument();
-    for (const name of ['Soil type', 'Elevation', 'Flood hazard', 'Rain-induced landslide hazard']) {
-      expect(within(panel).getByRole('checkbox', { name: new RegExp(name) })).toBeDisabled();
-    }
+    expect(within(panel).getByRole('checkbox', { name: /Barangay boundaries/ })).toBeChecked();
 
     // Turning the trees off takes them off the map.
     fireEvent.click(within(panel).getByRole('checkbox', { name: /Tagged trees/ }));
@@ -1109,26 +1118,59 @@ describe('the public map stays the public map', () => {
     supabaseMock.setResponse('map_layers:select', {
       data: [{
         id: 'flood-1', kind: 'flood', active: true, picture_path: 'flood/1/picture.png',
-        meta: { kind: 'flood', bounds: [[13.95, 120.98], [14.61, 121.62]], legend: [{ value: 3, label: 'High', colour: [204, 0, 0, 180] }] },
+        // Published in today's colours (palette.js), so drawn as it is.
+        meta: { kind: 'flood', bounds: [[13.95, 120.98], [14.61, 121.62]], legend: [{ value: 3, label: 'High', colour: [8, 48, 107, 190] }] },
       }],
       error: null,
     });
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
-    fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
-    const panel = screen.getByRole('dialog', { name: 'Map layers' });
+    fireEvent.click(screen.getByRole('button', { name: /^Survey layer/ }));
+    const survey = screen.getByRole('radiogroup', { name: 'Survey layer' });
 
-    const flood = await within(panel).findByRole('checkbox', { name: /Flood hazard/ });
-    expect(flood).toBeEnabled();
-    expect(within(panel).getByRole('checkbox', { name: /Soil type/ })).toBeDisabled();
+    const flood = await within(survey).findByRole('radio', { name: /Flood/ });
+    await waitFor(() => expect(flood).toBeEnabled());
+    expect(within(survey).getByRole('radio', { name: /Soil/ })).toBeDisabled();
     expect(screen.queryByTestId('image-overlay')).not.toBeInTheDocument();
 
     fireEvent.click(flood);
-    const overlay = screen.getByTestId('image-overlay');
+    // Chosen, the row folds back into its picture, which now says so.
+    expect(screen.queryByRole('radiogroup', { name: 'Survey layer' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Survey layer: Flood/ })).toBeInTheDocument();
+    const overlay = await screen.findByTestId('image-overlay');
     expect(overlay.dataset.url).toMatch(/map-layers\/flood\/1\/picture\.png$/);
     expect(overlay.dataset.pane).toBe('layer-overlays');
-    // Its key, under the switch.
-    expect(within(panel).getByText('High')).toBeInTheDocument();
+    // Its key, in the legend.
+    expect(screen.getByText('High')).toBeInTheDocument();
+    expect(screen.getByText(/Flood hazard/)).toBeInTheDocument();
+
+    // One at a time: back to none takes it off.
+    fireEvent.click(screen.getByRole('button', { name: /^Survey layer/ }));
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Survey layer' })).getByRole('radio', { name: /No layer/ }));
+    expect(screen.queryByTestId('image-overlay')).not.toBeInTheDocument();
+  });
+
+  it('picks the base map from a stack of pictures', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    expect(screen.getByTestId('tile-layer').dataset.url).toMatch(/openstreetmap/);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Base map: Street map/ }));
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Base map' })).getByRole('radio', { name: /Satellite/ }));
+    expect(screen.getByTestId('tile-layer').dataset.url).toMatch(/arcgisonline/);
+    expect(screen.getByRole('button', { name: /^Base map: Satellite/ })).toBeInTheDocument();
+  });
+
+  it('draws the barangays of the town in focus, and only of that town', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    const barangayLayer = () => screen.getAllByTestId('geojson').find((g) => g.dataset.name === 'barangays');
+    expect(barangayLayer()).toBeUndefined();
+
+    act(() => featureHandlers.get('Santa Cruz').click());
+    await waitFor(() => expect(barangayLayer()).toBeDefined());
+    expect(Number(barangayLayer().dataset.featureCount)).toBe(SANTA_CRUZ_BARANGAYS);
+    expect(barangayLayer().dataset.pane).toBe('barangay-boundaries');
   });
 
   it('has none of the office’s tools', async () => {
@@ -1225,9 +1267,12 @@ describe('the office map, round three', () => {
     fireEvent.click(within(panel).getByRole('checkbox', { name: /Tagged trees/ }));
     await waitFor(() => expect(markers().length).toBeGreaterThan(0));
 
-    for (const name of ['Soil type', 'Elevation', 'Flood hazard', 'Rain-induced landslide hazard']) {
-      expect(within(panel).getByRole('checkbox', { name })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /^Survey layer/ }));
+    const survey = screen.getByRole('radiogroup', { name: 'Survey layer' });
+    for (const name of ['Soil', 'Elevation', 'Flood', 'Landslide']) {
+      expect(within(survey).getByRole('radio', { name: new RegExp(name) })).toBeDisabled();
     }
+    expect(within(survey).getAllByText('Not uploaded yet')).toHaveLength(4);
   });
 
   it('keeps the legend shut until it is asked for', async () => {

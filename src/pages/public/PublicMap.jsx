@@ -29,7 +29,7 @@ import {
   municipalityAt,
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
-import { BASEMAPS, basemapById } from '../../lib/basemaps.js';
+import { basemapById } from '../../lib/basemaps.js';
 import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../lib/adminPins.js';
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
@@ -43,10 +43,12 @@ import { useMapLayers } from '../../hooks/useMapLayers.js';
 import { useMeasuredSample } from '../../hooks/useMeasuredSample.js';
 import { measureArea } from '../../lib/layers/facts.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
-import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
+import { BasemapPicker, SurveyKey, SurveyPicker } from '../../components/map/MapPickers.jsx';
+import { repaintPicture } from '../../lib/layers/browser.js';
+import { soilColourOf, soilColours } from '../../lib/layers/palette.js';
 import LayersPanel from '../../components/map/LayersPanel.jsx';
 import ToolTile from '../../components/map/ToolTile.jsx';
-import { DEFAULT_LAYERS } from '../../lib/mapLayers.js';
+import { DEFAULT_LAYERS, PGENRO_OVERLAYS } from '../../lib/mapLayers.js';
 import DrawLayer from '../../components/map/DrawLayer.jsx';
 import MeasureBox from '../../components/map/MeasureBox.jsx';
 import { labelOf } from '../../lib/lguOptions.js';
@@ -139,6 +141,8 @@ const PANES = [
   // PGENRO's survey layers — soil, elevation, flood — over the base map and
   // under everything that takes a click.
   ['layer-overlays', 415],
+  // The barangays inside the LGU in focus, under the municipal outline.
+  ['barangay-boundaries', 418],
   ['laguna-boundaries', 420],
   // Areas sit over the municipal outlines and under the trees: a forest should
   // never swallow a click meant for a tree standing in it.
@@ -495,11 +499,13 @@ function UserLocationMarker({ onTagAttempt = null }) {
 }
 
 /**
- * BSWM soil units as coloured shapes, fetched when switched on. Not
- * clickable: the colours are keyed in the Layers panel, and a click here
- * belongs to the town, the area or the tree above it.
+ * BSWM soil units as coloured shapes, fetched when switched on, one colour
+ * per series (palette.js) and nothing over the lake. Not clickable: the
+ * colours are keyed in the legend, and a click here belongs to the town, the
+ * area or the tree above it.
  */
-function SoilOverlay({ url }) {
+function SoilOverlay({ url, classes }) {
+  const colours = useMemo(() => soilColours(classes), [classes]);
   const [data, setData] = useState(null);
   useEffect(() => {
     let cancelled = false;
@@ -518,19 +524,103 @@ function SoilOverlay({ url }) {
       data={data}
       pane="layer-overlays"
       interactive={false}
-      style={(feature) => ({
-        color: feature.properties.colour,
-        weight: 0.8,
-        opacity: 0.8,
-        fillColor: feature.properties.colour,
-        fillOpacity: 0.35,
-      })}
+      style={(feature) => {
+        const colour = soilColourOf(colours, feature.properties);
+        return colour
+          ? { color: colour, weight: 0.6, opacity: 0.7, fillColor: colour, fillOpacity: 0.45 }
+          : { stroke: false, fill: false };
+      }}
     />
   );
 }
 
-/** Drawn bottom to top: elevation under soil under the hazards. */
-const OVERLAY_ORDER = ['elevation', 'soil', 'flood', 'landslide'];
+/**
+ * Elevation or a hazard, as its published picture in today's colours
+ * (palette.js) — repainted in the browser when it was published in older
+ * ones, which is only done once it is switched on.
+ */
+function PictureOverlay({ layer, kind }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setUrl(null);
+    repaintPicture(layer.pictureUrl, kind, layer.meta?.legend).then((painted) => {
+      if (!cancelled) setUrl(painted);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [layer.pictureUrl, layer.meta, kind]);
+  if (!url) return null;
+  return <ImageOverlay url={url} bounds={layer.meta.bounds} pane="layer-overlays" opacity={0.9} />;
+}
+
+// The barangay boundaries are 800 kB, so they are fetched the first time an
+// LGU is in focus, not with the page.
+let barangaysOnce = null;
+const loadBarangays = () => {
+  barangaysOnce ??= import('../../data/Laguna-Barangays.geojson').then((module) => module.default);
+  return barangaysOnce;
+};
+
+/**
+ * The barangays of the city or municipality in focus: thin dashed lines, and
+ * their names once the map is close enough to read them. Not clickable — the
+ * areas and trees over them are what take a click.
+ */
+function BarangayLayer({ municipality, color }) {
+  const map = useMap();
+  const [all, setAll] = useState(null);
+  const [zoom, setZoom] = useState(() => map.getZoom?.() ?? 11);
+  useEffect(() => {
+    let cancelled = false;
+    loadBarangays()
+      .then((data) => !cancelled && setAll(data))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (!map.on) return undefined;
+    const onZoom = () => setZoom(map.getZoom());
+    map.on('zoomend', onZoom);
+    return () => map.off('zoomend', onZoom);
+  }, [map]);
+
+  const data = useMemo(
+    () =>
+      all && {
+        type: 'FeatureCollection',
+        name: 'barangays',
+        features: all.features.filter((feature) => feature.properties.municipality === municipality),
+      },
+    [all, municipality]
+  );
+  if (!data) return null;
+  const named = zoom >= BARANGAY_NAMES_ZOOM;
+  return (
+    <GeoJSON
+      key={`${municipality}-${color}-${named}`}
+      data={data}
+      pane="barangay-boundaries"
+      interactive={false}
+      style={{ color, weight: 1, opacity: 0.75, dashArray: '4 4', fill: false }}
+      onEachFeature={(feature, layer) => {
+        if (named) {
+          layer.bindTooltip(feature.properties.barangay, {
+            permanent: true,
+            direction: 'center',
+            className: 'barangay-label',
+          });
+        }
+      }}
+    />
+  );
+}
+
+/** Close enough to the ground for barangay names not to pile on each other. */
+const BARANGAY_NAMES_ZOOM = 14;
 
 /** How big a group bubble is: bigger for more trees, without saying how many. */
 function bubbleSize(count) {
@@ -841,6 +931,9 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const mapLayers = useMapLayers();
   // What is drawn over the base map, and which corner panel is open.
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
+  // The one survey layer laid over the map, if any: 'soil', 'elevation', …
+  const [survey, setSurvey] = useState(null);
+  const surveyLayer = survey ? mapLayers.layers[survey] ?? null : null;
   const [openTool, setOpenTool] = useState(null);
   // Pinning the hall: the prompt, the mode, and what went wrong.
   const [pinningHall, setPinningHall] = useState(false);
@@ -1441,6 +1534,26 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetAreaId, savedAreas.features]);
 
+  /** The survey layer laid over the map, keyed — in both maps' legends. */
+  const surveyOverlay = PGENRO_OVERLAYS.find((overlay) => overlay.id === survey);
+  const surveyLegend =
+    surveyLayer && surveyOverlay ? (
+      <div className="border-t border-slate-100 pt-1.5">
+        <p className="text-[11px] font-semibold text-slate-700">
+          {surveyOverlay.label} <span className="font-normal text-slate-400">· {surveyOverlay.source}</span>
+        </p>
+        <SurveyKey kind={survey} meta={surveyLayer.meta} className="mt-1 max-h-40 overflow-y-auto pr-1" />
+      </div>
+    ) : null;
+
+  // Where the base map and survey pictures are cut from.
+  const pickerCentre = centreOf((fence && boundsOfMunicipality(fence)) || LAGUNA_BOUNDS);
+  const pickerProps = (tool) => ({
+    centre: pickerCentre,
+    open: openTool === tool,
+    onOpenChange: (open) => setOpenTool(open ? tool : null),
+  });
+
   /**
    * The office map's legend, for its corner panel: the Command Center's
    * colours, most urgent first — the order the eye should take them in.
@@ -1480,6 +1593,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         <span className="h-3 w-3 shrink-0 rounded-sm border border-slate-300 bg-slate-200" />
         <span className="text-[11px] text-slate-600">Outside {fenceLabel || 'Laguna'}</span>
       </div>
+      {surveyLegend}
     </>
   );
 
@@ -1572,6 +1686,22 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           transform: translateX(-2.25rem);
         }
 
+        /* Barangay names: lettering on the map, not a box over it. */
+        .leaflet-tooltip.barangay-label {
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          padding: 0;
+          font-size: 10.5px;
+          font-weight: 600;
+          color: #334155;
+          text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
+          white-space: nowrap;
+        }
+        .leaflet-tooltip.barangay-label::before {
+          display: none;
+        }
+
         /* A pin that has just come out of a group is a new element, so this
            plays exactly when something de-clusters — on the pins that appeared,
            and not on the ones that were already standing alone. */
@@ -1650,22 +1780,21 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           interactive={false}
         />
 
-        {/* PGENRO's survey layers, as switched on */}
-        {OVERLAY_ORDER.map((kind) => {
-          const layer = mapLayers.layers[kind];
-          if (!layer || !layers[kind]) return null;
-          if (kind === 'soil') return layer.shapesUrl ? <SoilOverlay key={layer.id} url={layer.shapesUrl} /> : null;
-          if (!layer.pictureUrl || !layer.meta?.bounds) return null;
-          return (
-            <ImageOverlay
-              key={layer.id}
-              url={layer.pictureUrl}
-              bounds={layer.meta.bounds}
-              pane="layer-overlays"
-              opacity={kind === 'elevation' ? 0.75 : 0.85}
-            />
-          );
-        })}
+        {/* The PGENRO survey layer chosen, if any */}
+        {surveyLayer && survey === 'soil' && surveyLayer.shapesUrl && (
+          <SoilOverlay key={surveyLayer.id} url={surveyLayer.shapesUrl} classes={surveyLayer.meta?.classes} />
+        )}
+        {surveyLayer && survey !== 'soil' && surveyLayer.pictureUrl && surveyLayer.meta?.bounds && (
+          <PictureOverlay key={surveyLayer.id} layer={surveyLayer} kind={survey} />
+        )}
+
+        {/* The barangays of the LGU in focus */}
+        {layers.barangays && (fence || selectedLgu) && (
+          <BarangayLayer
+            municipality={fence || selectedLgu}
+            color={basemapId === 'satellite' ? '#ffffff' : '#475569'}
+          />
+        )}
 
         {/* Cities and municipalities inside Laguna */}
         {layers.boundaries && (
@@ -1896,22 +2025,9 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           </select>
         )}
 
-        {/* Tile layer selector — the office's map has picture buttons instead */}
-        {!admin && (
-          <select
-            value={basemapId}
-            onChange={(e) => setBasemapId(e.target.value)}
-            aria-label="Base map"
-            className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm focus:outline-none"
-          >
-            {BASEMAPS.map((basemap) => (
-              <option key={basemap.id} value={basemap.id}>{basemap.longLabel}</option>
-            ))}
-          </select>
-        )}
-
-        {/* What is drawn over the base map — the same list the offices have,
-            the PGENRO survey layers included as they arrive. */}
+        {/* What is drawn over the base map — the same list the offices have.
+            The base map and the survey layer are the pictures in the bottom
+            corner. */}
         {!admin && (
           <div className="relative">
             <button
@@ -1928,7 +2044,6 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
                 <LayersPanel
                   id="public-map-layers"
                   audience="public"
-                  available={mapLayers.layers}
                   layers={layers}
                   onToggle={toggleLayer}
                   onClose={() => setOpenTool(null)}
@@ -1991,7 +2106,6 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
                 <LayersPanel
                   id="map-layers"
                   layers={layers}
-                  available={mapLayers.layers}
                   onToggle={toggleLayer}
                   onClose={() => setOpenTool(null)}
                 />
@@ -2006,11 +2120,28 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             onClick={drawing ? stopDrawing : startDrawing}
             pressed={drawing}
           />
-          <BasemapSwitcher
-            current={basemapId}
-            onChange={setBasemapId}
-            centre={centreOf((fence && boundsOfMunicipality(fence)) || LAGUNA_BOUNDS)}
+          <SurveyPicker
+            current={survey}
+            onChange={setSurvey}
+            available={mapLayers.layers}
+            basemap={basemapId}
+            {...pickerProps('survey')}
           />
+          <BasemapPicker current={basemapId} onChange={setBasemapId} {...pickerProps('basemap')} />
+        </div>
+      )}
+
+      {/* The public map's two pictures, in the same corner */}
+      {!admin && (
+        <div className="map-right-control absolute bottom-6 right-3 z-[400] flex flex-col items-end gap-3">
+          <SurveyPicker
+            current={survey}
+            onChange={setSurvey}
+            available={mapLayers.layers}
+            basemap={basemapId}
+            {...pickerProps('survey')}
+          />
+          <BasemapPicker current={basemapId} onChange={setBasemapId} {...pickerProps('basemap')} />
         </div>
       )}
 
@@ -2029,11 +2160,11 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         </div>
       )}
 
-      {/* Legend — the public map's, open unless the Layers panel is: that
-          panel keys every layer itself, and the two share the right edge. The
-          office's is behind the Legend tile in the corner column. */}
-      {!admin && openTool !== 'layers' && (
-      <div className="map-right-control absolute bottom-24 right-3 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2">
+      {/* Legend — the public map's, beside the two pictures, and out of the
+          way while any corner panel is open over it. The office's is behind
+          the Legend tile in the corner column. */}
+      {!admin && openTool === null && (
+      <div className="map-right-control absolute bottom-6 right-[5.5rem] z-[400] max-w-[13rem] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2 sm:right-24">
         <p className="text-[10px] font-semibold text-slate-700 mb-1">Legend</p>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -2080,6 +2211,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             <span className="w-3 h-3 rounded-sm flex-shrink-0 border border-slate-300 bg-slate-200" />
             <span className="text-[10px] text-slate-600">Outside Laguna</span>
           </div>
+          {surveyLegend}
         </div>
       </div>
       )}

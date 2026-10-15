@@ -1,6 +1,7 @@
 import { LAGUNA_GRID, cellAreaM2, columnsOf, rasterize } from './grid.js';
 import { ELEVATION_BANDS, bandOf, elevationGrid } from './elevation.js';
-import { HAZARD_COLOURS, drawPicture } from './picture.js';
+import { drawPicture } from './picture.js';
+import { pictureColour, soilColourOf, soilColours } from './palette.js';
 
 /**
  * Turning an uploaded file into a layer: checked, laid on the grid, drawn.
@@ -85,7 +86,7 @@ export function prepareHazard(data, { kind = 'flood' } = {}) {
   const level = (f) => Number(f.properties[field]);
   const grid = rasterize(LAGUNA_GRID, data.features, level);
   const display = rasterize(DISPLAY_GRID, data.features, level);
-  const picture = drawPicture(DISPLAY_GRID, display, (v) => HAZARD_COLOURS[v] ?? null);
+  const picture = drawPicture(DISPLAY_GRID, display, (v) => pictureColour(kind, v));
   const ha = hectaresByValue(LAGUNA_GRID, grid, [1, 2, 3]);
   return {
     grid,
@@ -98,9 +99,9 @@ export function prepareHazard(data, { kind = 'flood' } = {}) {
       shapes: data.features.length,
       hectares: { low: ha[1], medium: ha[2], high: ha[3] },
       legend: [
-        { value: 1, label: 'Low', colour: HAZARD_COLOURS[1] },
-        { value: 2, label: 'Medium', colour: HAZARD_COLOURS[2] },
-        { value: 3, label: 'High', colour: HAZARD_COLOURS[3] },
+        { value: 1, label: 'Low', colour: pictureColour(kind, 1) },
+        { value: 2, label: 'Medium', colour: pictureColour(kind, 2) },
+        { value: 3, label: 'High', colour: pictureColour(kind, 3) },
       ],
     },
   };
@@ -109,13 +110,6 @@ export function prepareHazard(data, { kind = 'flood' } = {}) {
 const SERIES_FIELDS = ['SoilSeries', 'SOIL_SERIES', 'SOILSERIES', 'Series', 'series', 'SOILNAME', 'SoilName'];
 const DESCRIPTION_FIELDS = ['SOILDESC', 'SoilDesc', 'SOIL_DESC', 'Description', 'DESCRIPTION', 'description'];
 const ZONE_FIELDS = ['AEZ', 'Aez', 'ZONE', 'Zone', 'zone'];
-
-/** A soil palette: 24 distinct earth-and-field tones, cycled. */
-const SOIL_PALETTE = [
-  '#a6761d', '#e6ab02', '#66a61e', '#d95f02', '#7570b3', '#e7298a', '#1b9e77', '#8c510a',
-  '#bf812d', '#dfc27d', '#80cdc1', '#35978f', '#01665e', '#c51b7d', '#de77ae', '#7fbc41',
-  '#4d9221', '#b35806', '#f1a340', '#998ec3', '#542788', '#fdb863', '#5ab4ac', '#d8b365',
-];
 
 /** BSWM soil series: shapes for the map, and the series under every cell. */
 export function prepareSoil(data) {
@@ -132,7 +126,7 @@ export function prepareSoil(data) {
     throw new Error(`This has ${data.features.length} shapes; a soil layer here is at most 250 (one per soil unit).`);
   }
 
-  const classes = data.features.map((f, i) => {
+  const named = data.features.map((f) => {
     const p = f.properties ?? {};
     const series = present(p[seriesField]) ? String(p[seriesField]).trim() : null;
     const description = present(p[descriptionField]) ? String(p[descriptionField]).trim() : series;
@@ -140,9 +134,11 @@ export function prepareSoil(data) {
       series: series ?? description,
       description: description ?? series,
       zone: zoneField && present(p[zoneField]) ? String(p[zoneField]).trim() : null,
-      colour: SOIL_PALETTE[i % SOIL_PALETTE.length],
     };
   });
+  // One colour per series (palette.js); the lake gets none.
+  const colours = soilColours(named);
+  const classes = named.map((soil) => ({ ...soil, colour: soilColourOf(colours, soil) }));
   const grid = rasterize(LAGUNA_GRID, data.features.map((f, i) => ({ ...f, cls: i + 1 })), (f) => f.cls);
   // The map's copy: just what it shows, coordinates to 6 places (10 cm).
   const round = (c) => (typeof c[0] === 'number' ? [Math.round(c[0] * 1e6) / 1e6, Math.round(c[1] * 1e6) / 1e6] : c.map(round));
@@ -187,7 +183,7 @@ export function prepareElevation(values, raster) {
       if (display[i] > max) max = display[i];
     }
   }
-  const picture = drawPicture(DISPLAY_GRID, bands, (b) => (b ? [...ELEVATION_BANDS[b - 1].colour, 150] : null));
+  const picture = drawPicture(DISPLAY_GRID, bands, (b) => (b ? pictureColour('elevation', b) : null));
   return {
     grid,
     picture,
@@ -196,7 +192,7 @@ export function prepareElevation(values, raster) {
       grid: LAGUNA_GRID,
       bounds: picture.bounds,
       range: { min, max },
-      legend: ELEVATION_BANDS.map((band, i) => ({ value: i + 1, label: band.label, colour: [...band.colour, 150] })),
+      legend: ELEVATION_BANDS.map((band, i) => ({ value: i + 1, label: band.label, colour: pictureColour('elevation', i + 1) })),
     },
   };
 }
