@@ -141,7 +141,7 @@ stayed online** after the area was deleted or its PDF replaced.
 - **A hall for every LGU, pinned by PGENRO.** An LGU with no real office yet
   has no hall, so its map's centre button shows the whole town, a training
   account's included (trainees cannot pin the real hall, by design). The
-  database already lets PGENRO pin any LGU's hall ( with an
+  database already lets PGENRO pin any LGU's hall (`set_lgu_hall` with an
   LGU); there is no screen for it yet.
 
 - **Phase 4: PGENRO's layers** — soil (BSWM), elevation (Copernicus DEM),
