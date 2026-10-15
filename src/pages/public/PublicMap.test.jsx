@@ -971,6 +971,18 @@ describe('what an office can do to a tree', () => {
     return screen.findByRole('complementary', { name: new RegExp(tree.species, 'i') });
   }
 
+  it('makes a printable map of the layers shown, for the office’s LGU', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderOffice({ fence: 'Santa Cruz', profile: SANTA_CRUZ_ADMIN });
+    await waitFor(() => expect(screen.queryByText('Loading map data…')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Show the legend' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose map layers' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Map layers' })).getByRole('checkbox', { name: /Tagged trees/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make a printable map of the layers shown' }));
+    expect(open).toHaveBeenCalledWith('/map-sheet?lgu=Santa+Cruz&trees=0', '_blank', 'noopener');
+    open.mockRestore();
+  });
+
   it('leaves dispatching and permits to the MENRO / CENRO, not PGENRO', async () => {
     const panel = await open(OFFICE_TREES[0], PGENRO_ADMIN);
     // PGENRO still sees what the tree needs.

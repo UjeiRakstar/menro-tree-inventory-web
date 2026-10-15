@@ -166,8 +166,13 @@ stayed online** after the area was deleted or its PDF replaced.
   instead. The 100-year flood shapefile is the same NOAH data as the GeoJSON.
   Laguna-BuiltUp.geojson (28 MB) could mark built-up ground on the map, or
   feed the land cover suggestion — not asked for yet.
-- **Phase 5: reports** — the GHG inventory table first, then hazard maps, the
-  STANDL map export and the City Biodiversity Index.
+- **Phase 5: reports** — the GHG inventory table, and the City Biodiversity
+  Index. *Built:* the map sheet (Make map on the office map → /map-sheet): the
+  CDRA layout with Santa Cruz's plate as the template, any survey layer, A4 or
+  A3, printed or saved as PDF at its stated scale, or as a PNG. Not yet: CDRA's
+  hatching for hazard levels (solid colours now), and hazard data other than
+  NOAH's — Santa Cruz's own CDRA landslide plate (UPLB) shows low
+  susceptibility where NOAH maps none.
 - **CAPSTONE_SPECS.md is behind.** Written 10 October: it predates accounts and
   roles, the office map, training, RISE, the province board, saving areas, and
   clustering coming back. Yours to update, or to ask me to.

@@ -22,10 +22,12 @@ export const HAZARD_PALETTES = Object.freeze({
     2: [49, 130, 189, 170],
     3: [8, 48, 107, 190],
   }),
+  // Strong enough that low still reads on a light grey base map, where most
+  // of a lowland LGU is.
   landslide: Object.freeze({
-    1: [218, 218, 235, 150],
-    2: [158, 154, 200, 170],
-    3: [84, 39, 143, 190],
+    1: [196, 178, 222, 175],
+    2: [142, 104, 191, 185],
+    3: [84, 39, 143, 200],
   }),
 });
 

@@ -31,6 +31,7 @@ const MapLayersPage = lazy(() => import('./pages/pgenro/MapLayersPage.jsx'));
 const MenroMap = lazy(() => import('./pages/MenroMap.jsx'));
 const BiodiversityHub = lazy(() => import('./pages/BiodiversityHub.jsx'));
 const ActionBoard = lazy(() => import('./pages/ActionBoard.jsx'));
+const MapSheet = lazy(() => import('./pages/MapSheet.jsx'));
 const ManageArborists = lazy(() => import('./pages/ManageArborists.jsx'));
 const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
 const BiodiversityDashboard = lazy(() => import('./pages/BiodiversityDashboard.jsx'));
@@ -185,6 +186,7 @@ function AppRoutes() {
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
         <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
         <Route path="map" element={<MenroMap />} />
+        <Route path="map-sheet" element={<MapSheet />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />

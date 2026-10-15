@@ -15,7 +15,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSearchParams } from 'react-router-dom';
-import { Crosshair, FileUp, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Smartphone, X } from 'lucide-react';
+import { Crosshair, FileUp, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Printer, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   LAGUNA_BOUNDS,
@@ -1485,6 +1485,25 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     setImportedName('');
   }
 
+  // ---- A printed map ------------------------------------------------------------
+  /**
+   * The map sheet (pages/MapSheet.jsx) of this LGU — or, for PGENRO, of the
+   * town in focus or the province — with the layers switched on here. In a
+   * new tab, so the map stays as it was.
+   */
+  function openMapSheet() {
+    const params = new URLSearchParams();
+    const place = fence || selectedLgu;
+    if (place) params.set('lgu', place);
+    if (survey && mapLayers.layers[survey]) params.set('survey', survey);
+    if (!layers.trees) params.set('trees', '0');
+    if (!layers.sites) params.set('sites', '0');
+    if (!layers.barangays) params.set('barangays', '0');
+    // The base map is left to the sheet: light grey, as the CDRA sheets are,
+    // whichever the office happens to be looking at.
+    window.open(`/map-sheet?${params}`, '_blank', 'noopener');
+  }
+
   // ---- Bringing an area in from a file ----------------------------------------
   async function handleImportFiles(event) {
     const files = Array.from(event.target.files ?? []);
@@ -2192,6 +2211,14 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             onClick={drawing ? stopDrawing : startDrawing}
             pressed={drawing}
           />
+          {canSaveAreas && !drawing && (
+            <ToolTile
+              icon={Printer}
+              label="Make map"
+              description="Make a printable map of the layers shown"
+              onClick={openMapSheet}
+            />
+          )}
           {canSaveAreas && !drawing && (
             <>
               <ToolTile
