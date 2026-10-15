@@ -95,10 +95,13 @@ function PublicShell() {
   // edge; a footer under it only competes for the attention it needs.
   const hideFooter = location.pathname === '/public-map';
 
+  // The map is exactly one screen under the navbar, and the window never
+  // scrolls on it: a panel sliding in from the edge gave the browser
+  // somewhere to scroll to, and it did.
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className={hideFooter ? 'flex h-[100dvh] flex-col overflow-hidden' : 'min-h-screen flex flex-col'}>
       <PublicNavbar />
-      <main className="flex-1">
+      <main className={hideFooter ? 'min-h-0 flex-1' : 'flex-1'}>
         {/* Inside the shell, not around it: a page arriving should not take
             the navigation away while it does. */}
         <Suspense fallback={<PageLoading />}>

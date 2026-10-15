@@ -1622,11 +1622,10 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
 
   return (
     <div
-      className={`relative w-full ${
-        // The office map fills whatever its shell leaves; the public one
-        // knows its own navbar's height.
-        admin ? 'h-full' : 'h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)]'
-      } ${panelShowing ? 'panel-open' : ''} ${sitePanelShowing ? 'site-panel-open' : ''} ${
+      // Both maps fill what their shell leaves under its header. Clipped,
+      // not scrollable: the panels slide in from beyond the edges, and
+      // nothing here should ever scroll the map out of the way.
+      className={`relative h-full w-full overflow-clip ${panelShowing ? 'panel-open' : ''} ${sitePanelShowing ? 'site-panel-open' : ''} ${
         selectedSite && sitePanelCollapsed && !areaEditor ? 'site-panel-collapsed' : ''
       } ${
         drawing || pinningHall ? 'map-drawing-on' : ''
