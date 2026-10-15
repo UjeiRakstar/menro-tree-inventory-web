@@ -728,6 +728,25 @@ describe('the spaces on the map, as against the points', () => {
     expect(within(panel).getByText('Brgy. Labuin, Santa Cruz, Laguna')).toBeInTheDocument();
   });
 
+  it('gives a sample the real climate of its LGU once CLIRAM is in', async () => {
+    supabaseMock.setResponse('lgu_climate:select', {
+      data: [{ lgu_psgc: 403426000, place: 'Santa Cruz', scenario: 'SSP2-4.5', temperature: { meanC: 26.6 }, rainfall: { annualMm: 2765 } }],
+      error: null,
+    });
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    siteHandlers.get('lc-labuin-secondary-forest').click();
+
+    const panel = await screen.findByRole('complementary', { name: 'Labuin Secondary Forest' });
+    await waitFor(() => expect(panel).toHaveTextContent('2,765 mm a year'));
+    const rainfall = within(panel).getByText('2,765 mm a year').closest('li');
+    expect(rainfall.querySelector('[data-provisional]')).toBeNull();
+    // The rest of the sample is still made up, and still says so.
+    expect(panel).toHaveTextContent('a sample area');
+    const soil = within(panel).getByText('Macolod clay loam').closest('li');
+    expect(soil.querySelector('[data-provisional="placeholder"]')).toBeTruthy();
+  });
+
   it('holds a tree and the ground it stands on at the same time', async () => {
     // The whole reason areas open on the right: a visitor who taps a forest
     // while a tree is open should get both, not watch one shove out the other.
@@ -1072,6 +1091,18 @@ describe('the public map stays the public map', () => {
     // Turning the trees off takes them off the map.
     fireEvent.click(within(panel).getByRole('checkbox', { name: /Tagged trees/ }));
     expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
+  });
+
+  it('moves the legend aside while the layers panel is open, so neither covers the other', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    expect(screen.getByText('Land cover — tap for details')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
+    expect(screen.queryByText('Land cover — tap for details')).not.toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Map layers' })).getByRole('button', { name: /Close/ }));
+    expect(screen.getByText('Land cover — tap for details')).toBeInTheDocument();
   });
 
   it('switches on a survey layer PGENRO has uploaded, and draws it', async () => {

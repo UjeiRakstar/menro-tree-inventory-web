@@ -127,6 +127,25 @@ describe('what the panel admits', () => {
     }
   });
 
+  it('drops the marks from a sample’s facts the layers measured, and only those', () => {
+    const measured = {
+      ...forest(),
+      properties: {
+        ...forest().properties,
+        soilType: 'Lipa loam',
+        hazards: { flood: { areaM2: 21015, levels: { low: 21015, medium: 0, high: 0, total: 21015 } } },
+        measured: ['soilType', 'hazards.flood'],
+      },
+    };
+    show(measured);
+    expect(screen.getByText('Lipa loam').closest('li').querySelector('[data-provisional]')).toBeNull();
+    expect(screen.getByText(/Average Rainfall/).closest('li').querySelector('[data-provisional="placeholder"]')).toBeTruthy();
+    // No landslide layer: not assessed, rather than the invented figure.
+    expect(screen.getByText('Not assessed')).toBeInTheDocument();
+    expect(screen.queryByText('everything but the area')).not.toBeInTheDocument();
+    expect(screen.getByText(/a sample area/)).toBeInTheDocument();
+  });
+
   it('tells "none mapped" apart from "nobody has looked"', () => {
     const unassessed = {
       ...forest(),

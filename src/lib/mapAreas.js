@@ -261,6 +261,28 @@ export function groundOf(facts, climate) {
 }
 
 /**
+ * A sample area with PGENRO's layers laid under it. Its boundary sits in the
+ * real barangay, so what the layers say about that ground is real even though
+ * the area is not: each fact a layer gives replaces the invented one, and
+ * `measured` lists which those are so the panel drops their amber marks.
+ *
+ * The invented hazard figures go as soon as any layer is live — a measured
+ * flood figure beside a made-up landslide one would read as the same kind of
+ * fact. A hazard no layer covers then shows as not assessed.
+ */
+export function sampleWithGround(feature, facts, climate) {
+  const ground = groundOf(facts, climate);
+  const measured = Object.keys(ground).filter((key) => key !== 'hazards' && key !== 'climateSource');
+  for (const kind of Object.keys(ground.hazards ?? {})) measured.push(`hazards.${kind}`);
+  if (measured.length === 0) return feature;
+  const properties = { ...feature.properties };
+  delete properties.hazards;
+  // A height from the elevation layer, never an invented one beside a real type.
+  if (!measured.includes('elevationM')) delete properties.elevationM;
+  return { ...feature, properties: { ...properties, ...ground, measured } };
+}
+
+/**
  * A saved row as the feature the map and the area panel draw — the same shape
  * as the sample areas (src/data/mockMapSites.js), so the panel needs nothing
  * new to show one.

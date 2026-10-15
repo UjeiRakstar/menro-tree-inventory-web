@@ -262,7 +262,13 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
   const sample = SITES_ARE_SAMPLE && !props.saved;
   // A saved area's ground facts come from PGENRO's layers (phase 4): amber
   // "awaiting" only for the ones no layer has given it yet.
-  const markFor = (value) => (sample ? 'placeholder' : props.saved && (value === null || value === undefined) ? 'awaiting' : null);
+  // A sample opened once the layers are live has some of its facts measured
+  // (useMeasuredSample): those lose the mark, the rest keep it.
+  const measured = props.measured ?? [];
+  const markFor = (value, key) =>
+    sample
+      ? measured.includes(key) ? null : 'placeholder'
+      : props.saved && (value === null || value === undefined) ? 'awaiting' : null;
   const designation = designationById(props.designation);
   const noRate = props.saved && props.namriaClass && !props.coverId ? noRateReason(props.namriaClass) : '';
   const title = siteTitle(feature);
@@ -318,11 +324,18 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
             {PLANNING_ONLY}
           </p>
 
-          {sample && (
+          {sample && !props.measured && (
             <ProvisionalNote kind="placeholder" title="everything but the area" className="mb-3">
               The boundary is drawn inside the right barangay and the area is measured from it, so
               that figure is real. Everything carrying an amber dot below is invented, and stays so
               until the PGENRO uploads the survey layers.
+            </ProvisionalNote>
+          )}
+          {sample && props.measured && (
+            <ProvisionalNote kind="placeholder" title="a sample area" className="mb-3">
+              No office has saved an area here yet, so this one is a sample: its name and land cover
+              are invented. Its boundary sits in the real barangay, though, so the ground facts
+              without an amber dot are real — measured from the PGENRO&apos;s layers for that spot.
             </ProvisionalNote>
           )}
 
@@ -366,7 +379,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
             <FactRow
               icon={elevationIcon}
               label="Elevation Type"
-              provisional={markFor(props.elevationType)}
+              provisional={markFor(props.elevationType, 'elevationType')}
               value={
                 props.elevationRange && props.elevationRange.min !== props.elevationRange.max
                   ? `${props.elevationType} — ${props.elevationRange.min}–${props.elevationRange.max} m asl`
@@ -379,12 +392,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
               icon={soilIcon}
               label="Soil Type"
               value={props.soilType ?? 'Not recorded'}
-              provisional={markFor(props.soilType)}
+              provisional={markFor(props.soilType, 'soilType')}
             />
             <FactRow
               icon={rainfallIcon}
               label="Average Rainfall"
-              provisional={markFor(props.rainfallMmPerYear)}
+              provisional={markFor(props.rainfallMmPerYear, 'rainfallMmPerYear')}
               value={
                 props.rainfallMmPerYear != null
                   ? `${props.rainfallMmPerYear.toLocaleString('en-US')} mm a year`
@@ -394,7 +407,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
             <FactRow
               icon={temperatureIcon}
               label="Average Temperature"
-              provisional={markFor(props.temperatureC)}
+              provisional={markFor(props.temperatureC, 'temperatureC')}
               value={props.temperatureC != null ? `${props.temperatureC} °C` : 'Not recorded'}
             />
           </ul>
@@ -406,8 +419,10 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
 
           {/* What can go wrong with it */}
           <div className="mt-2 divide-y divide-slate-100 border-t border-slate-200">
-            <HazardBlock icon={landslideIcon} label="Landslide" feature={feature} unit={unit} sample={sample} />
-            <HazardBlock icon={floodIcon} label="Flooding" feature={feature} unit={unit} sample={sample} />
+            {/* Once a sample is measured its invented hazards are gone: what is
+                left is measured, or not assessed. */}
+            <HazardBlock icon={landslideIcon} label="Landslide" feature={feature} unit={unit} sample={sample && !props.measured} />
+            <HazardBlock icon={floodIcon} label="Flooding" feature={feature} unit={unit} sample={sample && !props.measured} />
           </div>
 
           {/* A legal designation, and the document it rests on */}

@@ -40,6 +40,7 @@ import { centroidOf } from '../../lib/areaGeometry.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
 import { useMapLayers } from '../../hooks/useMapLayers.js';
+import { useMeasuredSample } from '../../hooks/useMeasuredSample.js';
 import { measureArea } from '../../lib/layers/facts.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
 import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
@@ -1277,6 +1278,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     [sites]
   );
   const selectedSite = useMemo(() => siteById(selectedSiteId, sites), [selectedSiteId, sites]);
+  // What the panel shows: a sample measured against the live layers.
+  const panelSite = useMeasuredSample(selectedSite, mapLayers);
   // The save form opens where the area panel does, and moves the same controls.
   const sitePanelShowing = (Boolean(selectedSite) && !sitePanelCollapsed) || Boolean(areaEditor);
   const canSaveAreas = admin && [ROLES.PGENRO, ROLES.LGU_ADMIN].includes(roleOf(profile));
@@ -1803,7 +1806,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
       {/* The drawn area in focus: land cover, or somewhere to plant */}
       {selectedSite && !areaEditor && (
         <SitePanel
-          feature={selectedSite}
+          feature={panelSite}
           onClose={clearSelectedSite}
           onCollapsedChange={setSitePanelCollapsed}
           footer={
@@ -2026,9 +2029,10 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         </div>
       )}
 
-      {/* Legend — the public map's, always open. The office's is behind the
-          Legend tile in the corner column. */}
-      {!admin && (
+      {/* Legend — the public map's, open unless the Layers panel is: that
+          panel keys every layer itself, and the two share the right edge. The
+          office's is behind the Legend tile in the corner column. */}
+      {!admin && openTool !== 'layers' && (
       <div className="map-right-control absolute bottom-24 right-3 z-[400] bg-white/95 rounded-lg shadow border border-slate-200 px-3 py-2">
         <p className="text-[10px] font-semibold text-slate-700 mb-1">Legend</p>
         <div className="space-y-1">

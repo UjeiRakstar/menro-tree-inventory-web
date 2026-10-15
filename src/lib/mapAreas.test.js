@@ -11,6 +11,7 @@ import {
   proposalChanges,
   rowFromForm,
   rowToFeature,
+  sampleWithGround,
   shapeToGeometry,
   treesInside,
 } from './mapAreas.js';
@@ -205,6 +206,32 @@ describe('groundOf', () => {
 
   it('names one soil when it is nearly all of the area', () => {
     expect(groundOf({ soil: [{ description: 'Lipa loam', zone: 'Uplands', share: 0.95 }] }).soilType).toBe('Lipa loam');
+  });
+
+  it('lays the layers under a sample, and drops its invented hazards', () => {
+    const sample = {
+      type: 'Feature',
+      geometry: shapeToGeometry(SHAPE),
+      properties: { id: 's', name: 'Sample', soilType: 'Made-up loam', elevationM: 38, temperatureC: 30,
+        hazards: { landslide: { share: 0.08 }, flood: { share: 0.21 } } },
+    };
+    const measured = sampleWithGround(sample, { soil: FACTS.soil, flood: FACTS.flood }, null);
+    expect(measured.properties).toMatchObject({
+      name: 'Sample',
+      soilType: 'Marikina silty clay loam (68%), Lipa loam (32%)',
+      elevationType: 'Lowland',
+      temperatureC: 30,
+      hazards: { flood: { areaM2: 22094 } },
+    });
+    expect(measured.properties.measured).toEqual(['soilType', 'elevationType', 'hazards.flood']);
+    // No elevation layer: no invented height beside a real zone, and no landslide figure.
+    expect(measured.properties.elevationM).toBeUndefined();
+    expect(measured.properties.hazards.landslide).toBeUndefined();
+  });
+
+  it('leaves a sample alone when no layer says anything', () => {
+    const sample = { type: 'Feature', geometry: null, properties: { id: 's', soilType: 'Made-up loam' } };
+    expect(sampleWithGround(sample, null, null)).toBe(sample);
   });
 
   it('leaves out what nobody has measured, so the panel can say so', () => {

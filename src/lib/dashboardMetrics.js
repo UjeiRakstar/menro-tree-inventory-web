@@ -300,7 +300,7 @@ export const PENDING_METRICS = [
     // Shown here only until an office saves a tree cover area on its map;
     // then the page shows the mapped figure instead (src/lib/mappedCover.js).
     waitingOn:
-      'the LGU offices mapping their tree cover on the office map. None has been saved here yet',
+      'the LGU offices mapping their tree cover on the office map. None has been saved yet — the areas on the public map are samples until then, and samples are not counted',
   },
   {
     key: 'carbonEmissionKg',
