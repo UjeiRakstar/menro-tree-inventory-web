@@ -146,9 +146,15 @@ stayed online** after the area was deleted or its PDF replaced.
   database already lets PGENRO pin any LGU's hall (`set_lgu_hall` with an
   LGU); there is no screen for it yet.
 
-- **Phase 4: PGENRO's layers** — soil (BSWM), elevation (Copernicus DEM),
-  rainfall and temperature (CLIRAM), flood and landslide (NOAH). Needs the
-  files.
+- **No landslide layer.** Phase 4 is built; PGENRO's folder (Documents/Acads/
+  Tree Inventory Web App Tech Files) has soil, the DEM, NOAH flooding and
+  CLIRAM for all 30 LGUs, but no NOAH rain-induced landslide map. Its slot on
+  the Map layers page waits for one; areas say "Not assessed" until then.
+- **Files in that folder not used, and why.** The elevation bands GeoJSON
+  carries codes (-2 … 1001) with no key, so the DEM it came from is used
+  instead. The 100-year flood shapefile is the same NOAH data as the GeoJSON.
+  Laguna-BuiltUp.geojson (28 MB) could mark built-up ground on the map, or
+  feed the land cover suggestion — not asked for yet.
 - **Phase 5: reports** — the GHG inventory table first, then hazard maps, the
   STANDL map export and the City Biodiversity Index.
 - **CAPSTONE_SPECS.md is behind.** Written 10 October: it predates accounts and

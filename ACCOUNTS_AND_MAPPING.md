@@ -245,8 +245,14 @@ officer their own LGU's and any tree they were dispatched to.
    an area edits it, moving its points on the map, or deletes it. PGENRO's
    change to an office's area is a proposal, shown to that MENRO / CENRO in
    the area's panel with what would change, to approve or decline.
-4. **PGENRO's layers.** Elevation, soil, CLIRAM climate, NOAH hazards —
-   replacing the amber placeholders the review step will show until then.
+4. **PGENRO's layers.** *Built and tested; waits on `map_layers.sql` being
+   run and the files uploaded.* Seal menu → Map layers: soil (BSWM GeoJSON),
+   elevation (Copernicus DEM GeoTIFF), flood and landslide (NOAH GeoJSON), each
+   prepared in the browser (checked, laid on a 60 m measuring grid over Laguna,
+   drawn), previewed, and published; and CLIRAM workbooks for rainfall and
+   temperature per LGU. Every saved area is measured against them — soil by
+   share, elevation range, flood exposure in m² by level — and the facts are
+   kept with the area. The amber placeholders clear as each layer goes live.
 5. **Reports.** The GHG inventory table first (trees, DBH, barangay,
    sequestered carbon — all already in the data); then hazard maps, STANDL map
    export, and the City Biodiversity Index.
