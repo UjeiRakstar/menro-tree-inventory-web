@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, LogOut, ShieldCheck, Users } from 'lucide-react';
+import { ChevronDown, FileText, LogOut, MapPinned, ShieldCheck, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
-import { isPgenro, roleLabel } from '../lib/roles.js';
+import { ROLES, isPgenro, roleLabel, roleOf } from '../lib/roles.js';
 import { logoFor } from '../lib/lguLogos.js';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 import pgenroLogo from '../assets/lgu-thumbs/PGENRO_LGU_logo.png';
@@ -81,7 +81,17 @@ export default function Header() {
   const { profile, lgu } = useAuth();
   const office = useOffice();
   const pgenro = isPgenro(profile);
-  const attention = useAttention({ lguPsgc: pgenro ? null : lgu?.psgc ?? null });
+  const attention = useAttention({ lguPsgc: pgenro ? null : lgu?.psgc ?? null, withProposals: roleOf(profile) === ROLES.LGU_ADMIN });
+  // The seal's "!" is everything waiting on this office's say-so.
+  const waiting = attention.approvals + attention.proposals;
+  const waitingLabel = [
+    attention.approvals > 0 &&
+      `${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`,
+    attention.proposals > 0 &&
+      `${attention.proposals} PGENRO ${attention.proposals === 1 ? 'proposal is' : 'proposals are'} waiting for a decision`,
+  ]
+    .filter(Boolean)
+    .join('; ');
 
   // A menu left open across pages, or open behind a click elsewhere, is a
   // menu in the way.
@@ -173,11 +183,7 @@ export default function Header() {
               className="h-11 w-11 rounded-full bg-white object-contain p-0.5"
             />
             <ChevronDown size={16} aria-hidden="true" className="text-white/80" />
-            <Badge
-              count={attention.approvals}
-              shape="alert"
-              label={`${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`}
-            />
+            <Badge count={waiting} shape="alert" label={waitingLabel} />
           </button>
 
           {menuOpen && (
@@ -214,6 +220,15 @@ export default function Header() {
                     </span>
                   )}
                 </NavLink>
+                {attention.proposals > 0 && (
+                  <NavLink to={`/map?area=${encodeURIComponent(attention.firstProposalArea)}`} className={menuItem}>
+                    <MapPinned size={16} aria-hidden="true" className="text-slate-500" />
+                    <span className="flex-1">Proposals from PGENRO</span>
+                    <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
+                      {attention.proposals} to decide
+                    </span>
+                  </NavLink>
+                )}
                 <NavLink to="/permits" className={menuItem}>
                   <FileText size={16} aria-hidden="true" className="text-slate-500" />
                   Permit logs

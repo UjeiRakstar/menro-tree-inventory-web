@@ -35,6 +35,7 @@ import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
 import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
 import { ROLES, roleOf } from '../../lib/roles.js';
+import { centroidOf } from '../../lib/areaGeometry.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
 import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
@@ -1358,6 +1359,22 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     // render, and re-running on them would re-open the tree after it closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetTreeId, loading]);
+
+  // The header's "Proposals from PGENRO" sends an area here as ?area=…: open
+  // it, where the proposal waits, once the saved areas are in.
+  const targetAreaId = admin ? searchParams.get('area') : null;
+  useEffect(() => {
+    if (!targetAreaId) return;
+    const area = savedAreas.features.find((feature) => feature.properties.id === targetAreaId);
+    if (!area) return;
+    setSelectedSiteId(area.properties.id);
+    setSitePanelCollapsed(false);
+    lastPanelSide.current = 'right';
+    const middle = centroidOf(area.geometry);
+    if (middle) setPointTarget({ position: middle, zoom: 17 });
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetAreaId, savedAreas.features]);
 
   /**
    * The office map's legend, for its corner panel: the Command Center's

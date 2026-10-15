@@ -20,40 +20,55 @@ export const lguOfTree = (tree) => {
  *
  *   actions  hazards nobody has been sent to yet — the red pins
  *   approvals  field officers who registered in the app and are waiting
+ *   proposals  changes PGENRO proposed to this office's map areas, waiting
+ *              for its decision — only when `withProposals`, which is an
+ *              LGU office: PGENRO's own proposals are not its to decide.
+ *              `firstProposalArea` is the oldest one's area, to open.
  *
  * An LGU account counts its own LGU only: the database already narrows the
  * field officers it can see, and the hazards are narrowed here. Counted again
  * on every page change, so a dispatch or an approval clears its badge by the
  * time the next page opens.
  */
-export function useAttention({ lguPsgc = null } = {}) {
+export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
   const { pathname } = useLocation();
-  const [counts, setCounts] = useState({ actions: 0, approvals: 0 });
+  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null });
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [trees, pending] = await Promise.all([
+      const [trees, pending, proposals] = await Promise.all([
         supabase.from('trees').select('*'),
         supabase
           .from('profiles')
           .select('id')
           .eq('is_approved', false)
           .is('rejected_at', null),
+        // The database shows an office only its own LGU's (map_areas.sql).
+        withProposals
+          ? supabase
+              .from('map_area_proposals')
+              .select('id, area_id, proposed_at')
+              .eq('status', 'pending')
+              .order('proposed_at', { ascending: true })
+          : Promise.resolve({ data: [], error: null }),
       ]);
       if (cancelled) return;
 
       const rows = Array.isArray(trees.data) ? trees.data : [];
+      const open = !proposals.error && Array.isArray(proposals.data) ? proposals.data : [];
       const mine = lguPsgc ? rows.filter((tree) => lguOfTree(tree) === Number(lguPsgc)) : rows;
       setCounts({
         actions: trees.error ? 0 : needingAction(mine),
         approvals: pending.error || !Array.isArray(pending.data) ? 0 : pending.data.length,
+        proposals: open.length,
+        firstProposalArea: open[0]?.area_id ?? null,
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [pathname, lguPsgc]);
+  }, [pathname, lguPsgc, withProposals]);
 
   return counts;
 }

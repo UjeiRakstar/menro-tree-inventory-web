@@ -176,6 +176,28 @@ describe('the badges', () => {
     expect(screen.getByText('2 waiting')).toBeInTheDocument();
   });
 
+  it('tells an LGU office when PGENRO proposes a change to one of its areas', async () => {
+    supabaseMock.signInAs(SANTA_CRUZ_ADMIN, SANTA_CRUZ);
+    supabaseMock.setResponse('map_area_proposals:select', {
+      data: [{ id: 'p1', area_id: 'area-1' }, { id: 'p2', area_id: 'area-2' }],
+      error: null,
+    });
+    renderHeader();
+    expect(await screen.findByLabelText('2 PGENRO proposals are waiting for a decision')).toHaveTextContent('!');
+    openMenu();
+    // The oldest first: the menu opens the map on its area.
+    expect(screen.getByRole('link', { name: /Proposals from PGENRO/ })).toHaveAttribute('href', '/map?area=area-1');
+  });
+
+  it('does not count PGENRO’s own proposals as waiting on PGENRO', async () => {
+    supabaseMock.signInAs(PGENRO_ADMIN);
+    supabaseMock.setResponse('map_area_proposals:select', { data: [{ id: 'p1', area_id: 'area-1' }], error: null });
+    renderHeader();
+    await waitFor(() => expect(supabaseMock.writesTo('trees', 'select')).toHaveLength(1));
+    expect(supabaseMock.writesTo('map_area_proposals', 'select')).toHaveLength(0);
+    expect(screen.queryByLabelText(/proposal/)).not.toBeInTheDocument();
+  });
+
   it('shows nothing when nothing needs the office', async () => {
     renderHeader();
     await waitFor(() => expect(supabaseMock.writesTo('trees', 'select')).toHaveLength(1));

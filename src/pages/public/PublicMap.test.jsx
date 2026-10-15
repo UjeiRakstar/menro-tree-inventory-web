@@ -1441,6 +1441,17 @@ describe('saving an area', () => {
       );
     });
 
+    it('opens the area a header link points at, with its proposal', async () => {
+      supabaseMock.setResponse('map_area_proposals:select', {
+        data: [{ id: 'p1', area_id: 'area-1', status: 'pending', changes: { ...SAVED, name: 'Renamed' } }],
+        error: null,
+      });
+      renderOffice({ fence: 'Santa Cruz', profile: SANTA_CRUZ_ADMIN, path: '/?area=area-1' });
+      const panel = await screen.findByRole('complementary', { name: 'Labuin Secondary Forest' });
+      expect(await within(panel).findByRole('region', { name: "PGENRO's proposal" })).toHaveTextContent('Name: Labuin Secondary Forest → Renamed');
+      expect(flyToSpy).toHaveBeenCalled();
+    });
+
     it('gives another LGU’s office nothing to change', async () => {
       const panel = await openSaved({ ...SANTA_CRUZ_ADMIN, lgu_psgc: 403405000 });
       expect(within(panel).queryByRole('button', { name: /Edit|Delete|Propose/ })).not.toBeInTheDocument();
