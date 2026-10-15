@@ -283,6 +283,51 @@ for (const label of ['runs', 'runs twice']) {
   check(`live_updates.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok}`).join('; '));
 }
 
+// ---- PGENRO's map layers (map_layers.sql) -------------------------------------------------------
+for (const label of ['runs', 'runs twice']) {
+  const out = await asEditor(SQL('map_layers.sql'));
+  const rows = out[out.length - 1].rows;
+  check(`map_layers.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok}`).join('; '));
+}
+const addLayer = (who, kind, file) => as(who, 'authenticated', () => fails(() => db.query(
+  `insert into public.map_layers (kind, file_name, grid_path, meta) values ($1, $2, 'x.bin.gz', '{}')`, [kind, file])));
+check('PGENRO uploads a layer', (await addLayer(PGENRO, 'flood', 'noah-v1.geojson')) === null);
+await addLayer(PGENRO, 'flood', 'noah-v2.geojson');
+const live = (await db.query(`select file_name from public.map_layers where kind = 'flood' and active`)).rows;
+check('…a new one retires the one before, which is kept', live.length === 1 && live[0].file_name === 'noah-v2.geojson' &&
+  (await count(`select count(*) n from public.map_layers where kind = 'flood'`)) === 2);
+const menroLayer = await addLayer(MENRO_SCZ, 'soil', 'mine.geojson');
+check('an office uploads no layer', menroLayer !== null, menroLayer ?? 'UPLOADED');
+check('the public sees the live layers', (await as(null, 'anon', () => count(`select count(*) n from public.map_layers where active`))) === 1);
+
+const climate = (who, lgu) => as(who, 'authenticated', () => fails(() => db.query(
+  `insert into public.lgu_climate (lgu_psgc, temperature, rainfall, scenario) values ($1, '{"meanC":26.6}', '{"annualMm":2765}', 'SSP2-4.5')
+   on conflict (lgu_psgc) do update set temperature = excluded.temperature`, [lgu])));
+check('PGENRO keeps each LGU’s climate', (await climate(PGENRO, SCZ)) === null && (await climate(PGENRO, SCZ)) === null);
+check('…an office does not', (await climate(MENRO_SCZ, SCZ)) !== null);
+check('the public reads it', (await as(null, 'anon', () => count(`select count(*) n from public.lgu_climate`))) === 1);
+
+const officeArea = (await one(`select id from public.map_areas where created_by = $1 and not is_training limit 1`, [MENRO_SCZ])).id;
+const logBefore = await count(`select count(*) n from public.activity_log where entity = 'map_area' and action = 'area.update'`);
+const pgFacts = await as(PGENRO, 'authenticated', () => fails(() => db.query(
+  `select public.set_area_layer_facts($1, '{"flood":{"total":120}}')`, [officeArea])));
+const stored = await one(`select layer_facts, name from public.map_areas where id = $1`, [officeArea]);
+check('PGENRO refreshes the facts of an office’s area, and nothing else of it',
+  pgFacts === null && stored.layer_facts?.flood?.total === 120, pgFacts ?? JSON.stringify(stored));
+check('…without it showing in the activity log as an edit',
+  (await count(`select count(*) n from public.activity_log where entity = 'map_area' and action = 'area.update'`)) === logBefore);
+const fieldFacts = await as(FIELD, 'authenticated', () => fails(() => db.query(`select public.set_area_layer_facts($1, '{}')`, [officeArea])));
+check('a field officer cannot', fieldFacts !== null, fieldFacts ?? 'SET');
+const traineeFacts = await as(TRAINEE, 'authenticated', () => fails(() => db.query(`select public.set_area_layer_facts($1, '{}')`, [officeArea])));
+check('nor can a trainee, on a real area', traineeFacts !== null, traineeFacts ?? 'SET');
+const ownFacts = await as(MENRO_SCZ, 'authenticated', () => db.query(`update public.map_areas set layer_facts = '{"soil":[]}' where id = $1`, [officeArea]));
+check('an office saves its own area’s facts with the area', ownFacts.affectedRows === 1);
+
+const layerFile = (who, bucket) => as(who, 'authenticated', () => fails(() => db.query(
+  `insert into storage.objects (bucket_id, name, owner) values ($1, 'flood/1/grid.bin.gz', $2)`, [bucket, who])));
+check('PGENRO stores layer files', (await layerFile(PGENRO, 'map-layers')) === null);
+check('…an office does not', (await layerFile(MENRO_SCZ, 'map-layers')) !== null);
+
 // ---- The purge takes training areas --------------------------------------------------------
 await asEditor(SQL('training_purge.sql'));
 check('the training purge clears training areas, and only those',

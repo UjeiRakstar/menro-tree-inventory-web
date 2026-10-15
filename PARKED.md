@@ -76,6 +76,8 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     area documents are filed by office so old ones can be removed (last)
 11. `supabase/live_updates.sql` — areas and PGENRO's proposals update on screen
     without a refresh (after step 9)
+12. `supabase/map_layers.sql` — PGENRO's map layers and climate figures, and each
+    area's facts from them (after step 9)
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
