@@ -52,6 +52,17 @@ beforeEach(() => {
   });
   supabaseMock.setResponse('lgus:select', { data: LGUS, error: null });
   supabaseMock.setResponse('permits:select', { data: PERMITS, error: null });
+  supabaseMock.setResponse('map_areas:select', {
+    data: [
+      { id: 'f1', name: 'Labuin Forest', lgu_psgc: SCZ, kind: 'land-cover', cover_class: 'open-forest', area_m2: 25000 },
+      { id: 's1', name: 'Pansol Riverbank', lgu_psgc: PILA, kind: 'planting-site', planting_status: 'open', area_m2: 4000 },
+    ],
+    error: null,
+  });
+  supabaseMock.setResponse('profiles:select', {
+    data: [{ id: 'm1', role: 'lgu_admin', status: 'active', lgu_psgc: SCZ }],
+    error: null,
+  });
   saveAsSpy.mockReset();
 });
 afterEach(cleanup);
@@ -65,7 +76,9 @@ describe('the province overview', () => {
     expect(rows.map((row) => within(row).getByRole('rowheader').textContent)).toEqual(['Santa Cruz', 'Pila']);
     expect(within(rows[0]).getByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' })).toBeInTheDocument();
     expect(within(rows[0]).getByRole('button', { name: /1 — Public tags awaiting a field check/ })).toBeInTheDocument();
-    expect(within(rows[1]).getByRole('button', { name: '1 — Stem quality Code 2 — little defects, Pila' })).toBeInTheDocument();
+    expect(within(rows[0]).getByRole('button', { name: '1 — Stem Code 3 — several defects, to watch, Santa Cruz' })).toBeInTheDocument();
+    // Codes 1 and 2 are not on the board: sound and mildly flawed stems call for nothing.
+    expect(screen.queryByRole('columnheader', { name: /Code 2/ })).not.toBeInTheDocument();
   });
 
   it('opens the trees behind a number, each a link to the map', async () => {
@@ -81,6 +94,24 @@ describe('the province overview', () => {
     renderBoard();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
     expect(screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' })).toBeInTheDocument();
+  });
+
+  it('shows progress across the province: areas mapped, sites open, and which LGUs have an office', async () => {
+    renderBoard();
+    const progress = await screen.findByRole('region', { name: 'Progress' });
+    expect(within(progress).getByRole('button', { name: '1 — Land cover areas mapped, all of Laguna' })).toHaveTextContent('2.5 ha of tree cover');
+    expect(within(progress).getByText('LGUs with an active MENRO / CENRO account').parentElement).toHaveTextContent(/1\s*of 2/);
+
+    const table = screen.getByRole('table');
+    const santaCruz = within(table).getByRole('rowheader', { name: 'Santa Cruz' }).closest('tr');
+    const pila = within(table).getByRole('rowheader', { name: 'Pila' }).closest('tr');
+    expect(santaCruz).toHaveTextContent('✓ 1');
+    expect(pila).toHaveTextContent('None');
+
+    // An area count opens the areas, each a link to it on the map.
+    fireEvent.click(within(pila).getByRole('button', { name: '1 — Tree planting sites open for planting, Pila' }));
+    const dialog = screen.getByRole('dialog', { name: 'Tree planting sites open for planting — Pila' });
+    expect(within(dialog).getByRole('link', { name: /View on map/ })).toHaveAttribute('href', '/map?area=s1');
   });
 
   it('is read-only: nothing on it dispatches or issues a permit', async () => {

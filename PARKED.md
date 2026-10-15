@@ -134,6 +134,16 @@ stayed online** after the area was deleted or its PDF replaced.
 
 ## Asked for on 14 October, not built yet
 
+- **One standard format for every Excel download** (15 October). The MENRO
+  report, the PGENRO permit report and the inventory export each lay their
+  sheets out differently. Waiting on the official format to standardise on —
+  a template from PGENRO, or the DENR form it should follow.
+- **A hall for every LGU, pinned by PGENRO.** An LGU with no real office yet
+  has no hall, so its map's centre button shows the whole town, a training
+  account's included (trainees cannot pin the real hall, by design). The
+  database already lets PGENRO pin any LGU's hall ( with an
+  LGU); there is no screen for it yet.
+
 - **Phase 4: PGENRO's layers** — soil (BSWM), elevation (Copernicus DEM),
   rainfall and temperature (CLIRAM), flood and landslide (NOAH). Needs the
   files.
