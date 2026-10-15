@@ -27,6 +27,7 @@ const PublicMap = lazy(() => import('./pages/public/PublicMap.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Activate = lazy(() => import('./pages/Activate.jsx'));
 const Accounts = lazy(() => import('./pages/pgenro/Accounts.jsx'));
+const MapLayersPage = lazy(() => import('./pages/pgenro/MapLayersPage.jsx'));
 const MenroMap = lazy(() => import('./pages/MenroMap.jsx'));
 const BiodiversityHub = lazy(() => import('./pages/BiodiversityHub.jsx'));
 const ActionBoard = lazy(() => import('./pages/ActionBoard.jsx'));
@@ -179,6 +180,7 @@ function AppRoutes() {
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
+        <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
         <Route path="map" element={<MenroMap />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />

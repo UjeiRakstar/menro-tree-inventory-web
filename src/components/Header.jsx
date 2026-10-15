@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, LogOut, MapPinned, ShieldCheck, Users } from 'lucide-react';
+import { ChevronDown, FileText, Layers, LogOut, MapPinned, ShieldCheck, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -237,6 +237,12 @@ export default function Header() {
                   <NavLink to="/accounts" className={menuItem}>
                     <ShieldCheck size={16} aria-hidden="true" className="text-slate-500" />
                     Accounts
+                  </NavLink>
+                )}
+                {pgenro && (
+                  <NavLink to="/map-layers" className={menuItem}>
+                    <Layers size={16} aria-hidden="true" className="text-slate-500" />
+                    Map layers
                   </NavLink>
                 )}
               </div>

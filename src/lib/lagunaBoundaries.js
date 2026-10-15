@@ -18,6 +18,7 @@ export const MUNICIPALITY_LIST = municipalityData.features
     name: f.properties.municipality,
     label: f.properties.municipality_label,
     isCity: f.properties.is_city,
+    psgc: Number(f.properties.municipality_psgc) || null,
   }))
   .sort((a, b) => a.label.localeCompare(b.label));
 
