@@ -2,9 +2,8 @@
 
 Work that is deliberately not being done yet, so it does not get lost.
 
-Last read through: 14 October 2026. Everything below was checked against the
-repo that day, not copied forward from the last list — three entries had gone
-stale and two claims in my own write-ups turned out not to be true.
+Last read through: 15 October 2026, against the repo, the live database
+(read-only, with the site's public key) and CAPSTONE_SPECS.md.
 
 ## Before the account ticket touches anything
 
@@ -34,13 +33,23 @@ stale and two claims in my own write-ups turned out not to be true.
 
 ## Mine to fix — found in this sweep
 
-- **`loadMapSites()` does not exist.** I described it twice as "the one seam"
-  the PGENRO uploads come in through. The actual seam today is the
-  `MAP_SITES` constant in `src/lib/mapSites.js`, which is assigned straight
-  from the mock. The comment at the top of `src/data/mockMapSites.js` repeats
-  the claim. The function should be written when the uploads are — an async
-  loader, which means the map has to learn to wait for areas the way it
-  already waits for trees.
+- **The comment at the top of `src/data/mockMapSites.js` is stale.** It
+  promises a `loadMapSites()`. Saved areas now load through
+  `src/hooks/useMapAreas.js` and replace the samples once any exist; the
+  comment, and the layer panel's "Sample areas until PGENRO uploads", should
+  say so.
+- **A MENRO is not told about PGENRO's proposals.** A proposal shows only in
+  the area's own panel. Nothing counts them — the seal's "!" counts field
+  officers waiting, not proposals waiting.
+- **Old documents stay in storage.** Deleting an area, or replacing its PDF,
+  leaves the old file in the 'area-documents' bucket, still at its public URL.
+- **A trainee in the field app is not told.** The training wall works in the
+  app (tested), but the app shows no "training" banner the way the website
+  does.
+- **The SQL tests live in a temp folder.** The PGlite harnesses (accounts,
+  fence, routing, training, permits, areas — 200+ checks) are in this
+  session's scratch folder, not the repo. They belong in `tools/sql-tests/`,
+  both to keep and as evidence for the testing chapter.
 - **Two hover tooltips in the tree panel can still clip.** The ⓘ there now
   uses the shared, portalled `InfoHint`. The trait-badge and phenology
   tooltips in `TreeDetailPanel.jsx` are not ⓘ buttons and still use the old
@@ -78,11 +87,10 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 9. `supabase/map_areas.sql` — saving drawn areas, proposals, and the public
    'area-documents' bucket (after step 1; after step 5 if training is in use)
 
-**As of 15 October** the live database has steps 1, 2, 5, 6, 7 and 8 — not
-**3 (`municipal_halls.sql`) or 4 (`tag_routing.sql`)**. Run 3 then 4 next.
-Until step 3 runs, activating a *training* code fails: the training file
-expects the hall columns that step adds. Step 4 is safe to run after the
-sandbox (`ada72b0`). Then step 9.
+**All nine are in the live database** (checked 15 October). Not deployed: the
+`manage-account` server function — until it is, PGENRO's "Update email" and
+"Change password" say so and do nothing, and locking an account stops its
+writes but does not sign it out.
 
 **The RISE PDF reader (temporary).** To switch it on: Supabase dashboard →
 Edge Functions → Secrets → add `GEMINI_API_KEY` (the field app's key, from its
@@ -141,6 +149,15 @@ way: **any signed-in arborist could make themselves an admin** by updating the
 
 ## Asked for on 14 October, not built yet
 
+- **Phase 4: PGENRO's layers** — soil (BSWM), elevation (Copernicus DEM),
+  rainfall and temperature (CLIRAM), flood and landslide (NOAH). Needs the
+  files.
+- **Phase 5: reports** — the GHG inventory table first, then hazard maps, the
+  STANDL map export and the City Biodiversity Index.
+- **CAPSTONE_SPECS.md is behind.** Written 10 October: it predates accounts and
+  roles, the office map, training, RISE, the province board, saving areas, and
+  clustering coming back. Yours to update, or to ask me to.
+
 - **A permit's LGU is worked out, not stored.** PGENRO's permit logs place a
   permit by its tree's barangay, or by the point a walk-in permit was issued
   for. A walk-in permit with neither lands under "Not placed". Storing
@@ -156,9 +173,10 @@ way: **any signed-in arborist could make themselves an admin** by updating the
 
 ## Waiting on another system
 
-- **The mapping feature.** Now being specified — it is the MENRO/CENRO
-  drawing work. Two things on the BioDashboard are waiting on it:
-  - Forest / Tree Cover Area, still "Awaiting data".
+- **Two BioDashboard figures the map can now feed.** Saving areas is built
+  (phase 3), so these no longer wait on another system — only on being wired:
+  - Forest / Tree Cover Area, still "Awaiting data": the sum of saved areas
+    whose NAMRIA class is tree cover.
   - MAI per hectare: the forestry figures are totals for the tagged trees, and
     become Mg/ha/yr once there is cover area to divide by.
 - **The emissions feed.** Total Carbon Emission comes from outside this system
@@ -249,10 +267,16 @@ stays reserved for the four kinds above.
 - ~~Tooltips cut off.~~ One shared `InfoHint`, portalled to the page body so no
   `overflow` can clip it. (Three of the four copies — see above.)
 - ~~Image weight.~~ 160 MB → 6.7 MB of built assets.
-- ~~Marker clustering.~~ Built, then **removed on request** (14 October): a
-  bubble sat at the average of its trees and the ring at the furthest zoom
-  moved them further still, which on a map about where trees stand misled more
-  than it helped. Every pin is drawn at its own coordinates.
+- ~~Marker clustering.~~ Built, removed on request (14 October) because a
+  bubble sat at the average of its trees, then **brought back** (15 October)
+  without numbers: a bubble stands on one of its own trees, takes its most
+  urgent tree's colour on the office map, and nothing is grouped at the
+  furthest zoom.
+- ~~Saving what is drawn (phase 3).~~ Areas, NAMRIA classes, the suggestion,
+  legal designations with their documents, planting sites, edit, delete, and
+  PGENRO proposals. `map_areas.sql`, 42 of 42 in PGlite.
+- ~~Training sandbox, RISE species form and reader, PGENRO's Action Board and
+  permit logs.~~ 14–15 October.
 - ~~The web tagging form asking OpenStreetMap.~~ It worked out the barangay from
   Nominatim and offered Santa Cruz's barangays only, so a resident anywhere else
   could not send a tag. It now uses the PSA boundaries and lists the barangays
