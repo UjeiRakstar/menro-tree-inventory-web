@@ -41,15 +41,9 @@ Last read through: 15 October 2026, against the repo, the live database
 - **A MENRO is not told about PGENRO's proposals.** A proposal shows only in
   the area's own panel. Nothing counts them — the seal's "!" counts field
   officers waiting, not proposals waiting.
-- **Old documents stay in storage.** Deleting an area, or replacing its PDF,
-  leaves the old file in the 'area-documents' bucket, still at its public URL.
 - **A trainee in the field app is not told.** The training wall works in the
   app (tested), but the app shows no "training" banner the way the website
   does.
-- **The SQL tests live in a temp folder.** The PGlite harnesses (accounts,
-  fence, routing, training, permits, areas — 200+ checks) are in this
-  session's scratch folder, not the repo. They belong in `tools/sql-tests/`,
-  both to keep and as evidence for the testing chapter.
 - **Two hover tooltips in the tree panel can still clip.** The ⓘ there now
   uses the shared, portalled `InfoHint`. The trait-badge and phenology
   tooltips in `TreeDetailPanel.jsx` are not ⓘ buttons and still use the old
@@ -86,8 +80,15 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
    after step 1)
 9. `supabase/map_areas.sql` — saving drawn areas, proposals, and the public
    'area-documents' bucket (after step 1; after step 5 if training is in use)
+10. `supabase/closing_gaps.sql` — publishing a tag checks whose it is, and
+    area documents are filed by office so old ones can be removed (last)
 
-**All nine are in the live database** (checked 15 October). Not deployed: the
+**Test any of these before it goes live:** `npm run test:sql` runs every
+file above in real Postgres (PGlite, in memory) and tries what each must
+allow and refuse — 8 suites, 264 checks — the final check query on its
+own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
+
+**Steps 1–9 are in the live database** (checked 15 October); step 10 is new. Not deployed: the
 `manage-account` server function — until it is, PGENRO's "Update email" and
 "Change password" say so and do nothing, and locking an account stops its
 writes but does not sign it out.
@@ -112,14 +113,6 @@ real field app still syncs a tree — nothing in it should change for a real
 account.
 
 Still open:
-- **`promote_pending_tree` does not check jurisdiction.** It is SECURITY
-  DEFINER, so it reads `pending_trees` past the new routing rules: a field
-  officer who knew the id of another LGU's tag could publish it. Not reachable
-  from the app's own screens. The fix is one check inside the function, which
-  lives in `supabase/crowdsource_promotion.sql`. The same gap lets a training
-  account that knows a real tree's id set that tree's `source` to
-  'crowdsource' by "adopting" it — the tree stays real and unseen by the
-  trainee (tested), but the one column changes.
 - **A MENRO can create a field officer in any municipality.** The Arborists
   page lets them pick any of the thirty. The new officer then lands in that
   LGU — out of sight of the MENRO who created them. The list should be their
@@ -140,12 +133,10 @@ field officers still register in the app, by design). Found and closed on the
 way: **any signed-in arborist could make themselves an admin** by updating the
 `role` column of their own profile row. `accounts.sql` section 5.
 
-- **The SQL was checked against real Postgres, not just parsed.** A harness
-  ran `accounts.sql` in PGlite (Postgres compiled to WebAssembly) with stand-ins
-  for Supabase's `auth` schema and roles, then tried everything it forbids: 43
-  of 43 checks passed. The harness lives in this session's scratch folder, not
-  the repo. Worth adding to the repo before phase 3 writes the area tables —
-  it is the only way to test a policy before it is live.
+Closed on 15 October (`closing_gaps.sql`): **`promote_pending_tree` did not
+check jurisdiction** — any verifier who knew a tag's id could publish another
+LGU's tag or a training one, and "adopt" any tree. And **old area documents
+stayed online** after the area was deleted or its PDF replaced.
 
 ## Asked for on 14 October, not built yet
 

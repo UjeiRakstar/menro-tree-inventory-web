@@ -33,7 +33,7 @@ import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../li
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
-import { areaPermission, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
+import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
 import { ROLES, roleOf } from '../../lib/roles.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
@@ -1730,6 +1730,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             existing={editingRow}
             shape={shape}
             trees={trees}
+            documentFolder={documentFolderOf(profile)}
             onSaved={handleAreaSaved}
             onCancel={cancelAreaEditor}
           />

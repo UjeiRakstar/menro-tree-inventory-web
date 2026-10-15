@@ -1318,12 +1318,13 @@ describe('saving an area', () => {
     await waitFor(() => expect(supabaseMock.writesTo('map_areas', 'insert')).toHaveLength(1));
     const [bucket, path] = supabaseMock.supabase.storage.upload.mock.calls[0];
     expect(bucket).toBe('area-documents');
-    expect(path).toMatch(/^santa-cruz\/.+\.pdf$/);
+    // Filed in the office's own folder, which is all the database lets it write.
+    expect(path).toMatch(/^403426000\/.+\.pdf$/);
     expect(supabaseMock.writesTo('map_areas', 'insert')[0].payload).toMatchObject({
       designation: 'zoning',
       doc_type: 'Municipal Ordinance',
       doc_title: 'Zoning Ordinance of Santa Cruz',
-      doc_url: expect.stringMatching(/^https:\/\/storage\.test\/area-documents\/santa-cruz\//),
+      doc_url: expect.stringMatching(/^https:\/\/storage\.test\/area-documents\/403426000\//),
     });
   });
 
@@ -1371,6 +1372,20 @@ describe('saving an area', () => {
       fireEvent.click(within(screen.getByRole('alertdialog', { name: /Delete Labuin/ })).getByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(supabaseMock.writesTo('map_areas', 'delete')).toHaveLength(1));
       expect(supabaseMock.writesTo('map_areas', 'delete')[0].filters).toContainEqual(['id', 'area-1']);
+    });
+
+    it('takes its document down with it when it is deleted', async () => {
+      supabaseMock.setResponse('map_areas:select', {
+        data: [{ ...SAVED, designation: 'zoning', doc_type: 'Ordinance', doc_title: 'Zoning',
+          doc_url: 'https://storage.test/area-documents/403426000/old.pdf' }],
+        error: null,
+      });
+      const panel = await openSaved(SANTA_CRUZ_ADMIN);
+      fireEvent.click(within(panel).getByRole('button', { name: /Delete/ }));
+      fireEvent.click(within(screen.getByRole('alertdialog', { name: /Delete Labuin/ })).getByRole('button', { name: 'Delete' }));
+      await waitFor(() =>
+        expect(supabaseMock.supabase.storage.remove).toHaveBeenCalledWith('area-documents', ['403426000/old.pdf'])
+      );
     });
 
     it('opens for editing with its boundary back on the map and its details filled in', async () => {

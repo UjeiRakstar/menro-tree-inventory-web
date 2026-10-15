@@ -18,6 +18,7 @@ import {
   areaFormProblems,
   measure,
   rowFromForm,
+  removeDocument,
   treesInside,
 } from '../../lib/mapAreas.js';
 import { ProvisionalNote } from '../public/Provisional.jsx';
@@ -132,7 +133,16 @@ const input =
  * The boundary is whatever is drawn on the map while this is open, so it can
  * be adjusted right up to saving.
  */
-export default function AreaForm({ mode = 'new', initial, existing = null, shape, trees = [], onSaved, onCancel }) {
+export default function AreaForm({
+  mode = 'new',
+  initial,
+  existing = null,
+  shape,
+  trees = [],
+  documentFolder = null,
+  onSaved,
+  onCancel,
+}) {
   const idBase = useId();
   const id = (name) => `${idBase}-${name}`;
   const fileInput = useRef(null);
@@ -176,8 +186,8 @@ export default function AreaForm({ mode = 'new', initial, existing = null, shape
   }
 
   async function uploadDocument() {
-    const folder = String(place?.municipality ?? 'laguna').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const path = `${folder}/${crypto.randomUUID()}.pdf`;
+    if (!documentFolder) throw new Error('Only an office account can attach a document.');
+    const path = `${documentFolder}/${crypto.randomUUID()}.pdf`;
     const { error: uploadError } = await supabase.storage
       .from('area-documents')
       .upload(path, file, { contentType: 'application/pdf', upsert: false });
@@ -197,8 +207,9 @@ export default function AreaForm({ mode = 'new', initial, existing = null, shape
     setError('');
     if (Object.keys(problems).length > 0) return;
     setSaving(true);
+    let docUrl = null;
     try {
-      const docUrl = form.designation && file ? await uploadDocument() : null;
+      docUrl = form.designation && file ? await uploadDocument() : null;
       const row = rowFromForm(form, { shape, place, suggestion, treesCount: inside.length, docUrl });
 
       let result;
@@ -214,11 +225,18 @@ export default function AreaForm({ mode = 'new', initial, existing = null, shape
         result = await supabase.from('map_areas').insert(row).select().single();
       }
       if (result.error) {
+        // The area was not saved, so the file just uploaded belongs to nothing.
+        if (docUrl) await removeDocument(supabase, docUrl);
         throw new Error(
           isMissingTable(result.error)
             ? 'Saving areas needs supabase/map_areas.sql, which has not been run yet.'
             : result.error.message
         );
+      }
+      // An edit that replaced or dropped the document leaves the old file
+      // behind; take it down. A proposal changes nothing yet, so keeps it.
+      if (mode === 'edit' && existing?.doc_url && existing.doc_url !== row.doc_url) {
+        await removeDocument(supabase, existing.doc_url);
       }
       onSaved({ id: mode === 'propose' ? existing.id : result.data?.id ?? existing?.id, mode });
     } catch (failure) {

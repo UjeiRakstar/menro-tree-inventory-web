@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Loader2, Pencil, Send, Trash2 } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
-import { proposalChanges } from '../../lib/mapAreas.js';
+import { proposalChanges, removeDocument } from '../../lib/mapAreas.js';
 
 const button =
   'inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition disabled:opacity-50';
@@ -40,7 +40,11 @@ export default function AreaActions({ feature, row, permission, proposal = null,
   }
 
   const remove = () =>
-    run('delete', () => supabase.from('map_areas').delete().eq('id', row.id), () => onDeleted?.());
+    run('delete', () => supabase.from('map_areas').delete().eq('id', row.id), async () => {
+      // The area is gone, so its document should not stay online.
+      await removeDocument(supabase, row.doc_url);
+      onDeleted?.();
+    });
   const approve = () =>
     run('approve', () => supabase.rpc('approve_area_proposal', { p_id: proposal.id, p_note: null }), () => onChanged?.('approved'));
   const decline = () =>

@@ -150,14 +150,18 @@ function createSupabaseMock() {
   // test says otherwise with storage.upload.mockResolvedValue(...).
   const storage = {
     upload: vi.fn(),
+    remove: vi.fn(),
     from: vi.fn((bucket) => ({
       upload: (path, file, options) => storage.upload(bucket, path, file, options),
+      remove: (paths) => storage.remove(bucket, paths),
       getPublicUrl: (path) => ({ data: { publicUrl: `https://storage.test/${bucket}/${path}` } }),
     })),
   };
   const resetStorage = () => {
     storage.upload.mockReset();
     storage.upload.mockImplementation(async (bucket, path) => ({ data: { path }, error: null }));
+    storage.remove.mockReset();
+    storage.remove.mockImplementation(async (bucket, paths) => ({ data: paths, error: null }));
   };
   resetStorage();
 

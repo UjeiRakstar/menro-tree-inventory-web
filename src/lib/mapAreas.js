@@ -171,6 +171,45 @@ export function formFromRow(row) {
   };
 }
 
+// ---- Documents -------------------------------------------------------------------
+
+export const DOCUMENT_BUCKET = 'area-documents';
+
+/**
+ * The folder an office files its documents in: its LGU's PSGC code, or
+ * "pgenro". The database lets an office upload into, and clear out, its own
+ * folder only (closing_gaps.sql).
+ */
+export function documentFolderOf(profile) {
+  const role = roleOf(profile);
+  if (role === ROLES.PGENRO) return 'pgenro';
+  if (role === ROLES.LGU_ADMIN && profile?.lgu_psgc != null) return String(profile.lgu_psgc);
+  return null;
+}
+
+/** The path inside the bucket of one of our documents' public URLs, or null. */
+export function documentPathOf(url) {
+  const marker = `/${DOCUMENT_BUCKET}/`;
+  const at = typeof url === 'string' ? url.indexOf(marker) : -1;
+  if (at < 0) return null;
+  return decodeURIComponent(url.slice(at + marker.length).split(/[?#]/)[0]) || null;
+}
+
+/**
+ * Removing a document no area uses any more. Best effort: a file that cannot
+ * be removed (another office filed it, or it is already gone) is left, and
+ * saving or deleting the area is not undone over it.
+ */
+export async function removeDocument(supabase, url) {
+  const path = documentPathOf(url);
+  if (!path) return;
+  try {
+    await supabase.storage.from(DOCUMENT_BUCKET).remove([path]);
+  } catch {
+    // Left in place; see above.
+  }
+}
+
 // ---- On the map ----------------------------------------------------------------
 
 const dateOf = (value) =>

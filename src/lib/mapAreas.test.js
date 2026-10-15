@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   areaFormProblems,
   areaPermission,
+  documentFolderOf,
+  documentPathOf,
   emptyAreaForm,
   formFromRow,
   geometryToShape,
@@ -158,5 +160,21 @@ describe('proposalChanges', () => {
       { key: 'cover_class', label: 'Land cover', before: 'Open forest', after: 'Closed forest' },
       { key: 'geometry', label: 'Boundary', before: 'as drawn', after: 'redrawn' },
     ]);
+  });
+});
+
+describe('documents', () => {
+  it('are filed by office', () => {
+    expect(documentFolderOf({ role: 'lgu_admin', status: 'active', lgu_psgc: 403426000 })).toBe('403426000');
+    expect(documentFolderOf({ role: 'pgenro', status: 'active' })).toBe('pgenro');
+    expect(documentFolderOf({ role: 'field_officer', status: 'active', lgu_psgc: 403426000 })).toBeNull();
+  });
+
+  it('are found in the bucket by their public link', () => {
+    expect(documentPathOf('https://x.supabase.co/storage/v1/object/public/area-documents/403426000/a%20b.pdf?t=1')).toBe(
+      '403426000/a b.pdf'
+    );
+    expect(documentPathOf('https://elsewhere.example/doc.pdf')).toBeNull();
+    expect(documentPathOf(null)).toBeNull();
   });
 });
