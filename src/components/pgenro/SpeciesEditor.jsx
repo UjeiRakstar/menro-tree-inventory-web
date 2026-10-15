@@ -2,7 +2,9 @@ import { useId, useMemo, useState } from 'react';
 import { ArrowLeft, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { MONTHS, RISE_FIELDS, filledKeys, profileFromForm } from '../../lib/riseFields.js';
+import { formKeysOf, siteNeedsProblems } from '../../lib/siteNeeds.js';
 import RiseAutofill from './RiseAutofill.jsx';
+import SiteNeedsFields from './SiteNeedsFields.jsx';
 
 /** Twelve toggles, one per month; the value is the month numbers chosen. */
 function MonthPicker({ label, value, onChange, labelId }) {
@@ -57,14 +59,17 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
   const taken = useMemo(() => new Set(takenNames.map((name) => name.toLowerCase())), [takenNames]);
   const nameClash = isNew && form.species.trim() && taken.has(form.species.trim().toLowerCase());
   const unchecked = fromPdf.size;
+  const needProblems = siteNeedsProblems(form);
 
-  function setField(key, value) {
+  // markKey: the field whose mark this clears — a site need's range is two
+  // inputs under one mark.
+  function setField(key, value, markKey = key) {
     setForm((current) => ({ ...current, [key]: value }));
     // Changing a field is checking it.
     setFromPdf((current) => {
-      if (!current.has(key)) return current;
+      if (!current.has(markKey)) return current;
       const next = new Set(current);
-      next.delete(key);
+      next.delete(markKey);
       return next;
     });
   }
@@ -84,7 +89,7 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
     );
     setForm((current) => {
       const next = { ...current };
-      for (const key of keys) next[key] = extracted[key];
+      for (const key of keys) for (const formKey of formKeysOf(key)) next[formKey] = extracted[formKey];
       return next;
     });
     setFromPdf(new Set(keys));
@@ -107,6 +112,10 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
       setError(`${form.species.trim()} already has a write-up. Open it from the list instead.`);
       return;
     }
+    if (Object.keys(needProblems).length > 0) {
+      setError('Some of the site needs are not right — see the figures marked in red.');
+      return;
+    }
     if (unchecked > 0 && !checked) {
       setError('Tick the box to say you have checked what was read from the PDF.');
       return;
@@ -123,7 +132,7 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
         saveError.code === 'PGRST204' || saveError.code === '42703' || /column .* does not exist/i.test(saveError.message ?? '');
       setError(
         missing
-          ? 'The RISE fields are not in the database yet. Run supabase/species_rise.sql in the SQL editor, then save again.'
+          ? 'Some of these fields are not in the database yet. Run supabase/species_rise.sql and supabase/species_site_needs.sql in the SQL editor, then save again.'
           : saveError.message
       );
       return;
@@ -215,6 +224,15 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
           );
         })}
       </div>
+
+      <SiteNeedsFields
+        idBase={idBase}
+        form={form}
+        onChange={setField}
+        marked={fromPdf}
+        onConfirm={confirmField}
+        problems={needProblems}
+      />
 
       <datalist id={knownListId}>
         {knownSpecies.map((name) => (

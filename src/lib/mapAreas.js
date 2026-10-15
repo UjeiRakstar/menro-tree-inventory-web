@@ -111,8 +111,12 @@ export function areaFormProblems(form, { measurable = true, hasNewDocument = fal
 /**
  * The row to save. `place` is { barangay, municipality, psgc } from where the
  * area's middle falls; `suggestion` what the page suggested from the trees.
+ * `matches` are the species the library suggested for a planting site
+ * (speciesMatch.asRecommended): a name typed that is one of them is saved
+ * with its scientific name and why it suits the ground; any other name is
+ * kept as typed.
  */
-export function rowFromForm(form, { shape, place = null, suggestion = null, treesCount = null, docUrl = null }) {
+export function rowFromForm(form, { shape, place = null, suggestion = null, treesCount = null, docUrl = null, matches = [] }) {
   const { geometry, areaM2: area, perimeterM } = measure(shape);
   const landCover = form.kind === 'land-cover';
   const site = form.kind === 'planting-site';
@@ -145,7 +149,7 @@ export function rowFromForm(form, { shape, place = null, suggestion = null, tree
           .split(/[,\n]/)
           .map((name) => name.trim())
           .filter(Boolean)
-          .map((common) => ({ common }))
+          .map((common) => matches.find((m) => m.common.toLowerCase() === common.toLowerCase()) ?? { common })
       : null,
     notes: text(form.notes) || null,
   };

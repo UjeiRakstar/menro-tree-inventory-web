@@ -103,6 +103,13 @@ describe('rowFromForm', () => {
     expect(row.cover_class).toBeNull();
   });
 
+  it('keeps why a suggested species suits the site, and takes typed names as they are', () => {
+    const form = { ...emptyAreaForm('planting-site'), name: 'Site', recommended: 'narra, Bamboo' };
+    const narra = { common: 'Narra', scientific: 'Pterocarpus indicus', why: 'grows at 0–600 m', matched: true };
+    const row = rowFromForm(form, { shape: SHAPE, matches: [narra] });
+    expect(row.recommended).toEqual([narra, { common: 'Bamboo' }]);
+  });
+
   it('round-trips through the form for editing', () => {
     const form = { ...emptyAreaForm('planting-site'), name: 'Site', recommended: 'Narra, Molave', spacingM: '3' };
     const row = rowFromForm(form, { shape: SHAPE });

@@ -1,3 +1,5 @@
+import { emptySiteNeeds, filledSiteNeeds, siteNeedsForm, siteNeedsRow } from './siteNeeds.js';
+
 /**
  * What the forester records from a DENR-ERDB RISE publication.
  *
@@ -6,6 +8,10 @@
  * other. The keys are columns of public.species_profiles
  * (supabase/species_profiles.sql and species_rise.sql), and the same keys the
  * reader is asked for in supabase/functions/rise-extract/index.ts.
+ *
+ * The site needs in figures — elevation, rainfall, temperature, soils,
+ * flooding, origin — are a second list (siteNeeds.js), kept in the same form
+ * and saved in the same row.
  */
 export const RISE_FIELDS = Object.freeze([
   { key: 'species', label: 'Common name', kind: 'text', required: true,
@@ -36,9 +42,12 @@ export const MONTHS = Object.freeze([
 const TEXT_KEYS = RISE_FIELDS.filter((field) => field.kind !== 'months').map((field) => field.key);
 const MONTH_KEYS = RISE_FIELDS.filter((field) => field.kind === 'months').map((field) => field.key);
 
-/** An empty form. Months are arrays; everything else is a string. */
+/** An empty form. Months and soils are arrays; everything else is a string. */
 export function emptyRiseForm() {
-  return Object.fromEntries(RISE_FIELDS.map((field) => [field.key, field.kind === 'months' ? [] : '']));
+  return {
+    ...Object.fromEntries(RISE_FIELDS.map((field) => [field.key, field.kind === 'months' ? [] : ''])),
+    ...emptySiteNeeds(),
+  };
 }
 
 /** Month numbers 1–12, each once, in calendar order; anything else dropped. */
@@ -74,6 +83,7 @@ export function cleanExtraction(raw) {
     const form = emptyRiseForm();
     for (const key of TEXT_KEYS) form[key] = cleanText(item[key]);
     for (const key of MONTH_KEYS) form[key] = cleanMonths(item[key]);
+    Object.assign(form, siteNeedsForm(item));
     if (!form.species) continue;
     if (!form.rise_citation) form.rise_citation = citation;
     species.push(form);
@@ -83,9 +93,12 @@ export function cleanExtraction(raw) {
 
 /** Which fields the reader actually filled — the ones the forester must check. */
 export function filledKeys(form) {
-  return RISE_FIELDS.filter((field) =>
-    field.kind === 'months' ? form[field.key]?.length > 0 : Boolean(form[field.key])
-  ).map((field) => field.key);
+  return [
+    ...RISE_FIELDS.filter((field) =>
+      field.kind === 'months' ? form[field.key]?.length > 0 : Boolean(form[field.key])
+    ).map((field) => field.key),
+    ...filledSiteNeeds(form),
+  ];
 }
 
 /** A saved profile row, as the form holds it. */
@@ -94,6 +107,7 @@ export function formFromProfile(row) {
   if (!row) return form;
   for (const key of TEXT_KEYS) form[key] = typeof row[key] === 'string' ? row[key] : '';
   for (const key of MONTH_KEYS) form[key] = cleanMonths(row[key]);
+  Object.assign(form, siteNeedsForm(row));
   return form;
 }
 
@@ -105,6 +119,7 @@ export function profileFromForm(form, { autofilled = false } = {}) {
     const months = cleanMonths(form[key]);
     row[key] = months.length > 0 ? months : null;
   }
+  Object.assign(row, siteNeedsRow(form));
   row.autofilled = Boolean(autofilled);
   return row;
 }

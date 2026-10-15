@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { SITE_NEED_KEYS } from './siteNeeds.js';
 import {
   RISE_FIELDS,
   cleanExtraction,
@@ -38,7 +39,7 @@ describe('cleanExtraction', () => {
     expect(species[0].flowering_months).toEqual([3, 4]);
     expect(species[0].uses).toBe('');
     expect(species[0]).not.toHaveProperty('invented_field');
-    expect(Object.keys(species[0]).sort()).toEqual(RISE_FIELDS.map((f) => f.key).sort());
+    expect(Object.keys(species[0]).sort()).toEqual([...RISE_FIELDS.map((f) => f.key), ...SITE_NEED_KEYS].sort());
   });
 
   it('copies the issue’s citation to each species that has none of its own', () => {

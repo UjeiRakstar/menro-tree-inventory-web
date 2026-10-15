@@ -27,5 +27,25 @@ await db.query(`insert into auth.users (id) values ($1)`, [U]);
 await db.exec(`select set_config('request.jwt.claim.sub', '${U}', false)`);
 await db.query(`update public.species_profiles set family = 'Fabaceae' where species = 'Narra'`);
 ok('the saver is stamped by the database', (await db.query(`select updated_by from species_profiles where species='Narra'`)).rows[0].updated_by === U);
+
+// Site needs (species_site_needs.sql), the way the SQL editor runs it.
+for (const run of ['runs', 'runs twice']) {
+  const out = await db.exec(SQL('species_site_needs.sql'));
+  const rows = out[out.length - 1].rows;
+  ok(`species_site_needs.sql ${run}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok} ${r.detail}`).join('; '));
+}
+await db.query(`update public.species_profiles set origin = 'native', elevation_min_m = 0, elevation_max_m = 600,
+  soil_textures = '{clay-loam,loam}', flood_tolerance = 'brief' where species = 'Narra'`);
+ok('site needs are stored', (await db.query(`select soil_textures from species_profiles where species='Narra'`)).rows[0].soil_textures.join() === 'clay-loam,loam');
+for (const [what, set] of [
+  ['an elevation range upside down', `elevation_min_m = 900, elevation_max_m = 100`],
+  ['a soil texture not on the list', `soil_textures = '{peat}'`],
+  ['an origin not on the list', `origin = 'exotic'`],
+  ['a flood tolerance not on the list', `flood_tolerance = 'some'`],
+]) {
+  let refused = null;
+  try { await db.query(`update public.species_profiles set ${set} where species = 'Narra'`); } catch (e) { refused = e.message; }
+  ok(`${what} is refused`, refused !== null, refused ?? '');
+}
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

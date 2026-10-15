@@ -1378,6 +1378,12 @@ describe('saving an area', () => {
     expect(within(form).getByLabelText(/Land cover \(NAMRIA\)/)).toHaveValue('open-forest');
   });
 
+  it('says, for a planting site, that species suggestions wait on the layers', async () => {
+    const form = await openForm();
+    fireEvent.click(within(form).getByRole('radio', { name: 'Tree planting site' }));
+    expect(await within(form).findByText(/Suggestions need PGENRO’s layers/)).toBeInTheDocument();
+  });
+
   it('says what is missing before saving', async () => {
     const form = await openForm();
     fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));

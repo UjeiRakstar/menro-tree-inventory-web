@@ -1974,6 +1974,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             trees={trees}
             documentFolder={documentFolderOf(profile)}
             layers={mapLayers.layers}
+            climateByLgu={mapLayers.climateByLgu}
             onSaved={handleAreaSaved}
             onCancel={cancelAreaEditor}
           />

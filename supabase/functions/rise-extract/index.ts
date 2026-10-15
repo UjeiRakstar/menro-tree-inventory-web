@@ -52,7 +52,16 @@ const months = (description: string) => ({
   items: { type: 'INTEGER' },
 });
 
-// The same keys as RISE_FIELDS in src/lib/riseFields.js.
+// A figure the issue states, or left out. The page drops anything that is
+// not a number, and anything off a list (src/lib/siteNeeds.js).
+const figure = (description: string) => ({
+  type: 'NUMBER',
+  nullable: true,
+  description: `${description} Only if the publication states it; otherwise leave it out.`,
+});
+
+// The same keys as RISE_FIELDS in src/lib/riseFields.js, and SITE_NEEDS in
+// src/lib/siteNeeds.js.
 const SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -77,6 +86,19 @@ const SCHEMA = {
           propagation: text('Seed collection, processing, storage, germination, nursery and planting.'),
           uses: text('Uses: wood, food, medicine, ornamental, ecological.'),
           pests_diseases: text('Pests and diseases, and their control.'),
+          origin: text('Exactly one of: endemic (found only in the Philippines), native, introduced, invasive — as the publication says. Empty if it does not say.'),
+          elevation_min_m: figure('Lowest elevation it grows at, in metres above sea level.'),
+          elevation_max_m: figure('Highest elevation it grows at, in metres above sea level.'),
+          rainfall_min_mm: figure('Least annual rainfall it grows with, in millimetres.'),
+          rainfall_max_mm: figure('Most annual rainfall it grows with, in millimetres.'),
+          temperature_min_c: figure('Lowest mean temperature it grows at, in °C.'),
+          temperature_max_c: figure('Highest mean temperature it grows at, in °C.'),
+          soil_textures: {
+            type: 'ARRAY',
+            description: 'The soil textures the publication says it grows in, each exactly one of: clay, clay-loam, loam, silt-loam, sandy-loam, sand. Empty if it does not say.',
+            items: { type: 'STRING' },
+          },
+          flood_tolerance: text('How it takes flooding, exactly one of: none, brief, prolonged (long flooding or waterlogging). Empty if the publication does not say.'),
         },
         required: ['species'],
       },
@@ -93,6 +115,7 @@ Rules:
 - Use only what the publication says. Do not add facts from elsewhere, even if you know them.
 - Keep the publication's wording where you can; summarise only when a section is very long.
 - If the publication does not cover a field, leave it as an empty string (or an empty list for months).
+- The site-need figures (elevation, rainfall, temperature) are numbers in metres, millimetres a year and °C. Convert from feet or inches if the publication uses them; never estimate a figure it does not give.
 - Separate paragraphs with a blank line. No markdown, no bullet characters.`;
 
 function reply(status: number, body: Record<string, unknown>) {

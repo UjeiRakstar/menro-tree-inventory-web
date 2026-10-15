@@ -78,13 +78,15 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     without a refresh (after step 9)
 12. `supabase/map_layers.sql` — PGENRO's map layers and climate figures, and each
     area's facts from them (after step 9)
+13. `supabase/species_site_needs.sql` — each species' site needs in figures, for
+    suggesting trees for a planting site (after step 7)
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 8 suites, 264 checks — the final check query on its
+allow and refuse — 8 suites, 271 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
-**Steps 1–9 are in the live database** (checked 15 October); steps 10 and 11 are new. Not deployed: the
+**Steps 1–12 are in the live database** (map layers and CLIRAM seen working, 15 October); step 13 is new. Not deployed: the
 `manage-account` server function — until it is, PGENRO's "Update email" and
 "Change password" say so and do nothing, and locking an account stops its
 writes but does not sign it out.
@@ -96,7 +98,9 @@ named `rise-extract`. To remove it when the backlog is done: delete
 `src/components/pgenro/RiseAutofill.jsx` and its one line in
 `SpeciesEditor.jsx` (and the reader tests in `SpeciesLibrary.test.jsx`), and
 delete the function and the secret in the dashboard. The species form stays.
-Profiles filled in with it keep `autofilled = true`.
+Profiles filled in with it keep `autofilled = true`. **Redeploy it** after
+step 13: it now also reads the site-need figures (elevation, rainfall,
+temperature, soils, flooding, origin) when an issue states them.
 
 When a training batch is done: `supabase/training_purge.sql`. It deletes every
 training row and leaves real rows alone; its section 3, commented out, also
@@ -199,16 +203,17 @@ The map draws land cover and tree planting sites, read out of
 figures, marked in amber. These turn it real; each needs the PGENRO account
 that can upload a layer.
 
-- **The uploads.** Elevation (Copernicus DEM), soil series (BSWM shapefile),
-  rainfall and temperature (DOST-PAGASA CLIRAM, per LGU), flood and landslide
-  extents (UPRI NOAH GeoJSON). The NOAH layer will supply
-  `hazards.{kind}.areaM2` outright; the sample records carry a `share` of the
-  polygon instead, and `hazardAreaM2` already reads either.
+- **The landslide upload.** Soil, elevation, flood and CLIRAM are live (15
+  October); a sample area opened on the map is measured against them. Only
+  NOAH's rain-induced landslide map is missing.
 - **Unlocking the rest of the land cover table.** All 29 published rows are in
   `src/lib/landCover.js`; four are `publicVisible`. The other 25 should become a
   PGENRO toggle rather than a second table — one table cannot drift from itself.
-- **Encoding the species recommendations.** From DENR RISE, matched against a
-  site's elevation, soil, rainfall and hazard exposure.
+- **Site needs for the species library.** The matching is built: a planting
+  site being saved suggests the library's trees that suit its ground, each
+  with why. It suggests nothing until the forester records each species' site
+  needs (Trees → Species (RISE) → "Site needs, in figures"), by hand or read
+  from the RISE PDF. Origin matters too: invasive species are never suggested.
 - **Soil series names.** The sample ones are plausible for lowland Laguna, not
   verified against the BSWM sheet.
 

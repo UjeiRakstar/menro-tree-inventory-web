@@ -69,6 +69,25 @@ describe('SitePanel, for a tree planting site', () => {
     expect(narra).toHaveAttribute('title', expect.stringContaining('Pterocarpus indicus'));
   });
 
+  it('ticks the names an office took from the matching, and says the rest are its own choice', () => {
+    const saved = {
+      ...plantingSite(),
+      properties: {
+        ...plantingSite().properties,
+        saved: true,
+        recommended: [
+          { common: 'Molave', scientific: 'Vitex parviflora', why: 'grows at 0–900 m', matched: true },
+          { common: 'Bamboo' },
+        ],
+      },
+    };
+    show(saved);
+    expect(screen.getByLabelText('matched to this ground').closest('span')).toHaveTextContent('Molave');
+    expect(screen.getByText('Molave')).toHaveAttribute('title', 'Vitex parviflora — grows at 0–900 m');
+    expect(screen.getByText('Bamboo')).not.toHaveAttribute('title');
+    expect(screen.getByText(/Chosen by the office\. Names with a tick were matched/)).toBeInTheDocument();
+  });
+
   it('says enough for somebody to actually turn up and plant', () => {
     // A site nobody can act on is a map pin. When, how many, how to get there,
     // who to ask.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, FileText, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, FileText, X } from 'lucide-react';
 import areaIcon from '../../assets/Total_Area_icon.png';
 import maiIcon from '../../assets/Total_MAI_icon.png';
 import elevationIcon from '../../assets/Elevation_Type_icon.png';
@@ -471,9 +471,12 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
                 {(props.recommended ?? []).map((tree) => (
                   <li key={tree.common}>
                     <span
-                      title={tree.why ? `${tree.scientific} — ${tree.why}` : tree.scientific}
-                      className="inline-block cursor-help rounded-md bg-green-50 px-2.5 py-1.5 text-[12px] font-bold text-green-900 ring-1 ring-inset ring-green-200"
+                      title={[tree.scientific, tree.why].filter(Boolean).join(' — ') || undefined}
+                      className={`inline-flex items-center gap-1 rounded-md bg-green-50 px-2.5 py-1.5 text-[12px] font-bold text-green-900 ring-1 ring-inset ring-green-200 ${
+                        tree.why || tree.scientific ? 'cursor-help' : ''
+                      }`}
                     >
+                      {tree.matched && <Check size={12} aria-label="matched to this ground" />}
                       {tree.common}
                     </span>
                   </li>
@@ -485,8 +488,11 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
                 </p>
               )}
               <p className="mt-2 text-[11px] leading-snug text-slate-400">
-                Matched to this site&apos;s elevation, soil, rainfall and hazard exposure from the
-                DENR RISE species list. Hover a name for why it suits the ground here.
+                {sample
+                  ? 'Matched to this site’s elevation, soil, rainfall and hazard exposure from the DENR RISE species list. Hover a name for why it suits the ground here.'
+                  : (props.recommended ?? []).some((tree) => tree.matched)
+                    ? 'Chosen by the office. Names with a tick were matched against this ground’s elevation, soil, rainfall and flooding from the species library (DENR RISE); hover one for why.'
+                    : 'Chosen by the office.'}
               </p>
 
               {/* What to do about it. A site nobody can act on is a map pin.

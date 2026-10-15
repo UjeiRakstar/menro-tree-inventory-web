@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { FileText, Lightbulb, Loader2, Upload, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { formatArea, SQ_M_PER_HECTARE } from '../../lib/areaGeometry.js';
-import { municipalityAt } from '../../lib/lagunaBoundaries.js';
+import { MUNICIPALITY_LIST, municipalityAt } from '../../lib/lagunaBoundaries.js';
 import { barangayAt, loadBarangayIndex } from '../../lib/barangayLookup.js';
 import { suggestCover, suggestionLabel } from '../../lib/coverSuggestion.js';
 import {
@@ -25,6 +25,8 @@ import { ProvisionalNote } from '../public/Provisional.jsx';
 import { loadMeasuringLayers } from '../../lib/layers/browser.js';
 import { factsFor } from '../../lib/layers/facts.js';
 import { groundOf } from '../../lib/mapAreas.js';
+import { asRecommended, recommendSpecies, siteOf } from '../../lib/speciesMatch.js';
+import SpeciesSuggestions from './SpeciesSuggestions.jsx';
 
 export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 
@@ -144,6 +146,7 @@ export default function AreaForm({
   trees = [],
   documentFolder = null,
   layers = null,
+  climateByLgu = null,
   onSaved,
   onCancel,
 }) {
@@ -188,6 +191,33 @@ export default function AreaForm({
     [shape, trees, measured]
   );
   const suggestion = useMemo(() => suggestCover(inside), [inside]);
+
+  // A planting site: the species library's trees that suit this ground.
+  const [library, setLibrary] = useState(null);
+  const plantingSite = form.kind === 'planting-site';
+  useEffect(() => {
+    if (!plantingSite || library) return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data, error: loadError } = await supabase.from('species_profiles').select('*');
+      if (!cancelled) setLibrary(loadError || !Array.isArray(data) ? 'unreadable' : data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [plantingSite, library]);
+  const lguPsgc = MUNICIPALITY_LIST.find((lgu) => lgu.name === place?.municipality)?.psgc ?? null;
+  const climate = climateByLgu?.get(lguPsgc) ?? null;
+  const speciesResult = useMemo(
+    () => (facts && Array.isArray(library) ? recommendSpecies(library, siteOf(facts, climate, measured.areaM2)) : null),
+    [facts, library, climate, measured.areaM2]
+  );
+  const matches = useMemo(() => (speciesResult ? speciesResult.suited.map(asRecommended) : []), [speciesResult]);
+  const chosenSpecies = new Set(
+    form.recommended.split(/[,\n]/).map((name) => name.trim().toLowerCase()).filter(Boolean)
+  );
+  const addSpecies = (name) =>
+    setForm((current) => ({ ...current, recommended: [current.recommended.trim(), name].filter(Boolean).join(', ') }));
   const problems = areaFormProblems(form, { measurable, hasNewDocument: Boolean(file) });
   const shown = tried ? problems : {};
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -237,7 +267,7 @@ export default function AreaForm({
     try {
       docUrl = form.designation && file ? await uploadDocument() : null;
       const row = {
-        ...rowFromForm(form, { shape, place, suggestion, treesCount: inside.length, docUrl }),
+        ...rowFromForm(form, { shape, place, suggestion, treesCount: inside.length, docUrl, matches }),
         ...(facts ? { layer_facts: facts, layer_facts_at: new Date().toISOString() } : {}),
       };
 
@@ -444,9 +474,18 @@ export default function AreaForm({
               <Field id={id('spacing')} label="Spacing (m)" problem={shown.spacingM} hint="Used to work out how many seedlings fit.">
                 <input id={id('spacing')} inputMode="decimal" value={form.spacingM} onChange={set('spacingM')} className={input} />
               </Field>
-              <Field id={id('recommended')} label="Recommended species" hint="Common names, separated by commas.">
+              <Field id={id('recommended')} label="Recommended species" hint="Common names, separated by commas — type them, or add the suggestions below.">
                 <textarea id={id('recommended')} rows={2} value={form.recommended} onChange={set('recommended')} className={input} />
               </Field>
+              {/* Waiting on the library or the layers says nothing; what is missing says why. */}
+              {(speciesResult || !facts || library === 'unreadable') && !measuring && (
+                <SpeciesSuggestions
+                  result={speciesResult}
+                  why={library === 'unreadable' ? 'library' : 'layers'}
+                  chosen={chosenSpecies}
+                  onAdd={addSpecies}
+                />
+              )}
               <Field id={id('access')} label="Getting there">
                 <input id={id('access')} value={form.accessNote} onChange={set('accessNote')} className={input} />
               </Field>

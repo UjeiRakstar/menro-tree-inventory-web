@@ -110,6 +110,38 @@ describe('typing one in', () => {
     });
   });
 
+  it('saves the site needs as figures, for matching to planting sites', async () => {
+    const form = await openNew('Molave');
+    fireEvent.change(within(form).getByLabelText('Elevation, lowest'), { target: { value: '0' } });
+    fireEvent.change(within(form).getByLabelText('Elevation, highest'), { target: { value: '900' } });
+    fireEvent.change(within(form).getByLabelText('Rainfall, highest'), { target: { value: '3,000' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Clay loam' }));
+    fireEvent.change(within(form).getByRole('combobox', { name: 'Origin' }), { target: { value: 'endemic' } });
+    fireEvent.change(within(form).getByRole('combobox', { name: 'Flooding' }), { target: { value: 'brief' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText(/Molave saved/)).toBeInTheDocument();
+    expect(upserts()[0].payload).toMatchObject({
+      elevation_min_m: 0,
+      elevation_max_m: 900,
+      rainfall_min_mm: null,
+      rainfall_max_mm: 3000,
+      soil_textures: ['clay-loam'],
+      origin: 'endemic',
+      flood_tolerance: 'brief',
+    });
+  });
+
+  it('will not save a range upside down', async () => {
+    const form = await openNew('Molave');
+    fireEvent.change(within(form).getByLabelText('Elevation, lowest'), { target: { value: '900' } });
+    fireEvent.change(within(form).getByLabelText('Elevation, highest'), { target: { value: '100' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    expect(await within(form).findByRole('alert')).toHaveTextContent('site needs');
+    expect(within(form).getByText('The lowest is above the highest.')).toBeInTheDocument();
+    expect(upserts()).toHaveLength(0);
+  });
+
   it('will not make a second write-up for a species that has one', async () => {
     renderLibrary();
     fireEvent.click(await screen.findByRole('button', { name: /Add a species/ }));
@@ -178,6 +210,27 @@ describe('reading a RISE PDF', () => {
     fireEvent.change(within(form).getByLabelText('Uses'), { target: { value: 'Posts and railway ties.' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Family is right' }));
     expect(within(form).getAllByText('From the PDF — check it')).toHaveLength(5);
+  });
+
+  it('fills the site needs too, when the issue states them, and marks them for checking', async () => {
+    supabaseMock.supabase.functions.invoke.mockResolvedValue({
+      data: {
+        ...READ_MOLAVE,
+        species: [{ ...READ_MOLAVE.species[0], elevation_min_m: 0, elevation_max_m: 900, soil_textures: ['clay-loam', 'peat'] }],
+      },
+      error: null,
+    });
+    const form = await openNew('Molave');
+    choosePdf();
+    fireEvent.click(within(form).getByRole('button', { name: 'Read it' }));
+    await waitFor(() => expect(within(form).getByLabelText('Elevation, highest')).toHaveValue('900'));
+
+    // A texture not on the list is dropped, not kept.
+    expect(within(form).getByRole('button', { name: 'Clay loam' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(form).getAllByText('From the PDF — check it')).toHaveLength(9);
+    // Changing either end of a range is checking that range.
+    fireEvent.change(within(form).getByLabelText('Elevation, lowest'), { target: { value: '10' } });
+    expect(within(form).getAllByText('From the PDF — check it')).toHaveLength(8);
   });
 
   it('asks which species, when an issue covers several', async () => {
