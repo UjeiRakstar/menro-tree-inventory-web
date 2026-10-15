@@ -1055,6 +1055,21 @@ describe('drawing and measuring an area', () => {
 });
 
 describe('the public map stays the public map', () => {
+  it('has the same layers as the offices, the survey layers marked as coming', async () => {
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
+    const panel = screen.getByRole('dialog', { name: 'Map layers' });
+    expect(within(panel).getByText('Every tree tagged in Laguna')).toBeInTheDocument();
+    for (const name of ['Soil type', 'Elevation', 'Flood hazard', 'Rain-induced landslide hazard']) {
+      expect(within(panel).getByRole('checkbox', { name: new RegExp(name) })).toBeDisabled();
+    }
+
+    // Turning the trees off takes them off the map.
+    fireEvent.click(within(panel).getByRole('checkbox', { name: /Tagged trees/ }));
+    expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
+  });
+
   it('has none of the office’s tools', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));

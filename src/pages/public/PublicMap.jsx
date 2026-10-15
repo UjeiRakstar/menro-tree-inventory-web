@@ -1447,6 +1447,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         // knows its own navbar's height.
         admin ? 'h-full' : 'h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)]'
       } ${panelShowing ? 'panel-open' : ''} ${sitePanelShowing ? 'site-panel-open' : ''} ${
+        selectedSite && sitePanelCollapsed && !areaEditor ? 'site-panel-collapsed' : ''
+      } ${
         drawing || pinningHall ? 'map-drawing-on' : ''
       }`}
     >
@@ -1498,11 +1500,17 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
            they come back as the panel closes. visibility as well as opacity,
            so a hidden tile cannot take a click. */
         .map-right-control {
-          transition: opacity 200ms ease, visibility 200ms ease;
+          transition: transform 300ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease,
+            visibility 200ms ease;
         }
         .site-panel-open .map-right-control {
           opacity: 0;
           visibility: hidden;
+        }
+        /* The area panel tucked away leaves its handle on the right edge,
+           level with the column: the column steps left of it. */
+        .site-panel-collapsed .map-right-control {
+          transform: translateX(-2.25rem);
         }
 
         /* A pin that has just come out of a group is a new element, so this
@@ -1584,7 +1592,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         />
 
         {/* Cities and municipalities inside Laguna */}
-        {(!admin || layers.boundaries) && (
+        {layers.boundaries && (
           <MunicipalityLayer
             data={municipalityData}
             selected={selectedLgu}
@@ -1595,7 +1603,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         )}
 
         {/* Land cover and tree planting sites — the spaces, as against the points */}
-        {(!admin || layers.sites) && (
+        {layers.sites && (
           <SiteLayer
             // Leaflet's GeoJSON layer is drawn once from its data; a new key
             // redraws it when an area is saved, edited or deleted.
@@ -1637,7 +1645,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         )}
 
         {/* Tagged trees, each where it was tagged; tapping one opens its panel */}
-        {(!admin || layers.trees) && (
+        {layers.trees && (
           <TreePins
             pins={mapPins}
             openTreeId={selectedTree?.id}
@@ -1820,6 +1828,33 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             ))}
           </select>
         )}
+
+        {/* What is drawn over the base map — the same list the offices have,
+            the PGENRO survey layers included as they arrive. */}
+        {!admin && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => toggleTool('layers')}
+              aria-expanded={openTool === 'layers'}
+              aria-controls="public-map-layers"
+              className="flex w-48 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+            >
+              <LayersIcon size={14} aria-hidden="true" /> Map layers
+            </button>
+            {openTool === 'layers' && (
+              <div className="absolute right-0 top-full mt-2">
+                <LayersPanel
+                  id="public-map-layers"
+                  audience="public"
+                  layers={layers}
+                  onToggle={toggleLayer}
+                  onClose={() => setOpenTool(null)}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* The office's tools, in the bottom-right corner where Google Maps keeps
@@ -1827,7 +1862,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           the left; Draw starts measuring; the two pictures are the base maps. */}
       {admin && (
         <div className="map-right-control absolute bottom-6 right-3 z-[400] flex flex-col items-end gap-2">
-          <div className="relative">
+          <div>
             <ToolTile
               icon={ListTree}
               label="Legend"
@@ -1842,7 +1877,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
                   id="map-legend"
                   role="dialog"
                   aria-label="Legend"
-                  className="w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl"
+                  className="max-h-[calc(100vh-13rem)] w-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-2xl"
                 >
                   <div className="flex items-start">
                     <h2 className="flex-1 text-sm font-bold text-slate-800">Legend</h2>
@@ -1860,7 +1895,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
               </div>
             )}
           </div>
-          <div className="relative">
+          <div>
             <ToolTile
               icon={LayersIcon}
               label="Layers"

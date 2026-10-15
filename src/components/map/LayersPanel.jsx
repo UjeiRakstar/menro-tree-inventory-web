@@ -9,13 +9,13 @@ import { ProvisionalTag } from '../public/Provisional.jsx';
  * underneath, disabled, with where each will come from — a promise the office
  * can see, rather than a feature nobody knows is coming.
  */
-export default function LayersPanel({ id, layers, onToggle, onClose }) {
+export default function LayersPanel({ id, layers, onToggle, onClose, audience = 'office' }) {
   return (
     <div
       id={id}
       role="dialog"
       aria-label="Map layers"
-      className="w-72 rounded-xl border border-slate-200 bg-white p-3 text-slate-800 shadow-2xl"
+      className="max-h-[calc(100vh-13rem)] w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 text-slate-800 shadow-2xl"
     >
       <div className="flex items-start gap-2">
         <h2 className="flex-1 text-sm font-bold">Layers</h2>
@@ -29,7 +29,10 @@ export default function LayersPanel({ id, layers, onToggle, onClose }) {
         </button>
       </div>
       <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-        Drawn over the base map. Street or satellite is chosen with the pictures below.
+        Drawn over the base map.{' '}
+        {audience === 'office'
+          ? 'Street or satellite is chosen with the pictures below.'
+          : 'Street or satellite is chosen from the base map list.'}
       </p>
 
       <fieldset className="mt-3">
@@ -46,7 +49,7 @@ export default function LayersPanel({ id, layers, onToggle, onClose }) {
                 />
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-slate-800">{layer.label}</span>
-                  <span className="block text-[10.5px] text-slate-500">{layer.detail}</span>
+                  <span className="block text-[10.5px] text-slate-500">{audience === 'public' && layer.publicDetail ? layer.publicDetail : layer.detail}</span>
                 </span>
               </label>
             </li>
