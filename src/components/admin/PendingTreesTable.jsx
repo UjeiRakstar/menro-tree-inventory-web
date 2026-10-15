@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { Loader2, Trash2, CheckCircle2, User, X, MapPin, Calendar, TreePine, Upload } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 
-export default function PendingTreesTable({ onCountChange }) {
+/**
+ * Community tags waiting on their LGU: verify (dispatch a field officer),
+ * reject, and publish once checked. `readOnly` is PGENRO's view — the
+ * province's tags, without the buttons: that work is the MENRO / CENRO's.
+ */
+export default function PendingTreesTable({ onCountChange, readOnly = false }) {
   const [pendingTrees, setPendingTrees] = useState([]);
   // Submissions an arborist is out verifying. They used to vanish from this
   // screen the moment they were dispatched, with nothing to bring them back.
@@ -148,6 +153,12 @@ export default function PendingTreesTable({ onCountChange }) {
 
   return (
     <div className="space-y-6">
+      {readOnly && (
+        <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200">
+          The community tags across Laguna. Verifying, rejecting and publishing them is done by the MENRO /
+          CENRO of each tag&apos;s city or municipality.
+        </p>
+      )}
       {publishError && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {publishError}
@@ -167,8 +178,8 @@ export default function PendingTreesTable({ onCountChange }) {
                 key={tree.id}
                 tree={tree}
                 isLoading={actionLoading === tree.id}
-                onReject={() => handleReject(tree.id)}
-                onVerify={() => handleOpenDispatch(tree)}
+                onReject={readOnly ? null : () => handleReject(tree.id)}
+                onVerify={readOnly ? null : () => handleOpenDispatch(tree)}
               />
             ))}
           </div>
@@ -196,6 +207,7 @@ export default function PendingTreesTable({ onCountChange }) {
                   {tree.barangay || 'Unknown location'}
                   {tree.assigned_to ? ` — with ${tree.assigned_to}` : ''}
                 </p>
+                {!readOnly && (
                 <button
                   type="button"
                   onClick={() => handlePublish(tree)}
@@ -209,6 +221,7 @@ export default function PendingTreesTable({ onCountChange }) {
                   )}
                   Publish to map
                 </button>
+                )}
               </article>
             ))}
           </div>
@@ -339,7 +352,8 @@ function PendingCard({ tree, isLoading, onReject, onVerify }) {
           GPS: {tree.latitude?.toFixed(5)}, {tree.longitude?.toFixed(5)}
         </p>
 
-        {/* Actions */}
+        {/* Actions — none in PGENRO's read-only view */}
+        {onReject && onVerify && (
         <div className="flex gap-2">
           <button
             onClick={onReject}
@@ -358,6 +372,7 @@ function PendingCard({ tree, isLoading, onReject, onVerify }) {
             Verify Tree
           </button>
         </div>
+        )}
       </div>
     </div>
   );

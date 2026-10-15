@@ -964,12 +964,20 @@ describe('what an office can do to a tree', () => {
     supabaseMock.setResponse('pending_trees:select', { data: [OUT_FOR_CHECKING], error: null });
   });
 
-  async function open(tree) {
-    renderOffice();
+  async function open(tree, profile = SANTA_CRUZ_ADMIN) {
+    renderOffice({ profile });
     await waitFor(() => expect(officePin(tree)).toBeTruthy());
     fireEvent.click(officePin(tree));
     return screen.findByRole('complementary', { name: new RegExp(tree.species, 'i') });
   }
+
+  it('leaves dispatching and permits to the MENRO / CENRO, not PGENRO', async () => {
+    const panel = await open(OFFICE_TREES[0], PGENRO_ADMIN);
+    // PGENRO still sees what the tree needs.
+    expect(within(panel).getByText('Hazard — needs dispatching')).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /Dispatch|Re-assign|Issue permit/ })).not.toBeInTheDocument();
+    expect(panel).toHaveTextContent('done by the MENRO / CENRO');
+  });
 
   it('dispatches someone to a hazard nobody is on', async () => {
     const panel = await open(OFFICE_TREES[0]);

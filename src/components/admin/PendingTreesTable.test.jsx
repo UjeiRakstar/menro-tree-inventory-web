@@ -117,6 +117,14 @@ describe('PendingTreesTable', () => {
     expect(screen.queryByRole('region', { name: 'Awaiting review' })).not.toBeInTheDocument();
   });
 
+  it('shows PGENRO the queue without the buttons, and says whose work it is', async () => {
+    render(<PendingTreesTable readOnly />);
+    const awaiting = await screen.findByRole('region', { name: 'Awaiting review' });
+    expect(within(awaiting).getByText('Narra')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Verify|Reject|Publish/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/done by the MENRO \/\s*CENRO/)).toBeInTheDocument();
+  });
+
   it('says so when the queue cannot be read, rather than looking empty', async () => {
     supabaseMock.setResponse('pending_trees:select', { data: null, error: { message: 'offline' } });
     render(<PendingTreesTable />);

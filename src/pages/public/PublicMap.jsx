@@ -801,7 +801,7 @@ function FlyToUserButton({ mapRef }) {
  * permit is issued once. A button that cannot be used says why on hover and to
  * a screen reader, rather than just greying out.
  */
-function TreeActions({ tree, onDispatch, onPermit }) {
+function TreeActions({ tree, onDispatch, onPermit, canAct = true }) {
   const color = pinColorOf(tree);
   const hazard = color === PIN_COLOR.RED || color === PIN_COLOR.ORANGE;
   const permitted = Boolean(tree.has_cutting_permit || tree.hasCuttingPermit);
@@ -821,6 +821,12 @@ function TreeActions({ tree, onDispatch, onPermit }) {
       {tree.__pending ? (
         <p className="mt-2 text-xs text-slate-500">
           A resident tagged this. It joins the inventory once the field officer checks it in the app.
+        </p>
+      ) : !canAct ? (
+        // PGENRO watches the province; the work on a tree is its LGU's.
+        <p className="mt-2 text-xs text-slate-500">
+          Dispatching an arborist and issuing a cutting permit are done by the MENRO / CENRO of the
+          tree&apos;s city or municipality.
         </p>
       ) : (
         <div className="mt-2.5 flex gap-2">
@@ -848,7 +854,7 @@ function TreeActions({ tree, onDispatch, onPermit }) {
           </button>
         </div>
       )}
-      {!tree.__pending && !hazard && (
+      {!tree.__pending && canAct && !hazard && (
         <p id="tree-action-why" className="sr-only">
           Only a tree with a hazard is dispatched.
         </p>
@@ -1604,6 +1610,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         tree={selectedTree}
         onDispatch={() => setDispatchTree(selectedTree)}
         onPermit={() => setPermitTree(selectedTree)}
+        canAct={roleOf(profile) === ROLES.LGU_ADMIN}
       />
     ) : null;
 

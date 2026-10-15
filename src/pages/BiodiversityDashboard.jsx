@@ -20,6 +20,8 @@ import { classifyPinColor } from '../lib/pinColor.js';
 import { HEX_FOR_COLOR } from '../lib/markerIcons.js';
 import InventoryView from './InventoryView.jsx';
 import PendingTreesTable from '../components/admin/PendingTreesTable.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { ROLES, roleOf } from '../lib/roles.js';
 import santaCruzBoundary from '../data/Santa-Cruz-Boundary.geojson';
 
 const SANTA_CRUZ_CENTER = [14.2823, 121.4163];
@@ -90,6 +92,9 @@ function FitToPins({ pins }) {
 
 export default function BiodiversityDashboard() {
   const [activeTab, setActiveTab] = useState('analytics');
+  // PGENRO sees the community tags, but verifying them is the LGU's.
+  const { profile } = useAuth();
+  const pgenro = roleOf(profile) === ROLES.PGENRO;
   const [location, setLocation] = useState(ALL_BARANGAYS_LABEL);
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -704,7 +709,7 @@ export default function BiodiversityDashboard() {
 
       {/* Tab 3: Pending Review (Crowdsourced) */}
       {activeTab === 'pending' && (
-        <PendingTreesTable onCountChange={setPendingCount} />
+        <PendingTreesTable onCountChange={setPendingCount} readOnly={pgenro} />
       )}
     </section>
   );
