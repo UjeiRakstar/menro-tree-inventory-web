@@ -74,13 +74,15 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
    'area-documents' bucket (after step 1; after step 5 if training is in use)
 10. `supabase/closing_gaps.sql` — publishing a tag checks whose it is, and
     area documents are filed by office so old ones can be removed (last)
+11. `supabase/live_updates.sql` — areas and PGENRO's proposals update on screen
+    without a refresh (after step 9)
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
 allow and refuse — 8 suites, 264 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
-**Steps 1–9 are in the live database** (checked 15 October); step 10 is new. Not deployed: the
+**Steps 1–9 are in the live database** (checked 15 October); steps 10 and 11 are new. Not deployed: the
 `manage-account` server function — until it is, PGENRO's "Update email" and
 "Change password" say so and do nothing, and locking an account stops its
 writes but does not sign it out.

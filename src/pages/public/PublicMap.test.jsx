@@ -1467,6 +1467,25 @@ describe('saving an area', () => {
       expect(flyToSpy).toHaveBeenCalled();
     });
 
+    it('updates live when an area or a proposal changes elsewhere, without a refresh', async () => {
+      await openSaved(SANTA_CRUZ_ADMIN);
+      const listenerFor = (table) =>
+        supabaseMock.supabase.channel().on.mock.calls.find(([, filter]) => filter?.table === table)?.[2];
+      const before = supabaseMock.writesTo('map_areas', 'select').length;
+
+      // PGENRO proposes, somewhere else: the database tells the page.
+      supabaseMock.setResponse('map_area_proposals:select', {
+        data: [{ id: 'p9', area_id: 'area-1', status: 'pending', changes: { ...SAVED, name: 'From PGENRO' } }],
+        error: null,
+      });
+      act(() => listenerFor('map_area_proposals')());
+
+      const panel = screen.getByRole('complementary', { name: 'Labuin Secondary Forest' });
+      expect(await within(panel).findByRole('region', { name: "PGENRO's proposal" })).toHaveTextContent('From PGENRO');
+      expect(supabaseMock.writesTo('map_areas', 'select').length).toBeGreaterThan(before);
+      expect(listenerFor('map_areas')).toBeTypeOf('function');
+    });
+
     it('gives another LGU’s office nothing to change', async () => {
       const panel = await openSaved({ ...SANTA_CRUZ_ADMIN, lgu_psgc: 403405000 });
       expect(within(panel).queryByRole('button', { name: /Edit|Delete|Propose/ })).not.toBeInTheDocument();

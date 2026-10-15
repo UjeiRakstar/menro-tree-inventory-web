@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { rowToFeature } from '../lib/mapAreas.js';
 
@@ -44,6 +44,38 @@ export function useMapAreas({ withProposals = false } = {}) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Live: an area saved, edited or deleted anywhere, or a proposal made or
+  // decided, shows without a refresh (supabase/live_updates.sql). A burst of
+  // changes — an approval touches both tables — becomes one reload. And on
+  // coming back to the tab, in case anything was missed while it slept.
+  // useId has colons, which a channel name uses as its own separator.
+  const channelName = `map-areas-${useId().replace(/:/g, '')}`;
+  useEffect(() => {
+    let timer = null;
+    const soon = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => reload(), 300);
+    };
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'map_areas' }, soon);
+    if (withProposals) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'map_area_proposals' }, soon);
+    }
+    channel.subscribe();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') soon();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', soon);
+    return () => {
+      clearTimeout(timer);
+      supabase.removeChannel?.(channel);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', soon);
+    };
+  }, [reload, withProposals, channelName]);
 
   const features = useMemo(
     () => rows.map((row) => rowToFeature(row, { lguLabel: labels.get(Number(row.lgu_psgc)) ?? '' })),

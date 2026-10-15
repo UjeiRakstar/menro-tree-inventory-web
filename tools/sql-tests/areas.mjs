@@ -43,6 +43,7 @@ await db.exec(`
   create function storage.foldername(name text) returns text[] language sql immutable as $$
     select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
   alter table storage.objects enable row level security;
+  create publication supabase_realtime;
   create table public.barangays (psgc bigint primary key, name text, municipality text,
     municipality_label text, municipality_psgc bigint, is_city boolean);
   insert into public.barangays values (403426001, 'Labuin', 'Santa Cruz', 'Santa Cruz', 403426000, false);
@@ -274,6 +275,13 @@ check('…but not PGENRO’s', removePg.affectedRows === 0);
 const pgRemoves = await as(PGENRO, 'authenticated', () => db.query(
   `delete from storage.objects where bucket_id = 'area-documents' and name = 'pgenro/p.pdf'`));
 check('PGENRO removes any', pgRemoves.affectedRows === 1);
+
+// ---- Live updates ----------------------------------------------------------------------------
+for (const label of ['runs', 'runs twice']) {
+  const out = await asEditor(SQL('live_updates.sql'));
+  const rows = out[out.length - 1].rows;
+  check(`live_updates.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok}`).join('; '));
+}
 
 // ---- The purge takes training areas --------------------------------------------------------
 await asEditor(SQL('training_purge.sql'));

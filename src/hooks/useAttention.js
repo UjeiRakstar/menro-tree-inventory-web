@@ -33,6 +33,20 @@ export const lguOfTree = (tree) => {
 export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
   const { pathname } = useLocation();
   const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null });
+  // Bumped when a proposal is made or decided, so the "!" changes live
+  // (supabase/live_updates.sql) rather than on the next page.
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!withProposals) return undefined;
+    const channel = supabase
+      .channel('attention-proposals')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'map_area_proposals' }, () =>
+        setTick((n) => n + 1)
+      )
+      .subscribe();
+    return () => supabase.removeChannel?.(channel);
+  }, [withProposals]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +82,7 @@ export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [pathname, lguPsgc, withProposals]);
+  }, [pathname, lguPsgc, withProposals, tick]);
 
   return counts;
 }
