@@ -297,8 +297,10 @@ export const PENDING_METRICS = [
     key: 'forestCoverHa',
     label: 'Forest / Tree Cover Area',
     unit: 'ha',
+    // Shown here only until an office saves a tree cover area on its map;
+    // then the page shows the mapped figure instead (src/lib/mappedCover.js).
     waitingOn:
-      'the mapping feature, which has to delineate tree cover before there are hectares to count',
+      'the LGU offices mapping their tree cover on the office map. None has been saved here yet',
   },
   {
     key: 'carbonEmissionKg',

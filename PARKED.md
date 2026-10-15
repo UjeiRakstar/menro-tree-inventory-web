@@ -38,9 +38,6 @@ Last read through: 15 October 2026, against the repo, the live database
   `src/hooks/useMapAreas.js` and replace the samples once any exist; the
   comment, and the layer panel's "Sample areas until PGENRO uploads", should
   say so.
-- **A MENRO is not told about PGENRO's proposals.** A proposal shows only in
-  the area's own panel. Nothing counts them — the seal's "!" counts field
-  officers waiting, not proposals waiting.
 - **A trainee in the field app is not told.** The training wall works in the
   app (tested), but the app shows no "training" banner the way the website
   does.
@@ -164,12 +161,12 @@ stayed online** after the area was deleted or its PDF replaced.
 
 ## Waiting on another system
 
-- **Two BioDashboard figures the map can now feed.** Saving areas is built
-  (phase 3), so these no longer wait on another system — only on being wired:
-  - Forest / Tree Cover Area, still "Awaiting data": the sum of saved areas
-    whose NAMRIA class is tree cover.
-  - MAI per hectare: the forestry figures are totals for the tagged trees, and
-    become Mg/ha/yr once there is cover area to divide by.
+- **MAI per hectare, deliberately not done.** The BioDashboard now shows
+  *mapped* tree cover (hectares, by NAMRIA class, and the growth at each
+  class's published rate) once an office saves tree-cover areas. Dividing the
+  tagged trees' growth by those hectares was the old plan; it mixes a sample
+  (wherever somebody tagged) with an area (what somebody drew) into a figure
+  that describes neither. A per-hectare figure needs a plot survey instead.
 - **The emissions feed.** Total Carbon Emission comes from outside this system
   (Greenhouse Gases Quantification Sheet, Climate Change Commission).
 - **Downloads.** The data request form collects who is asking and what for,

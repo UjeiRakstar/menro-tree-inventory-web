@@ -33,6 +33,10 @@ import {
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
+import { useMapAreas } from '../../hooks/useMapAreas.js';
+import { summariseMappedCover } from '../../lib/mappedCover.js';
+import { formatTonnesPerYear } from '../../lib/landCover.js';
+import { PLANNING_ONLY } from '../../lib/namriaCover.js';
 import {
   FORESTRY_PAIR,
   METRIC_PAIRS,
@@ -543,6 +547,16 @@ export default function PublicDashboard() {
 
   const scopeLabel = selectedLgu ? labelOf(selectedLgu) : 'Laguna';
 
+  // Tree cover the LGU offices have mapped, in the place in view.
+  const savedAreas = useMapAreas();
+  const mappedCover = useMemo(
+    () => summariseMappedCover(savedAreas.features, { municipality: selectedLgu }),
+    [savedAreas.features, selectedLgu]
+  );
+  const pendingMetrics = PENDING_METRICS.filter(
+    (metric) => !(metric.key === 'forestCoverHa' && mappedCover.areas > 0)
+  );
+
   /**
    * Every place in scope, including the ones with no trees in them.
    *
@@ -839,6 +853,46 @@ export default function PublicDashboard() {
           </div>
         </div>
 
+        {/* Tree cover as the offices have mapped it — a real figure, but only
+            of what has been drawn, and the card says so. */}
+        {mappedCover.areas > 0 && (
+          <section aria-label="Mapped tree cover" className="mt-10">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">From the map</h2>
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                Forest / Tree Cover Area — mapped
+              </p>
+              <p className="mt-1 flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-green-800">
+                  {mappedCover.hectares.toLocaleString('en-US', {
+                    minimumFractionDigits: mappedCover.hectares < 10 ? 2 : 1,
+                    maximumFractionDigits: mappedCover.hectares < 10 ? 2 : 1,
+                  })}
+                </span>
+                <span className="text-xs text-slate-500">ha</span>
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                Across {mappedCover.areas} {mappedCover.areas === 1 ? 'area' : 'areas'} the LGU offices have mapped in{' '}
+                {scopeLabel}: {mappedCover.byClass.map((c) => `${c.label} ${c.hectares.toFixed(1)} ha`).join(' · ')}.
+                Only what has been mapped — not all of {scopeLabel}&rsquo;s tree cover.
+              </p>
+              {mappedCover.biomassTPerYear > 0 && (
+                <p className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-slate-700">
+                  About <strong>{formatTonnesPerYear(mappedCover.biomassTPerYear)} t</strong> of above-ground biomass a
+                  year, at each class&rsquo;s published rate.
+                  <ProvisionalTag kind="borrowed" />
+                </p>
+              )}
+              {mappedCover.unratedHa > 0 && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {mappedCover.unratedHa.toFixed(1)} ha has no published rate, and is not counted in the growth.
+                </p>
+              )}
+              <p className="mt-2 text-[10.5px] text-slate-400">{PLANNING_ONLY}</p>
+            </div>
+          </section>
+        )}
+
         {/* Asked for, and honestly not here yet. Shown small rather than
             omitted: the public looks for these, and a page that left them out
             would read as though nobody had thought of them. */}
@@ -847,7 +901,7 @@ export default function PublicDashboard() {
             Not available yet
           </h2>
           <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {PENDING_METRICS.map((metric) => (
+            {pendingMetrics.map((metric) => (
               <li
                 key={metric.key}
                 data-provisional="awaiting"

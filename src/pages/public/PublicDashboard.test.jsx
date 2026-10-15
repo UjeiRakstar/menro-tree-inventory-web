@@ -247,7 +247,7 @@ describe('PublicDashboard', () => {
 
     const cover = within(pending).getByText('Forest / Tree Cover Area').closest('li');
     expect(within(cover).getByText('—')).toBeInTheDocument();
-    expect(within(cover).getByText(/Waiting on the mapping feature/)).toBeInTheDocument();
+    expect(within(cover).getByText(/Waiting on the LGU offices mapping their tree cover/)).toBeInTheDocument();
 
     const emission = within(pending).getByText('Total Carbon Emission').closest('li');
     expect(within(emission).getByText(/Climate Change Commission/)).toBeInTheDocument();
@@ -256,6 +256,32 @@ describe('PublicDashboard', () => {
     expect(
       screen.queryByRole('button', { name: /^Forest \/ Tree Cover Area/ })
     ).not.toBeInTheDocument();
+  });
+
+  it('shows the tree cover the offices have mapped, once there is some — and says it is only that', async () => {
+    // About a hectare of open forest in Santa Cruz, saved by its office.
+    const dLat = 100 / 111320;
+    const dLng = 100 / (111320 * Math.cos((14.28 * Math.PI) / 180));
+    supabaseMock.setResponse('map_areas:select', {
+      data: [
+        {
+          id: 'a1', kind: 'land-cover', name: 'Labuin Forest', cover_class: 'open-forest',
+          municipality: 'Santa Cruz', lgu_psgc: 403426000, created_by_role: 'lgu_admin',
+          geometry: { type: 'Polygon', coordinates: [[[121.41, 14.28], [121.41 + dLng, 14.28], [121.41 + dLng, 14.28 + dLat], [121.41, 14.28]]] },
+        },
+      ],
+      error: null,
+    });
+    renderDashboard();
+
+    const mapped = await screen.findByRole('region', { name: 'Mapped tree cover' });
+    expect(mapped).toHaveTextContent(/0\.50\s*ha/);
+    expect(mapped).toHaveTextContent('Open forest');
+    expect(mapped).toHaveTextContent(/Only what has been mapped/);
+    expect(mapped).toHaveTextContent(/For planning purposes only/);
+    // No longer listed as waiting.
+    const pending = screen.getByRole('region', { name: 'Figures not available yet' });
+    expect(within(pending).queryByText('Forest / Tree Cover Area')).not.toBeInTheDocument();
   });
 
   it('selects a city or municipality clicked on the map, and unselects it on a second click', async () => {
