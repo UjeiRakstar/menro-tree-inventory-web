@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Building2, Eye, Loader2, MapPin, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../../lib/provinceBoard.js';
 import { namriaClassById } from '../../lib/namriaCover.js';
 import ProvincePermits from './ProvincePermits.jsx';
+import PlantingRequests from '../../components/PlantingRequests.jsx';
 
 /** Each metric's colour, the office map's where it has one. */
 const TONE = {
@@ -281,7 +282,12 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen }) {
  * permit logs. Read-only — the work stays with each MENRO/CENRO.
  */
 export default function ProvinceBoard() {
-  const [tab, setTab] = useState('overview');
+  // ?tab=requests opens the planting site requests (the header's menu links there).
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => (searchParams.get('tab') === 'requests' ? 'requests' : 'overview'));
+  useEffect(() => {
+    if (searchParams.get('tab') === 'requests') setTab('requests');
+  }, [searchParams]);
   const [data, setData] = useState({ trees: [], tags: [], areas: [], profiles: [], lgus: [], permits: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -339,6 +345,7 @@ export default function ProvinceBoard() {
         {[
           ['overview', 'Overview'],
           ['permits', 'Permit logs'],
+          ['requests', 'Planting site requests'],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -370,6 +377,8 @@ export default function ProvinceBoard() {
           lgus={data.lgus}
           onOpen={(metric, lgu) => setOpen({ metric, lgu })}
         />
+      ) : tab === 'requests' ? (
+        <PlantingRequests decides />
       ) : (
         <ProvincePermits permits={data.permits} trees={data.trees} lgus={data.lgus} labelOf={labelOf} />
       )}

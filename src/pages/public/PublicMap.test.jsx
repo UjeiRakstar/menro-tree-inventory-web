@@ -1392,6 +1392,62 @@ describe('saving an area', () => {
     expect(await within(form).findByText(/Suggestions need PGENRO’s layers/)).toBeInTheDocument();
   });
 
+  describe('bringing an area in from a file', () => {
+    const square = (lng, lat, d = 0.001) => [[lng, lat], [lng + d, lat], [lng + d, lat + d], [lng, lat + d], [lng, lat]];
+    const geojson = (...areas) => {
+      const text = JSON.stringify({
+        type: 'FeatureCollection',
+        features: areas.map(([name, ring]) => ({ type: 'Feature', properties: { Name: name }, geometry: { type: 'Polygon', coordinates: [ring] } })),
+      });
+      const file = new File([text], 'areas.geojson', { type: 'application/geo+json' });
+      // Every browser's File reads itself as text; jsdom's does not.
+      file.text = async () => text;
+      return file;
+    };
+    async function importFile(file) {
+      renderOffice({ fence: 'Santa Cruz', profile: SANTA_CRUZ_ADMIN });
+      await waitFor(() => expect(screen.queryByText('Loading map data…')).not.toBeInTheDocument());
+      fireEvent.change(screen.getByLabelText('Area file (GeoJSON or shapefile)'), { target: { files: [file] } });
+    }
+
+    it('opens the save form with the area drawn and its name filled in', async () => {
+      await importFile(geojson(['Labuin Riverbank', square(121.4163, 14.2823)]));
+      const form = await screen.findByRole('form', { name: 'Save this area' });
+      expect(within(form).getByLabelText(/^Name/)).toHaveValue('Labuin Riverbank');
+      // 0.001° a side at 14°N: about 108 m by 111 m.
+      expect(within(form).getByRole('region', { name: 'What the map measured' })).toHaveTextContent('Area1.20 ha');
+      expect(screen.getByRole('region', { name: 'Measure area' })).toHaveTextContent('Brought in from the file');
+    });
+
+    it('asks which, when the file has several', async () => {
+      await importFile(geojson(['Small', square(121.4163, 14.2823)], ['Big', square(121.417, 14.283, 0.002)]));
+      const choose = await screen.findByRole('dialog', { name: 'Choose the area to bring in' });
+      fireEvent.click(within(choose).getByRole('button', { name: /^Small/ }));
+      expect(within(await screen.findByRole('form', { name: 'Save this area' })).getByLabelText(/^Name/)).toHaveValue('Small');
+    });
+
+    it('will not bring in an area outside the LGU', async () => {
+      // Calamba, not Santa Cruz.
+      await importFile(geojson(['Elsewhere', square(121.165, 14.21)]));
+      expect(await screen.findByRole('alert')).toHaveTextContent('outside Santa Cruz');
+      expect(screen.queryByRole('form', { name: 'Save this area' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('sends an office’s planting site to PGENRO as a request, and says so', async () => {
+    const form = await openForm();
+    fireEvent.click(within(form).getByRole('radio', { name: 'Tree planting site' }));
+    expect(within(form).getByRole('note')).toHaveTextContent('This goes to PGENRO as a request');
+    expect(within(form).getByRole('button', { name: 'Send the request' })).toBeInTheDocument();
+  });
+
+  it('lets PGENRO save a planting site outright', async () => {
+    const form = await openForm(PGENRO_ADMIN);
+    fireEvent.click(within(form).getByRole('radio', { name: 'Tree planting site' }));
+    expect(within(form).queryByRole('note')).not.toBeInTheDocument();
+    expect(within(form).getByRole('button', { name: 'Save the area' })).toBeInTheDocument();
+  });
+
   it('says what is missing before saving', async () => {
     const form = await openForm();
     fireEvent.click(within(form).getByRole('button', { name: 'Save the area' }));
@@ -1486,7 +1542,7 @@ describe('saving an area', () => {
       else renderMap();
       await waitFor(() => expect(siteHandlers.has('area-1')).toBe(true));
       act(() => siteHandlers.get('area-1').click());
-      return screen.getByRole('complementary', { name: 'Labuin Secondary Forest' });
+      return screen.getByRole('complementary', { name: /^Labuin Secondary Forest/ });
     }
 
     it('shows what PGENRO’s layers and CLIRAM say about the ground', async () => {
@@ -1522,6 +1578,29 @@ describe('saving an area', () => {
       expect(panel).toHaveTextContent('For planning purposes only. Not a land title');
       expect(panel).not.toHaveTextContent('everything but the area');
       expect(within(panel).queryByRole('button', { name: /Edit|Delete|Propose/ })).not.toBeInTheDocument();
+    });
+
+    it('is a request PGENRO approves or declines, when an office asked for a planting site', async () => {
+      const request = { ...SAVED, kind: 'planting-site', cover_class: null, approval: 'requested' };
+      supabaseMock.setResponse('map_areas:select', { data: [request], error: null });
+      supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
+      const panel = await openSaved(PGENRO_ADMIN);
+      const asked = within(panel).getByRole('region', { name: 'Planting site request' });
+      expect(asked).toHaveTextContent('Requested by the Santa Cruz MENRO / CENRO');
+      expect(within(panel).queryByRole('button', { name: /Edit|Propose/ })).not.toBeInTheDocument();
+      fireEvent.click(within(asked).getByRole('button', { name: 'Approve' }));
+      await waitFor(() =>
+        expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('decide_planting_request', { p_id: 'area-1', p_approve: true, p_note: null })
+      );
+    });
+
+    it('tells the office that asked why PGENRO declined, and lets it ask again', async () => {
+      const declined = { ...SAVED, kind: 'planting-site', cover_class: null, approval: 'declined', review_note: 'Inside the easement' };
+      supabaseMock.setResponse('map_areas:select', { data: [declined], error: null });
+      const panel = await openSaved(SANTA_CRUZ_ADMIN);
+      expect(within(panel).getByRole('status')).toHaveTextContent('PGENRO declined this request.“Inside the easement”');
+      expect(within(panel).getByRole('button', { name: /Edit/ })).toBeInTheDocument();
+      expect(within(panel).getByRole('button', { name: /Withdraw/ })).toBeInTheDocument();
     });
 
     it('can be edited and deleted by the office that drew it', async () => {

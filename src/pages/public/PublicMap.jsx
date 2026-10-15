@@ -15,7 +15,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSearchParams } from 'react-router-dom';
-import { Crosshair, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Smartphone, X } from 'lucide-react';
+import { Crosshair, FileUp, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   LAGUNA_BOUNDS,
@@ -35,6 +35,8 @@ import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
 import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
+import { ACCEPTED_FILES, areaCandidates, boundsOfShape, readAreaFiles, shapeFromGeometry } from '../../lib/areaImport.js';
+import { formatArea } from '../../lib/areaGeometry.js';
 import { ROLES, roleOf } from '../../lib/roles.js';
 import { centroidOf } from '../../lib/areaGeometry.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
@@ -126,8 +128,15 @@ const PLANTING_SITE_STYLE = { color: '#ca8a04', weight: 2, opacity: 0.95, fillCo
 const SITE_HOVER_STYLE = { weight: 3, fillOpacity: 0.42 };
 const SITE_SELECTED_STYLE = { weight: 4, fillOpacity: 0.5 };
 
-const styleForSite = (feature) =>
-  feature?.properties?.kind === 'planting-site' ? PLANTING_SITE_STYLE : LAND_COVER_STYLE;
+// A planting site only asked for, not yet approved, is drawn dashed and
+// fainter: it is a request, seen by the office and PGENRO only.
+const REQUESTED_STYLE = { dashArray: '6 5', fillOpacity: 0.12 };
+
+const styleForSite = (feature) => {
+  const props = feature?.properties;
+  if (props?.kind !== 'planting-site') return LAND_COVER_STYLE;
+  return props.approval && props.approval !== 'approved' ? { ...PLANTING_SITE_STYLE, ...REQUESTED_STYLE } : PLANTING_SITE_STYLE;
+};
 
 /**
  * Leaflet draws everything vector into one layer unless told otherwise, and
@@ -225,7 +234,9 @@ function FlyToPoint({ target }) {
   const map = useMap();
   useEffect(() => {
     if (!target) return;
-    map.flyTo(target.position, target.zoom ?? 19, { duration: 1.2 });
+    // An imported area is framed whole; a tree or the hall is flown to.
+    if (target.bounds) map.flyToBounds(target.bounds, { padding: [48, 48], duration: 1.2 });
+    else map.flyTo(target.position, target.zoom ?? 19, { duration: 1.2 });
   }, [target, map]);
   return null;
 }
@@ -319,10 +330,14 @@ function SiteLayer({ sites, selectedId, onSelect }) {
       style={styleFor}
       bubblingMouseEvents={false}
       onEachFeature={(feature, layer) => {
-        const { id, kind, coverId, coverLabel } = feature.properties;
+        const { id, kind, coverId, coverLabel, approval } = feature.properties;
         const what =
           kind === 'planting-site'
-            ? 'Tree planting site'
+            ? approval === 'requested'
+              ? 'Planting site requested, waiting for PGENRO'
+              : approval === 'declined'
+                ? 'Planting site request, declined'
+                : 'Tree planting site'
             : coverLabel ?? landCoverById(coverId)?.label ?? 'Land cover';
         layer.bindTooltip(`${siteTitle(feature)} — ${what}`, {
           sticky: true,
@@ -929,6 +944,13 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const [drawing, setDrawing] = useState(false);
   const [shape, setShape] = useState(EMPTY_SHAPE);
   const [drawNotice, setDrawNotice] = useState('');
+  // Bringing an area in from a file: reading it, the areas to choose from
+  // when it has several, what went wrong, and the name it came with.
+  const importInput = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importChoices, setImportChoices] = useState(null);
+  const [importError, setImportError] = useState('');
+  const [importedName, setImportedName] = useState('');
   // Saving what is drawn: { mode: 'new' | 'edit' | 'propose', featureId }.
   const [areaEditor, setAreaEditor] = useState(null);
   // Areas offices have saved; the samples stand in until there are some.
@@ -1460,6 +1482,48 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     setShape(EMPTY_SHAPE);
     setDrawNotice('');
     setAreaEditor(null);
+    setImportedName('');
+  }
+
+  // ---- Bringing an area in from a file ----------------------------------------
+  async function handleImportFiles(event) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const candidates = areaCandidates(await readAreaFiles(files));
+      if (candidates.length === 1) bringIn(candidates[0]);
+      else setImportChoices(candidates);
+    } catch (failure) {
+      setImportError(failure.message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  /** One area from a file, on the map as a drawing and in the save form. */
+  function bringIn(candidate) {
+    setImportChoices(null);
+    const { shape: imported, notes } = shapeFromGeometry(candidate.geometry);
+    // The same rule as drawing: an LGU account's area is inside its LGU.
+    const outside = imported.points.filter((point) => refusePoint(point)).length;
+    if (outside > imported.points.length * 0.1) {
+      setImportError(
+        fenceFeature
+          ? `That area is outside ${fenceLabel}: ${outside} of its ${imported.points.length} points fall beyond the boundary. An LGU account brings in areas inside its own LGU only.`
+          : `That area is outside Laguna: ${outside} of its ${imported.points.length} points fall beyond the boundary.`
+      );
+      return;
+    }
+    setImportError('');
+    startDrawing();
+    setShape(imported);
+    setImportedName(candidate.name);
+    setPointTarget({ bounds: boundsOfShape(imported) });
+    openAreaEditor('new');
+    setDrawNotice(['Brought in from the file. Move any point that is not right.', ...notes].join(' '));
   }
 
   // ---- Saving what is drawn ------------------------------------------------------
@@ -1974,13 +2038,14 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           <AreaForm
             key={areaEditor.featureId ?? 'new'}
             mode={areaEditor.mode}
-            initial={editingRow ? formFromRow(editingRow) : emptyAreaForm()}
+            initial={editingRow ? formFromRow(editingRow) : { ...emptyAreaForm(), name: importedName }}
             existing={editingRow}
             shape={shape}
             trees={trees}
             documentFolder={documentFolderOf(profile)}
             layers={mapLayers.layers}
             climateByLgu={mapLayers.climateByLgu}
+            requestsPlantingSites={roleOf(profile) === ROLES.LGU_ADMIN}
             onSaved={handleAreaSaved}
             onCancel={cancelAreaEditor}
           />
@@ -2127,6 +2192,25 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             onClick={drawing ? stopDrawing : startDrawing}
             pressed={drawing}
           />
+          {canSaveAreas && !drawing && (
+            <>
+              <ToolTile
+                icon={importing ? Loader2 : FileUp}
+                label="Import"
+                description="Bring in an area from a GeoJSON or shapefile"
+                onClick={() => importInput.current?.click()}
+              />
+              <input
+                ref={importInput}
+                type="file"
+                multiple
+                accept={ACCEPTED_FILES}
+                onChange={handleImportFiles}
+                aria-label="Area file (GeoJSON or shapefile)"
+                className="hidden"
+              />
+            </>
+          )}
           <SurveyPicker
             current={survey}
             onChange={setSurvey}
@@ -2149,6 +2233,61 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             {...pickerProps('survey')}
           />
           <BasemapPicker current={basemapId} onChange={setBasemapId} {...pickerProps('basemap')} />
+        </div>
+      )}
+
+      {/* Bringing an area in: what went wrong, or which of several to take */}
+      {admin && importError && (
+        <div
+          role="alert"
+          className="absolute bottom-6 left-1/2 z-[650] flex w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 items-start gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-800 shadow-2xl"
+        >
+          <p className="flex-1">{importError}</p>
+          <button type="button" onClick={() => setImportError('')} aria-label="Dismiss" className="rounded-full p-0.5 text-red-400 hover:bg-red-50">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {admin && importChoices && (
+        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-slate-900/30 p-4" onClick={() => setImportChoices(null)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose the area to bring in"
+            onClick={(event) => event.stopPropagation()}
+            className="flex max-h-[80%] w-full max-w-md flex-col rounded-2xl bg-white p-4 shadow-2xl"
+          >
+            <h2 className="text-base font-bold text-slate-900">Choose the area to bring in</h2>
+            <p className="mt-1 text-[12.5px] text-slate-500">
+              The file has {importChoices.length} areas. Each is saved on its own, with its own details — bring in one,
+              save it, then import again for the next.
+            </p>
+            <ul className="mt-3 flex-1 space-y-1.5 overflow-y-auto">
+              {importChoices.map((candidate, i) => (
+                <li key={candidate.index}>
+                  <button
+                    type="button"
+                    onClick={() => bringIn(candidate)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left ring-1 ring-slate-200 hover:bg-green-50 hover:ring-green-300"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
+                      {candidate.name || `Area ${i + 1}`}
+                    </span>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {formatArea(candidate.areaM2, candidate.areaM2 >= 10000 ? 'ha' : 'm2')}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setImportChoices(null)}
+              className="mt-3 rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

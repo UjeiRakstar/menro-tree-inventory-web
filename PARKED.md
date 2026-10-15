@@ -48,6 +48,10 @@ Last read through: 15 October 2026, against the repo, the live database
 - **No `.gitattributes`.** Every commit warns that LF will become CRLF. Harmless
   today; a repo that changes line endings under people is how a one-line diff
   becomes a whole-file one.
+- **Old development tools.** `npm audit` flags Vite, Vitest, React Router,
+  Tailwind's file watcher and others (none of them shipped to a visitor except
+  React Router). Updating them is its own piece of work: Vite and Vitest are a
+  major version behind, and React Router's fix needs a test pass of every link.
 - **A 365 kB chunk named `treeTraits`.** Larger than the whole of Leaflet, for
   a module that imports seven small icons. Something is being pulled in that
   should not be. Not investigated.
@@ -80,10 +84,13 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     area's facts from them (after step 9)
 13. `supabase/species_site_needs.sql` — each species' site needs in figures, for
     suggesting trees for a planting site (after step 7)
+14. `supabase/planting_requests.sql` — planting sites are PGENRO's; a MENRO /
+    CENRO's goes to PGENRO as a request (after steps 5, 9 and 12). Safe to run
+    map_areas.sql again after it: requests stay off the public map.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 8 suites, 271 checks — the final check query on its
+allow and refuse — 8 suites, 296 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Steps 1–12 are in the live database** (map layers and CLIRAM seen working, 15 October); step 13 is new. Not deployed: the

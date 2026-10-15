@@ -155,6 +155,20 @@ describe('areaPermission', () => {
     expect(areaPermission(pgenro, area('lgu_admin'))).toBe('propose');
   });
 
+  it('makes planting sites PGENRO’s: it decides a request, and keeps what it approved', () => {
+    const site = (approval, createdByRole = 'lgu_admin') => ({
+      properties: { saved: true, kind: 'planting-site', approval, createdByRole, lguPsgc: 403426000 },
+    });
+    expect(areaPermission(pgenro, site('requested'))).toBe('review');
+    expect(areaPermission(pgenro, site('approved'))).toBe('edit');
+    expect(areaPermission(pgenro, site('declined'))).toBeNull();
+    // The office edits or withdraws its own until it is approved, then it is not its own.
+    expect(areaPermission(menro, site('requested'))).toBe('edit');
+    expect(areaPermission(menro, site('declined'))).toBe('edit');
+    expect(areaPermission(menro, site('approved'))).toBeNull();
+    expect(areaPermission(menro, site('approved', 'pgenro'))).toBeNull();
+  });
+
   it('touches no sample area, and gives the public nothing', () => {
     expect(areaPermission(pgenro, { properties: { kind: 'land-cover' } })).toBeNull();
     expect(areaPermission(null, area('lgu_admin'))).toBeNull();

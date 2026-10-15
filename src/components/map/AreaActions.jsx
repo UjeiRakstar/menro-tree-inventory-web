@@ -13,6 +13,11 @@ const button =
  *                         proposal waiting, Approve or Decline it
  *   permission 'propose'  PGENRO on an office's area: Propose a change, or
  *                         see its proposal waiting and withdraw it
+ *   permission 'review'   PGENRO on a planting site an office asked for:
+ *                         Approve, or Decline with a note
+ *
+ * An office's own planting site request says where it stands — waiting, or
+ * declined and why — and its Delete withdraws it.
  *
  * The database checks every one of these again (map_areas.sql); the buttons
  * only save asking for something that would be refused.
@@ -24,6 +29,8 @@ export default function AreaActions({ feature, row, permission, proposal = null,
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const name = feature?.properties?.name ?? 'this area';
+  const props = feature?.properties ?? {};
+  const request = props.kind === 'planting-site' && props.approval && props.approval !== 'approved' ? props.approval : null;
 
   if (!permission) return null;
 
@@ -49,6 +56,10 @@ export default function AreaActions({ feature, row, permission, proposal = null,
     run('approve', () => supabase.rpc('approve_area_proposal', { p_id: proposal.id, p_note: null }), () => onChanged?.('approved'));
   const decline = () =>
     run('decline', () => supabase.rpc('decline_area_proposal', { p_id: proposal.id, p_note: note.trim() || null }), () => onChanged?.('declined'));
+  const decide = (approve) =>
+    run(approve ? 'approve' : 'decline', () =>
+      supabase.rpc('decide_planting_request', { p_id: row.id, p_approve: approve, p_note: note.trim() || null }),
+      () => onChanged?.(approve ? 'approved' : 'declined'));
   const withdraw = () =>
     run('withdraw', () => supabase.from('map_area_proposals').delete().eq('id', proposal.id), () => onChanged?.('withdrawn'));
 
@@ -56,6 +67,46 @@ export default function AreaActions({ feature, row, permission, proposal = null,
 
   return (
     <div className="space-y-3">
+      {permission === 'review' && (
+        <section aria-label="Planting site request" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900">
+          <p className="font-bold">
+            Requested by the {props.municipality ? `${props.municipality} ` : ''}MENRO / CENRO
+          </p>
+          <p className="mt-0.5">Approved, it goes on the public map and becomes PGENRO&apos;s to look after.</p>
+          <label className="mt-2 block text-[11.5px] font-semibold">
+            Note for the office (optional — say why, if you decline)
+            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-[12px] font-normal" />
+          </label>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => decide(false)} disabled={Boolean(busy)}
+              className={`${button} flex-1 bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50`}>
+              {busy === 'decline' && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+              Decline
+            </button>
+            <button type="button" onClick={() => decide(true)} disabled={Boolean(busy)}
+              className={`${button} flex-1 bg-green-700 text-white hover:bg-green-800`}>
+              {busy === 'approve' && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+              Approve
+            </button>
+          </div>
+        </section>
+      )}
+
+      {permission === 'edit' && request === 'requested' && (
+        <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900">
+          <span className="font-bold">Sent to PGENRO.</span> Waiting for its approval — until then only your office and
+          PGENRO see this site.
+        </p>
+      )}
+      {permission === 'edit' && request === 'declined' && (
+        <div role="status" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-900">
+          <p className="font-bold">PGENRO declined this request.</p>
+          {props.reviewNote && <p className="mt-0.5 italic">“{props.reviewNote}”</p>}
+          <p className="mt-1">Edit it to ask again, or withdraw it.</p>
+        </div>
+      )}
+
       {proposal && permission === 'edit' && (
         <section aria-label="PGENRO's proposal" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px]">
           <p className="font-bold text-amber-900">PGENRO proposes a change</p>
@@ -116,16 +167,18 @@ export default function AreaActions({ feature, row, permission, proposal = null,
       )}
 
       {confirming ? (
-        <div role="alertdialog" aria-label={`Delete ${name}?`} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-900">
-          <p className="font-bold">Delete {name}?</p>
-          <p className="mt-0.5">It leaves the map for everyone. This cannot be undone.</p>
+        <div role="alertdialog" aria-label={`${request ? 'Withdraw' : 'Delete'} ${name}?`} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] text-red-900">
+          <p className="font-bold">{request ? 'Withdraw' : 'Delete'} {name}?</p>
+          <p className="mt-0.5">
+            {request ? 'The request is taken back from PGENRO.' : 'It leaves the map for everyone.'} This cannot be undone.
+          </p>
           <div className="mt-2 flex gap-2">
             <button type="button" onClick={() => setConfirming(false)}
               className={`${button} flex-1 bg-white text-slate-600 ring-1 ring-slate-200`}>Keep it</button>
             <button type="button" onClick={remove} disabled={Boolean(busy)}
               className={`${button} flex-1 bg-red-600 text-white hover:bg-red-700`}>
               {busy === 'delete' && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-              Delete
+              {request ? 'Withdraw' : 'Delete'}
             </button>
           </div>
         </div>
@@ -138,7 +191,7 @@ export default function AreaActions({ feature, row, permission, proposal = null,
               </button>
               <button type="button" onClick={() => setConfirming(true)}
                 className={`${button} bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50`}>
-                <Trash2 size={14} aria-hidden="true" /> Delete
+                <Trash2 size={14} aria-hidden="true" /> {request ? 'Withdraw' : 'Delete'}
               </button>
             </>
           )}

@@ -24,15 +24,18 @@ export const lguOfTree = (tree) => {
  *              for its decision — only when `withProposals`, which is an
  *              LGU office: PGENRO's own proposals are not its to decide.
  *              `firstProposalArea` is the oldest one's area, to open.
+ *   requests   planting site requests (planting_requests.sql) — for PGENRO,
+ *              those waiting for its decision; for an office, its own that
+ *              PGENRO declined, to correct or withdraw. Only when `withRequests`.
  *
  * An LGU account counts its own LGU only: the database already narrows the
  * field officers it can see, and the hazards are narrowed here. Counted again
  * on every page change, so a dispatch or an approval clears its badge by the
  * time the next page opens.
  */
-export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
+export function useAttention({ lguPsgc = null, withProposals = false, withRequests = null } = {}) {
   const { pathname } = useLocation();
-  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null });
+  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null, requests: 0 });
   // Bumped when a proposal is made or decided, so the "!" changes live
   // (supabase/live_updates.sql) rather than on the next page.
   const [tick, setTick] = useState(0);
@@ -49,9 +52,18 @@ export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
   }, [withProposals]);
 
   useEffect(() => {
+    if (!withRequests) return undefined;
+    const channel = supabase
+      .channel('attention-requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'map_areas' }, () => setTick((n) => n + 1))
+      .subscribe();
+    return () => supabase.removeChannel?.(channel);
+  }, [withRequests]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [trees, pending, proposals] = await Promise.all([
+      const [trees, pending, proposals, requests] = await Promise.all([
         supabase.from('trees').select('*'),
         supabase
           .from('profiles')
@@ -66,6 +78,14 @@ export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
               .eq('status', 'pending')
               .order('proposed_at', { ascending: true })
           : Promise.resolve({ data: [], error: null }),
+        // 'waiting': PGENRO's to decide; 'declined': an office's to answer.
+        withRequests
+          ? supabase
+              .from('map_areas')
+              .select('id')
+              .eq('kind', 'planting-site')
+              .eq('approval', withRequests === 'waiting' ? 'requested' : 'declined')
+          : Promise.resolve({ data: [], error: null }),
       ]);
       if (cancelled) return;
 
@@ -77,12 +97,13 @@ export function useAttention({ lguPsgc = null, withProposals = false } = {}) {
         approvals: pending.error || !Array.isArray(pending.data) ? 0 : pending.data.length,
         proposals: open.length,
         firstProposalArea: open[0]?.area_id ?? null,
+        requests: requests.error || !Array.isArray(requests.data) ? 0 : requests.data.length,
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [pathname, lguPsgc, withProposals, tick]);
+  }, [pathname, lguPsgc, withProposals, withRequests, tick]);
 
   return counts;
 }

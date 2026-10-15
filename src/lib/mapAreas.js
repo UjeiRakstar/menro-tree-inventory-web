@@ -309,6 +309,10 @@ export function rowToFeature(row, { lguLabel = '', climate = null } = {}) {
       province: 'Laguna',
       lguPsgc: row.lgu_psgc != null ? Number(row.lgu_psgc) : null,
       createdByRole: row.created_by_role ?? null,
+      // A planting site an office asked for: 'requested' or 'declined' until
+      // PGENRO approves it (planting_requests.sql). Land cover is 'approved'.
+      approval: row.approval ?? 'approved',
+      reviewNote: row.review_note ?? null,
       designation: row.designation ?? null,
       document: row.doc_url
         ? { type: row.doc_type, number: row.doc_number, title: row.doc_title, url: row.doc_url }
@@ -343,9 +347,18 @@ export function areaPermission(profile, feature) {
   const props = feature?.properties;
   if (!props?.saved) return null;
   const role = roleOf(profile);
-  if (role === ROLES.PGENRO) return props.createdByRole === 'pgenro' ? 'edit' : 'propose';
+  const plantingSite = props.kind === 'planting-site';
+  const approval = props.approval ?? 'approved';
+  if (role === ROLES.PGENRO) {
+    // Planting sites are PGENRO's: it decides a request, and keeps the
+    // approved ones whoever asked for them (planting_requests.sql).
+    if (plantingSite) return approval === 'requested' ? 'review' : approval === 'approved' ? 'edit' : null;
+    return props.createdByRole === 'pgenro' ? 'edit' : 'propose';
+  }
   if (role === ROLES.LGU_ADMIN) {
-    return props.createdByRole === 'lgu_admin' && Number(profile?.lgu_psgc) === props.lguPsgc ? 'edit' : null;
+    const own = props.createdByRole === 'lgu_admin' && Number(profile?.lgu_psgc) === props.lguPsgc;
+    if (plantingSite && approval === 'approved') return null;
+    return own ? 'edit' : null;
   }
   return null;
 }

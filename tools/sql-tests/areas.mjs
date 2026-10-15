@@ -334,6 +334,73 @@ check('the training purge clears training areas, and only those',
   (await count(`select count(*) n from public.map_areas where is_training`)) === 0 &&
   (await count(`select count(*) n from public.map_areas`)) > 0);
 
+// ---- Planting site requests (planting_requests.sql) -----------------------------------------------
+for (const label of ['runs', 'runs twice']) {
+  const out = await asEditor(SQL('planting_requests.sql'));
+  const rows = out[out.length - 1].rows;
+  check(`planting_requests.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok}`).join('; '));
+}
+const plantingSite = (fields = {}) => insertArea({ kind: 'planting-site', cover_class: null, planting_status: 'open', ...fields });
+const asked = (await as(MENRO_SCZ, 'authenticated', () => plantingSite({ name: 'Riverbank request', approval: 'approved' }))).rows[0];
+check('a MENRO’s planting site is a request, whatever the page claims', asked.approval === 'requested', asked.approval);
+const pgSite = (await as(PGENRO, 'authenticated', () => plantingSite({ name: 'PGENRO site' }))).rows[0];
+check('PGENRO’s is on the map at once', pgSite.approval === 'approved', pgSite.approval);
+const cover = (await as(MENRO_SCZ, 'authenticated', () => insertArea({ name: 'Plain cover' }))).rows[0];
+check('land cover needs no approval', cover.approval === 'approved');
+
+const seesRequest = (who, role = 'authenticated') =>
+  as(who, role, () => count(`select count(*) n from public.map_areas where id = $1`, [asked.id]));
+check('the public does not see a request', (await seesRequest(null, 'anon')) === 0);
+check('another LGU does not', (await seesRequest(MENRO_CLB)) === 0);
+check('a field officer does not', (await seesRequest(FIELD)) === 0);
+check('the office that asked does, and PGENRO does', (await seesRequest(MENRO_SCZ)) === 1 && (await seesRequest(PGENRO)) === 1);
+
+const selfApproveSite = await as(MENRO_SCZ, 'authenticated', () =>
+  db.query(`update public.map_areas set approval = 'approved' where id = $1 returning approval`, [asked.id]));
+check('an office cannot approve its own request', selfApproveSite.rows[0]?.approval !== 'approved', JSON.stringify(selfApproveSite.rows));
+const menroDecides = await as(MENRO_SCZ, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true)`, [asked.id])));
+check('nor decide it', menroDecides !== null, menroDecides ?? 'DECIDED');
+const pgEditsRequest = await as(PGENRO, 'authenticated', () => db.query(`update public.map_areas set name = 'Mine' where id = $1`, [asked.id]));
+check('PGENRO does not edit a request — it decides it', pgEditsRequest.affectedRows === 0);
+
+await as(PGENRO, 'authenticated', () => db.query(`select public.decide_planting_request($1, false, 'Too close to the river')`, [asked.id]));
+const turnedDown = await one(`select approval, review_note, reviewed_by from public.map_areas where id = $1`, [asked.id]);
+check('PGENRO declines, with a note the office sees',
+  turnedDown.approval === 'declined' && turnedDown.review_note === 'Too close to the river' && turnedDown.reviewed_by === PGENRO);
+check('a declined request is still not public', (await seesRequest(null, 'anon')) === 0);
+const factsOnly = await as(MENRO_SCZ, 'authenticated', () => db.query(`update public.map_areas set layer_facts = '{}' where id = $1 returning approval`, [asked.id]));
+check('refreshing its facts does not ask again', factsOnly.rows[0]?.approval === 'declined', JSON.stringify(factsOnly.rows));
+const fixed = await as(MENRO_SCZ, 'authenticated', () => db.query(`update public.map_areas set name = 'Riverbank, set back' where id = $1 returning approval, review_note`, [asked.id]));
+check('the office corrects it, and it is asked again — the note kept',
+  fixed.rows[0]?.approval === 'requested' && fixed.rows[0]?.review_note === 'Too close to the river', JSON.stringify(fixed.rows));
+
+const decidedOk = await as(PGENRO, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true, 'Good')`, [asked.id])));
+check('PGENRO approves it', decidedOk === null && (await one(`select approval from public.map_areas where id = $1`, [asked.id])).approval === 'approved', decidedOk ?? '');
+check('…and the public sees it', (await seesRequest(null, 'anon')) === 1);
+const again = await as(PGENRO, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true)`, [asked.id])));
+check('a request is decided once', again !== null, again ?? 'AGAIN');
+const officeEdits = await as(MENRO_SCZ, 'authenticated', () => db.query(`update public.map_areas set name = 'Back to me' where id = $1`, [asked.id]));
+const officeDeletes = await as(MENRO_SCZ, 'authenticated', () => db.query(`delete from public.map_areas where id = $1`, [asked.id]));
+check('once approved, the office neither edits nor deletes it', officeEdits.affectedRows === 0 && officeDeletes.affectedRows === 0);
+const pgKeeps = await as(PGENRO, 'authenticated', () => db.query(`update public.map_areas set planting_status = 'full' where id = $1 returning approval`, [asked.id]));
+check('PGENRO looks after it from then on, and it stays approved', pgKeeps.rows[0]?.approval === 'approved', JSON.stringify(pgKeeps.rows));
+const pgNoCover = await as(PGENRO, 'authenticated', () => db.query(`update public.map_areas set name = 'x' where id = $1`, [cover.id]));
+check('…which gives PGENRO nothing over an office’s land cover', pgNoCover.affectedRows === 0);
+
+const traineeSite = (await as(TRAINEE, 'authenticated', () => plantingSite({ name: 'Practice site' }))).rows[0];
+const realDecidesTraining = await as(PGENRO, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true)`, [traineeSite.id])));
+check('a real PGENRO account does not decide a trainee’s request', realDecidesTraining !== null, realDecidesTraining ?? 'DECIDED');
+const withdrawn = await as(MENRO_SCZ, 'authenticated', async () => {
+  const fresh = (await plantingSite({ name: 'Second thoughts' })).rows[0];
+  return db.query(`delete from public.map_areas where id = $1`, [fresh.id]);
+});
+check('an office withdraws a request it has not had decided', withdrawn.affectedRows === 1);
+const reMap = await asEditor(SQL('map_areas.sql'));
+check('running map_areas.sql again does not make requests public',
+  reMap[reMap.length - 1].rows.every((r) => r.ok !== false) &&
+  (await as(null, 'anon', () => count(`select count(*) n from public.map_areas where approval <> 'approved'`))) === 0 &&
+  (await count(`select count(*) n from public.map_areas where approval <> 'approved'`)) > 0);
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 process.exit(failed.length ? 1 : 0);

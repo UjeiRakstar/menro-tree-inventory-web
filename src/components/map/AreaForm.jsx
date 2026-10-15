@@ -147,6 +147,8 @@ export default function AreaForm({
   documentFolder = null,
   layers = null,
   climateByLgu = null,
+  // An LGU office: its planting sites go to PGENRO as requests.
+  requestsPlantingSites = false,
   onSaved,
   onCancel,
 }) {
@@ -459,6 +461,13 @@ export default function AreaForm({
             </>
           )}
 
+          {form.kind === 'planting-site' && requestsPlantingSites && mode !== 'propose' && (
+            <p role="note" className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] leading-snug text-amber-900">
+              <span className="font-bold">Planting sites are PGENRO&apos;s.</span> This goes to PGENRO as a request. Until
+              PGENRO approves it, only your office and PGENRO see it; approved, it goes on the public map.
+            </p>
+          )}
+
           {form.kind === 'planting-site' && (
             <>
               <Field id={id('status')} label="Status">
@@ -578,7 +587,13 @@ export default function AreaForm({
             <button type="submit" disabled={saving}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50">
               {saving && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
-              {saving ? 'Saving…' : mode === 'propose' ? 'Send the proposal' : 'Save the area'}
+              {saving
+                ? 'Saving…'
+                : mode === 'propose'
+                  ? 'Send the proposal'
+                  : form.kind === 'planting-site' && requestsPlantingSites
+                    ? 'Send the request'
+                    : 'Save the area'}
             </button>
           </div>
         </div>

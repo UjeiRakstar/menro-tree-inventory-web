@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro } from '../lib/roles.js';
@@ -9,6 +9,7 @@ import DispatchModal from '../components/DispatchModal.jsx';
 import IssuePermitModal from '../components/IssuePermitModal.jsx';
 import WalkInPermitForm from '../components/WalkInPermitForm.jsx';
 import PermitsLog from './PermitsLog.jsx';
+import PlantingRequests from '../components/PlantingRequests.jsx';
 
 // Inline wrapper so PermitsLog renders as a tab without its own page heading
 function PermitsLogTab() {
@@ -40,7 +41,12 @@ function OfficeBoard() {
   const [status, setStatus] = useState('loading');
   const [trees, setTrees] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [activeTab, setActiveTab] = useState('hazards');
+  // ?tab=requests opens the planting site requests (the header's menu links there).
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => (searchParams.get('tab') === 'requests' ? 'requests' : 'hazards'));
+  useEffect(() => {
+    if (searchParams.get('tab') === 'requests') setActiveTab('requests');
+  }, [searchParams]);
   const [dispatchTree, setDispatchTree] = useState(null);
   const [permitModalOpen, setPermitModalOpen] = useState(false);
   const [selectedPermitTree, setSelectedPermitTree] = useState(null);
@@ -103,6 +109,10 @@ function OfficeBoard() {
           className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'permits' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           📄 Permit Logs
         </button>
+        <button type="button" onClick={() => setActiveTab('requests')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'requests' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          🌱 Planting site requests
+        </button>
       </div>
 
       {activeTab === 'hazards' ? (
@@ -128,6 +138,8 @@ function OfficeBoard() {
         </div>
       ) : activeTab === 'walkins' ? (
         <WalkInPermitForm />
+      ) : activeTab === 'requests' ? (
+        <PlantingRequests />
       ) : (
         <PermitsLogTab />
       )}

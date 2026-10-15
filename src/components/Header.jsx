@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, Layers, LogOut, MapPinned, ShieldCheck, Users } from 'lucide-react';
+import { ChevronDown, FileText, Layers, LogOut, MapPinned, ShieldCheck, Sprout, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -81,14 +81,24 @@ export default function Header() {
   const { profile, lgu } = useAuth();
   const office = useOffice();
   const pgenro = isPgenro(profile);
-  const attention = useAttention({ lguPsgc: pgenro ? null : lgu?.psgc ?? null, withProposals: roleOf(profile) === ROLES.LGU_ADMIN });
+  const lguAdmin = roleOf(profile) === ROLES.LGU_ADMIN;
+  const attention = useAttention({
+    lguPsgc: pgenro ? null : lgu?.psgc ?? null,
+    withProposals: lguAdmin,
+    // PGENRO decides planting site requests; an office answers a declined one.
+    withRequests: pgenro ? 'waiting' : lguAdmin ? 'declined' : null,
+  });
   // The seal's "!" is everything waiting on this office's say-so.
-  const waiting = attention.approvals + attention.proposals;
+  const waiting = attention.approvals + attention.proposals + attention.requests;
   const waitingLabel = [
     attention.approvals > 0 &&
       `${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`,
     attention.proposals > 0 &&
       `${attention.proposals} PGENRO ${attention.proposals === 1 ? 'proposal is' : 'proposals are'} waiting for a decision`,
+    attention.requests > 0 &&
+      (pgenro
+        ? `${attention.requests} planting site ${attention.requests === 1 ? 'request is' : 'requests are'} waiting for a decision`
+        : `${attention.requests} planting site ${attention.requests === 1 ? 'request was' : 'requests were'} declined`),
   ]
     .filter(Boolean)
     .join('; ');
@@ -227,6 +237,17 @@ export default function Header() {
                     <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
                       {attention.proposals} to decide
                     </span>
+                  </NavLink>
+                )}
+                {(pgenro || lguAdmin) && (
+                  <NavLink to="/action-board?tab=requests" className={menuItem}>
+                    <Sprout size={16} aria-hidden="true" className="text-slate-500" />
+                    <span className="flex-1">Planting site requests</span>
+                    {attention.requests > 0 && (
+                      <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
+                        {attention.requests} {pgenro ? 'to decide' : 'declined'}
+                      </span>
+                    )}
                   </NavLink>
                 )}
                 <NavLink to="/permits" className={menuItem}>
