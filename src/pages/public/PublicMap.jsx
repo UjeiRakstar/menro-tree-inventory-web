@@ -36,6 +36,7 @@ import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
 import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
 import { ROLES, roleOf } from '../../lib/roles.js';
 import { centroidOf } from '../../lib/areaGeometry.js';
+import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
 import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
@@ -1220,6 +1221,11 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     return fence ? { ...all, features: all.features.filter((f) => f.properties.municipality === fence) } : all;
   }, [fence, savedAreas.features]);
 
+  const tileHandlers = useMemo(() => {
+    const basemap = basemapById(basemapId);
+    return basemap.fallbackToParent ? { tileerror: parentTileOnError(basemap.url) } : undefined;
+  }, [basemapId]);
+
   const sitesKey = useMemo(
     () => sites.features.map((f) => `${f.properties.id}@${f.properties.version ?? ''}`).join('|'),
     [sites]
@@ -1563,6 +1569,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           attribution={basemapById(basemapId).attribution}
           maxZoom={MAX_MAP_ZOOM}
           maxNativeZoom={MAX_NATIVE_ZOOM}
+          // Where Esri has no imagery this deep, the level above, enlarged.
+          eventHandlers={tileHandlers}
         />
 
         {/* Everything outside the area of responsibility is covered over, not

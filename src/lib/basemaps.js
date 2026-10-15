@@ -20,8 +20,12 @@ export const BASEMAPS = [
     id: 'satellite',
     label: 'Satellite',
     longLabel: 'Satellite (Esri)',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    // blankTile=false: a missing tile is a 404, not Esri's "Map data not yet
+    // available" picture, so the map can draw the level above instead
+    // (src/lib/tileFallback.js). Siniloan's imagery stops at zoom 18.
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',
     attribution: '&copy; Esri',
+    fallbackToParent: true,
   },
 ];
 

@@ -3,6 +3,10 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, LayersControl } f
 import { Upload, X, Loader2, CheckCircle, AlertTriangle, MapPin } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import CertificatePrint from './CertificatePrint.jsx';
+import { basemapById } from '../lib/basemaps.js';
+import { parentTileOnError } from '../lib/tileFallback.js';
+
+const SATELLITE = basemapById('satellite');
 
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'YOUR_CLOUD_NAME';
 const CLOUDINARY_UPLOAD_PRESET = 'tree_inventory_mobile';
@@ -372,10 +376,12 @@ export default function WalkInPermitForm() {
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
                   </LayersControl.BaseLayer>
-                  <LayersControl.BaseLayer name="Copernicus Satellite View">
+                  {/* Esri's imagery, not Copernicus: the label said otherwise. */}
+                  <LayersControl.BaseLayer name="Satellite (Esri)">
                     <TileLayer
-                      attribution='Tiles &copy; Esri'
-                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                      attribution={SATELLITE.attribution}
+                      url={SATELLITE.url}
+                      eventHandlers={{ tileerror: parentTileOnError(SATELLITE.url) }}
                     />
                   </LayersControl.BaseLayer>
                 </LayersControl>
