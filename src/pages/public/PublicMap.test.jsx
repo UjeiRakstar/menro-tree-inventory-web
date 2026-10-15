@@ -84,6 +84,10 @@ vi.mock('react-leaflet', () => ({
     <div data-testid="spider-leg" data-positions={JSON.stringify(positions)} />
   ),
   Circle: () => <div data-testid="circle" />,
+  // PGENRO's survey layers drawn as pictures.
+  ImageOverlay: ({ url, bounds, pane }) => (
+    <div data-testid="image-overlay" data-url={url} data-bounds={JSON.stringify(bounds)} data-pane={pane} />
+  ),
   Popup: ({ children }) => <div data-testid="popup">{children}</div>,
   // A grouped set of trees — and the hall, and a drawing's corners, which are
   // markers too. The icon is a real Leaflet divIcon, so its markup is kept for
@@ -1070,6 +1074,32 @@ describe('the public map stays the public map', () => {
     expect(screen.queryAllByTestId('tree-marker')).toHaveLength(0);
   });
 
+  it('switches on a survey layer PGENRO has uploaded, and draws it', async () => {
+    supabaseMock.setResponse('map_layers:select', {
+      data: [{
+        id: 'flood-1', kind: 'flood', active: true, picture_path: 'flood/1/picture.png',
+        meta: { kind: 'flood', bounds: [[13.95, 120.98], [14.61, 121.62]], legend: [{ value: 3, label: 'High', colour: [204, 0, 0, 180] }] },
+      }],
+      error: null,
+    });
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    fireEvent.click(screen.getByRole('button', { name: 'Map layers' }));
+    const panel = screen.getByRole('dialog', { name: 'Map layers' });
+
+    const flood = await within(panel).findByRole('checkbox', { name: /Flood hazard/ });
+    expect(flood).toBeEnabled();
+    expect(within(panel).getByRole('checkbox', { name: /Soil type/ })).toBeDisabled();
+    expect(screen.queryByTestId('image-overlay')).not.toBeInTheDocument();
+
+    fireEvent.click(flood);
+    const overlay = screen.getByTestId('image-overlay');
+    expect(overlay.dataset.url).toMatch(/map-layers\/flood\/1\/picture\.png$/);
+    expect(overlay.dataset.pane).toBe('layer-overlays');
+    // Its key, under the switch.
+    expect(within(panel).getByText('High')).toBeInTheDocument();
+  });
+
   it('has none of the office’s tools', async () => {
     renderMap();
     await waitFor(() => expect(markers()).toHaveLength(5));
@@ -1368,6 +1398,31 @@ describe('saving an area', () => {
       act(() => siteHandlers.get('area-1').click());
       return screen.getByRole('complementary', { name: 'Labuin Secondary Forest' });
     }
+
+    it('shows what PGENRO’s layers and CLIRAM say about the ground', async () => {
+      supabaseMock.setResponse('map_areas:select', {
+        data: [{
+          ...SAVED,
+          layer_facts: {
+            soil: [{ series: 'Marikina', description: 'Marikina silty clay loam', zone: 'Lowlands', share: 1 }],
+            elevation: { min: 11, max: 18, mean: 14 },
+            flood: { low: 36822, medium: 0, high: 0, total: 36822 },
+          },
+        }],
+        error: null,
+      });
+      supabaseMock.setResponse('lgu_climate:select', {
+        data: [{ lgu_psgc: 403426000, place: 'Santa Cruz', scenario: 'SSP2-4.5', temperature: { meanC: 26.6 }, rainfall: { annualMm: 2765 } }],
+        error: null,
+      });
+      const panel = await openSaved(null);
+      expect(panel).toHaveTextContent('Lowland — 11–18 m asl');
+      expect(panel).toHaveTextContent('Marikina silty clay loam');
+      expect(panel).toHaveTextContent('2,765 mm a year');
+      expect(panel).toHaveTextContent('26.6 °C');
+      expect(panel).toHaveTextContent(/36,822[\d,.]* m²|36,822 m²/);
+      expect(panel).toHaveTextContent('DOST-PAGASA CLIRAM');
+    });
 
     it('replaces the samples on the public map, real and planning-only', async () => {
       const panel = await openSaved(null);

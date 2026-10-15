@@ -7,6 +7,7 @@ import {
   emptyAreaForm,
   formFromRow,
   geometryToShape,
+  groundOf,
   proposalChanges,
   rowFromForm,
   rowToFeature,
@@ -176,5 +177,39 @@ describe('documents', () => {
     );
     expect(documentPathOf('https://elsewhere.example/doc.pdf')).toBeNull();
     expect(documentPathOf(null)).toBeNull();
+  });
+});
+
+describe('groundOf', () => {
+  const FACTS = {
+    soil: [
+      { series: 'Marikina', description: 'Marikina silty clay loam', zone: 'Lowlands', share: 0.68 },
+      { series: 'Lipa', description: 'Lipa loam', zone: 'Uplands', share: 0.32 },
+    ],
+    elevation: { min: 14, max: 23, mean: 19 },
+    flood: { low: 22094, medium: 0, high: 0, total: 22094 },
+  };
+  const CLIMATE = { scenario: 'SSP2-4.5', place: 'Santa Cruz', temperature: { meanC: 26.6 }, rainfall: { annualMm: 2765 } };
+
+  it('gives the panel its soil, elevation, flood and climate', () => {
+    expect(groundOf(FACTS, CLIMATE)).toMatchObject({
+      soilType: 'Marikina silty clay loam (68%), Lipa loam (32%)',
+      elevationType: 'Lowland',
+      elevationM: 19,
+      elevationRange: { min: 14, max: 23 },
+      hazards: { flood: { areaM2: 22094 } },
+      rainfallMmPerYear: 2765,
+      temperatureC: 26.6,
+    });
+  });
+
+  it('names one soil when it is nearly all of the area', () => {
+    expect(groundOf({ soil: [{ description: 'Lipa loam', zone: 'Uplands', share: 0.95 }] }).soilType).toBe('Lipa loam');
+  });
+
+  it('leaves out what nobody has measured, so the panel can say so', () => {
+    const ground = groundOf(null, null);
+    expect(ground).toEqual({});
+    expect(rowToFeature({ id: 'a', kind: 'land-cover', name: 'A', geometry: null }).properties.soilType).toBeUndefined();
   });
 });

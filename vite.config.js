@@ -25,6 +25,13 @@ export default defineConfig({
       },
     },
   ],
+  // The map-layer upload prepares files in a background thread
+  // (src/lib/layers/prepare.worker.js), which loads the GeoTIFF reader only
+  // when an elevation model is uploaded. Splitting it out like that needs the
+  // thread built as an ES module rather than the default single script.
+  worker: {
+    format: 'es',
+  },
   build: {
     rollupOptions: {
       output: {

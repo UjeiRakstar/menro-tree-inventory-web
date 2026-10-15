@@ -22,6 +22,9 @@ import {
   treesInside,
 } from '../../lib/mapAreas.js';
 import { ProvisionalNote } from '../public/Provisional.jsx';
+import { loadMeasuringLayers } from '../../lib/layers/browser.js';
+import { factsFor } from '../../lib/layers/facts.js';
+import { groundOf } from '../../lib/mapAreas.js';
 
 export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 
@@ -140,6 +143,7 @@ export default function AreaForm({
   shape,
   trees = [],
   documentFolder = null,
+  layers = null,
   onSaved,
   onCancel,
 }) {
@@ -157,6 +161,28 @@ export default function AreaForm({
   const measured = useMemo(() => measure(shape), [shape]);
   const measurable = measured.areaM2 !== null;
   const place = usePlace(shape?.closed ? measured.centroid : null);
+
+  // PGENRO's layers, loaded once when the form opens, so the area is measured
+  // against them as it is drawn and its facts are saved with it.
+  const liveLayers = useMemo(
+    () => Object.fromEntries(Object.entries(layers ?? {}).filter(([, layer]) => layer)),
+    [layers]
+  );
+  const [grids, setGrids] = useState(null);
+  useEffect(() => {
+    if (Object.keys(liveLayers).length === 0) return undefined;
+    let cancelled = false;
+    loadMeasuringLayers(supabase, liveLayers).then((loaded) => !cancelled && setGrids(loaded));
+    return () => {
+      cancelled = true;
+    };
+  }, [liveLayers]);
+  const facts = useMemo(
+    () => (grids && measured.areaM2 !== null ? factsFor(grids, liveLayers, { geometry: measured.geometry, areaM2: measured.areaM2 }) : null),
+    [grids, liveLayers, measured]
+  );
+  const ground = groundOf(facts, null);
+  const measuring = Object.keys(liveLayers).length > 0 && !grids;
   const inside = useMemo(
     () => (shape?.closed ? treesInside(trees, measured.geometry) : []),
     [shape, trees, measured]
@@ -210,7 +236,10 @@ export default function AreaForm({
     let docUrl = null;
     try {
       docUrl = form.designation && file ? await uploadDocument() : null;
-      const row = rowFromForm(form, { shape, place, suggestion, treesCount: inside.length, docUrl });
+      const row = {
+        ...rowFromForm(form, { shape, place, suggestion, treesCount: inside.length, docUrl }),
+        ...(facts ? { layer_facts: facts, layer_facts_at: new Date().toISOString() } : {}),
+      };
 
       let result;
       if (mode === 'propose') {
@@ -292,13 +321,49 @@ export default function AreaForm({
               <dd className="font-semibold text-slate-800">
                 {shape?.closed ? `${inside.length} inside, ${suggestion.facts.species} species` : '—'}
               </dd>
+              {ground.soilType && (
+                <>
+                  <dt className="text-slate-500">Soil</dt>
+                  <dd className="font-semibold text-slate-800">{ground.soilType}</dd>
+                </>
+              )}
+              {ground.elevationRange && (
+                <>
+                  <dt className="text-slate-500">Elevation</dt>
+                  <dd className="font-semibold text-slate-800">
+                    {ground.elevationType} — {ground.elevationRange.min === ground.elevationRange.max
+                      ? `${ground.elevationRange.min} m`
+                      : `${ground.elevationRange.min}–${ground.elevationRange.max} m`}
+                  </dd>
+                </>
+              )}
+              {ground.hazards?.flood && (
+                <>
+                  <dt className="text-slate-500">Flood exposure</dt>
+                  <dd className="font-semibold text-slate-800">
+                    {ground.hazards.flood.areaM2 > 0 ? formatArea(ground.hazards.flood.areaM2, unit) : 'None mapped'}
+                  </dd>
+                </>
+              )}
             </dl>
+            {measuring && (
+              <p role="status" className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Measuring against PGENRO’s layers…
+              </p>
+            )}
             {shown.shape && <p className="mt-1 text-[11px] font-semibold text-red-700">{shown.shape}</p>}
           </section>
 
-          <ProvisionalNote kind="awaiting" title="elevation, soil, climate, hazards">
-            Filled in for each area once PGENRO uploads its layers. Nothing to enter here.
+          {['soil', 'elevation', 'flood', 'landslide'].some((kind) => !liveLayers[kind]) && (
+          <ProvisionalNote
+            kind="awaiting"
+            title={['soil', 'elevation', 'flood', 'landslide']
+              .filter((kind) => !liveLayers[kind])
+              .join(', ')}
+          >
+            Filled in for each area once PGENRO uploads that layer. Nothing to enter here.
           </ProvisionalNote>
+          )}
 
           <div role="radiogroup" aria-label="Kind of area" className="flex gap-1 rounded-xl bg-slate-100 p-1">
             {AREA_KINDS.map((kind) => (

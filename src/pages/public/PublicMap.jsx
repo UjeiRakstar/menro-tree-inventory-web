@@ -10,6 +10,7 @@ import {
   useMap,
   useMapEvents,
   Circle,
+  ImageOverlay,
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -38,6 +39,8 @@ import { ROLES, roleOf } from '../../lib/roles.js';
 import { centroidOf } from '../../lib/areaGeometry.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
+import { useMapLayers } from '../../hooks/useMapLayers.js';
+import { measureArea } from '../../lib/layers/facts.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
 import BasemapSwitcher from '../../components/map/BasemapSwitcher.jsx';
 import LayersPanel from '../../components/map/LayersPanel.jsx';
@@ -132,6 +135,9 @@ const styleForSite = (feature) =>
  */
 const PANES = [
   ['laguna-mask', 410],
+  // PGENRO's survey layers — soil, elevation, flood — over the base map and
+  // under everything that takes a click.
+  ['layer-overlays', 415],
   ['laguna-boundaries', 420],
   // Areas sit over the municipal outlines and under the trees: a forest should
   // never swallow a click meant for a tree standing in it.
@@ -487,6 +493,44 @@ function UserLocationMarker({ onTagAttempt = null }) {
   );
 }
 
+/**
+ * BSWM soil units as coloured shapes, fetched when switched on. Not
+ * clickable: the colours are keyed in the Layers panel, and a click here
+ * belongs to the town, the area or the tree above it.
+ */
+function SoilOverlay({ url }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(url)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json) => !cancelled && setData(json))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+  if (!data) return null;
+  return (
+    <GeoJSON
+      key={url}
+      data={data}
+      pane="layer-overlays"
+      interactive={false}
+      style={(feature) => ({
+        color: feature.properties.colour,
+        weight: 0.8,
+        opacity: 0.8,
+        fillColor: feature.properties.colour,
+        fillOpacity: 0.35,
+      })}
+    />
+  );
+}
+
+/** Drawn bottom to top: elevation under soil under the hazards. */
+const OVERLAY_ORDER = ['elevation', 'soil', 'flood', 'landslide'];
+
 /** How big a group bubble is: bigger for more trees, without saying how many. */
 function bubbleSize(count) {
   if (count < 10) return 26;
@@ -792,6 +836,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const [areaEditor, setAreaEditor] = useState(null);
   // Areas offices have saved; the samples stand in until there are some.
   const savedAreas = useMapAreas({ withProposals: admin });
+  // PGENRO's survey layers, drawn when switched on in the Layers panel.
+  const mapLayers = useMapLayers();
   // What is drawn over the base map, and which corner panel is open.
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [openTool, setOpenTool] = useState(null);
@@ -1346,6 +1392,16 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     setSitePanelCollapsed(false);
   }
 
+  /** An area measured again against the live layers — after an approval moved it. */
+  async function remeasureArea(id) {
+    const { data } = await supabase.from('map_areas').select('id, geometry, area_m2').eq('id', id).single();
+    if (!data?.geometry) return;
+    const facts = await measureArea(supabase, mapLayers.layers, { geometry: data.geometry, areaM2: data.area_m2 });
+    if (!facts) return;
+    await supabase.rpc('set_area_layer_facts', { p_area: id, p_facts: facts });
+    savedAreas.reload();
+  }
+
   const editingRow = areaEditor?.featureId ? savedAreas.rowsById.get(areaEditor.featureId) ?? null : null;
 
   // ---- "View on map" ----------------------------------------------------------
@@ -1591,6 +1647,23 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           interactive={false}
         />
 
+        {/* PGENRO's survey layers, as switched on */}
+        {OVERLAY_ORDER.map((kind) => {
+          const layer = mapLayers.layers[kind];
+          if (!layer || !layers[kind]) return null;
+          if (kind === 'soil') return layer.shapesUrl ? <SoilOverlay key={layer.id} url={layer.shapesUrl} /> : null;
+          if (!layer.pictureUrl || !layer.meta?.bounds) return null;
+          return (
+            <ImageOverlay
+              key={layer.id}
+              url={layer.pictureUrl}
+              bounds={layer.meta.bounds}
+              pane="layer-overlays"
+              opacity={kind === 'elevation' ? 0.75 : 0.85}
+            />
+          );
+        })}
+
         {/* Cities and municipalities inside Laguna */}
         {layers.boundaries && (
           <MunicipalityLayer
@@ -1742,7 +1815,11 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
                 proposal={savedAreas.proposals.get(selectedSite.properties.id) ?? null}
                 onEdit={() => openAreaEditor('edit', selectedSite)}
                 onPropose={() => openAreaEditor('propose', selectedSite)}
-                onChanged={() => savedAreas.reload()}
+                onChanged={(what) => {
+                  savedAreas.reload();
+                  // An approved proposal may have moved the boundary: measure it again.
+                  if (what === 'approved') remeasureArea(selectedSite.properties.id);
+                }}
                 onDeleted={() => {
                   clearSelectedSite();
                   savedAreas.reload();
@@ -1764,6 +1841,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             shape={shape}
             trees={trees}
             documentFolder={documentFolderOf(profile)}
+            layers={mapLayers.layers}
             onSaved={handleAreaSaved}
             onCancel={cancelAreaEditor}
           />
@@ -1847,6 +1925,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
                 <LayersPanel
                   id="public-map-layers"
                   audience="public"
+                  available={mapLayers.layers}
                   layers={layers}
                   onToggle={toggleLayer}
                   onClose={() => setOpenTool(null)}
@@ -1906,7 +1985,13 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             />
             {openTool === 'layers' && (
               <div className="absolute bottom-0 right-full mr-2">
-                <LayersPanel id="map-layers" layers={layers} onToggle={toggleLayer} onClose={() => setOpenTool(null)} />
+                <LayersPanel
+                  id="map-layers"
+                  layers={layers}
+                  available={mapLayers.layers}
+                  onToggle={toggleLayer}
+                  onClose={() => setOpenTool(null)}
+                />
               </div>
             )}
           </div>

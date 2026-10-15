@@ -23,22 +23,26 @@ export function useMapAreas({ withProposals = false } = {}) {
   const [rows, setRows] = useState([]);
   const [labels, setLabels] = useState(() => new Map());
   const [pending, setPending] = useState([]);
+  // Each LGU's CLIRAM figures (map_layers.sql), for the areas' rainfall and temperature.
+  const [climate, setClimate] = useState(() => new Map());
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState('');
 
   const reload = useCallback(async () => {
-    const [areas, lgus, proposals] = await Promise.all([
+    const [areas, lgus, proposals, climates] = await Promise.all([
       supabase.from('map_areas').select('*').order('created_at', { ascending: true }),
       supabase.from('lgus').select('psgc, label'),
       withProposals
         ? supabase.from('map_area_proposals').select('*').eq('status', 'pending')
         : Promise.resolve({ data: [], error: null }),
+      supabase.from('lgu_climate').select('*'),
     ]);
     setMissing(isMissingTable(areas.error));
     setError(areas.error && !isMissingTable(areas.error) ? areas.error.message : '');
     setRows(Array.isArray(areas.data) ? areas.data : []);
     setLabels(new Map((Array.isArray(lgus.data) ? lgus.data : []).map((lgu) => [Number(lgu.psgc), lgu.label])));
     setPending(Array.isArray(proposals.data) ? proposals.data : []);
+    setClimate(new Map((!climates.error && Array.isArray(climates.data) ? climates.data : []).map((c) => [Number(c.lgu_psgc), c])));
   }, [withProposals]);
 
   useEffect(() => {
@@ -78,8 +82,14 @@ export function useMapAreas({ withProposals = false } = {}) {
   }, [reload, withProposals, channelName]);
 
   const features = useMemo(
-    () => rows.map((row) => rowToFeature(row, { lguLabel: labels.get(Number(row.lgu_psgc)) ?? '' })),
-    [rows, labels]
+    () =>
+      rows.map((row) =>
+        rowToFeature(row, {
+          lguLabel: labels.get(Number(row.lgu_psgc)) ?? '',
+          climate: climate.get(Number(row.lgu_psgc)) ?? null,
+        })
+      ),
+    [rows, labels, climate]
   );
   const rowsById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
   const proposals = useMemo(() => new Map(pending.map((proposal) => [proposal.area_id, proposal])), [pending]);

@@ -3,6 +3,7 @@ import { containsPoint } from './lagunaBoundaries.js';
 import { lengthM, areaM2 } from './drawing.js';
 import { maiCoverOf, namriaClassById } from './namriaCover.js';
 import { ROLES, roleOf } from './roles.js';
+import { elevationTypeOf } from './layers/elevation.js';
 
 /**
  * Saved map areas: between the drawing on the map, the form, the row in
@@ -222,11 +223,49 @@ export function officeOf(row, lguLabel) {
 }
 
 /**
+ * What PGENRO's layers and CLIRAM say about an area, as the panel's fields.
+ *
+ * `facts` is the area's `layer_facts` (src/lib/layers/measure.js); `climate`
+ * its LGU's CLIRAM row. A field nobody has measured is left undefined, and
+ * the panel marks it as awaiting data.
+ */
+export function groundOf(facts, climate) {
+  const ground = {};
+  const soils = Array.isArray(facts?.soil) ? facts.soil : null;
+  if (soils?.length) {
+    const named = soils.slice(0, 2).map((s) => s.description || s.series).filter(Boolean);
+    ground.soilType =
+      soils.length > 1 && soils[0].share < 0.9
+        ? soils.slice(0, 2).map((s) => `${s.description || s.series} (${Math.round(s.share * 100)}%)`).join(', ')
+        : named[0];
+  }
+  if (facts?.elevation) {
+    const { min, max, mean } = facts.elevation;
+    ground.elevationM = mean;
+    ground.elevationRange = { min, max };
+  }
+  // BSWM's own zone for the ground the area mostly stands on, else by height.
+  const zone = soils?.[0]?.zone;
+  const zoneType = zone ? zone.replace(/s$/, '') : null;
+  if (zoneType || facts?.elevation) ground.elevationType = zoneType ?? elevationTypeOf(facts.elevation.mean);
+  for (const kind of ['flood', 'landslide']) {
+    if (facts?.[kind]) {
+      ground.hazards ??= {};
+      ground.hazards[kind] = { areaM2: facts[kind].total, levels: facts[kind] };
+    }
+  }
+  if (climate?.rainfall?.annualMm != null) ground.rainfallMmPerYear = climate.rainfall.annualMm;
+  if (climate?.temperature?.meanC != null) ground.temperatureC = climate.temperature.meanC;
+  if (climate) ground.climateSource = { scenario: climate.scenario, place: climate.place };
+  return ground;
+}
+
+/**
  * A saved row as the feature the map and the area panel draw — the same shape
  * as the sample areas (src/data/mockMapSites.js), so the panel needs nothing
  * new to show one.
  */
-export function rowToFeature(row, { lguLabel = '' } = {}) {
+export function rowToFeature(row, { lguLabel = '', climate = null } = {}) {
   const namria = namriaClassById(row.cover_class);
   return {
     type: 'Feature',
@@ -261,6 +300,7 @@ export function rowToFeature(row, { lguLabel = '' } = {}) {
       updatedAt: dateOf(row.updated_at),
       // The exact time, for redrawing the layer when the area changes.
       version: row.updated_at ?? null,
+      ...groundOf(row.layer_facts, climate),
     },
   };
 }

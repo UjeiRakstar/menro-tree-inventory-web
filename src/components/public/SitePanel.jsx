@@ -145,9 +145,24 @@ function HazardBlock({ icon, label, feature, unit, sample = false }) {
       // The share is invented while the records are samples; the NOAH layer
       // will hand over square metres and this stops being a placeholder.
       provisional={sample ? 'placeholder' : null}
-      note={none ? 'None of this area falls inside the hazard extent.' : `${Math.round(share * 100)}% of the area`}
+      note={none ? 'None of this area falls inside the hazard extent.' : hazardNote(feature, label, share, unit)}
     />
   );
+}
+
+/** The share of the area, and — from NOAH's levels — how much of it is how bad. */
+function hazardNote(feature, label, share, unit) {
+  const levels = feature?.properties?.hazards?.[label === 'Flooding' ? 'flood' : 'landslide']?.levels;
+  const percent = `${Math.round(share * 100)}% of the area`;
+  if (!levels) return percent;
+  const parts = [
+    ['high', 'high'],
+    ['medium', 'medium'],
+    ['low', 'low'],
+  ]
+    .filter(([key]) => levels[key] > 0)
+    .map(([key, word]) => `${formatArea(levels[key], unit)} ${word}`);
+  return parts.length ? `${percent} — ${parts.join(' · ')}` : percent;
 }
 
 /** The seals of the agencies the ground truth belongs to. */
@@ -245,8 +260,9 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
   const isPlantingSite = props.kind === 'planting-site';
   // Invented while it is a sample; real once an office saved it.
   const sample = SITES_ARE_SAMPLE && !props.saved;
-  // A saved area's ground facts wait on PGENRO's layers (phase 4).
-  const groundMark = sample ? 'placeholder' : props.saved ? 'awaiting' : null;
+  // A saved area's ground facts come from PGENRO's layers (phase 4): amber
+  // "awaiting" only for the ones no layer has given it yet.
+  const markFor = (value) => (sample ? 'placeholder' : props.saved && (value === null || value === undefined) ? 'awaiting' : null);
   const designation = designationById(props.designation);
   const noRate = props.saved && props.namriaClass && !props.coverId ? noRateReason(props.namriaClass) : '';
   const title = siteTitle(feature);
@@ -350,23 +366,25 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
             <FactRow
               icon={elevationIcon}
               label="Elevation Type"
-              provisional={groundMark}
+              provisional={markFor(props.elevationType)}
               value={
-                props.elevationM != null
-                  ? `${props.elevationType} — ${props.elevationM} m asl`
-                  : (props.elevationType ?? 'Not recorded')
+                props.elevationRange && props.elevationRange.min !== props.elevationRange.max
+                  ? `${props.elevationType} — ${props.elevationRange.min}–${props.elevationRange.max} m asl`
+                  : props.elevationM != null
+                    ? `${props.elevationType} — ${props.elevationM} m asl`
+                    : (props.elevationType ?? 'Not recorded')
               }
             />
             <FactRow
               icon={soilIcon}
               label="Soil Type"
               value={props.soilType ?? 'Not recorded'}
-              provisional={groundMark}
+              provisional={markFor(props.soilType)}
             />
             <FactRow
               icon={rainfallIcon}
               label="Average Rainfall"
-              provisional={groundMark}
+              provisional={markFor(props.rainfallMmPerYear)}
               value={
                 props.rainfallMmPerYear != null
                   ? `${props.rainfallMmPerYear.toLocaleString('en-US')} mm a year`
@@ -376,10 +394,15 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
             <FactRow
               icon={temperatureIcon}
               label="Average Temperature"
-              provisional={groundMark}
+              provisional={markFor(props.temperatureC)}
               value={props.temperatureC != null ? `${props.temperatureC} °C` : 'Not recorded'}
             />
           </ul>
+          {props.climateSource && (
+            <p className="mt-1 text-[10.5px] leading-snug text-slate-400">
+              Rainfall and temperature: DOST-PAGASA CLIRAM, observed baseline for {props.climateSource.place}.
+            </p>
+          )}
 
           {/* What can go wrong with it */}
           <div className="mt-2 divide-y divide-slate-100 border-t border-slate-200">
