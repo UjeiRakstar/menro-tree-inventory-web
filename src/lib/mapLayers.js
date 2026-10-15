@@ -15,7 +15,7 @@
 /** Layers the map can draw today, all on by default. */
 export const LIVE_LAYERS = Object.freeze([
   { id: 'trees', label: 'Tagged trees', detail: 'Coloured by what each needs' },
-  { id: 'sites', label: 'Land cover and planting sites', detail: 'Sample areas until PGENRO uploads' },
+  { id: 'sites', label: 'Land cover and planting sites', detail: 'As the offices saved them; samples until there are some' },
   { id: 'boundaries', label: 'City and municipal boundaries', detail: 'PSA / NAMRIA' },
 ]);
 

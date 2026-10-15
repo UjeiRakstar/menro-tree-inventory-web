@@ -33,11 +33,6 @@ Last read through: 15 October 2026, against the repo, the live database
 
 ## Mine to fix — found in this sweep
 
-- **The comment at the top of `src/data/mockMapSites.js` is stale.** It
-  promises a `loadMapSites()`. Saved areas now load through
-  `src/hooks/useMapAreas.js` and replace the samples once any exist; the
-  comment, and the layer panel's "Sample areas until PGENRO uploads", should
-  say so.
 - **A trainee in the field app is not told.** The training wall works in the
   app (tested), but the app shows no "training" banner the way the website
   does.

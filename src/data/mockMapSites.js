@@ -13,10 +13,10 @@
  *
  * REPLACING THIS WITH REAL DATA
  * -----------------------------
- * Nothing imports this file but src/lib/mapSites.js. When the PGENRO account
- * can upload layers, `loadMapSites()` fetches them instead and this file is
- * deleted; no component changes, because the components only ever see the
- * shape below.
+ * Nothing imports this file but src/lib/mapSites.js. The areas the offices
+ * save (supabase/map_areas.sql, loaded by src/hooks/useMapAreas.js) replace
+ * these on both maps as soon as any exist, in the same shape, so no component
+ * changes. This file can be deleted once every LGU has mapped its own.
  *
  * Each feature is ordinary GeoJSON. Its properties:
  *
