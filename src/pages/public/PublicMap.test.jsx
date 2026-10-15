@@ -1469,8 +1469,9 @@ describe('saving an area', () => {
 
     it('updates live when an area or a proposal changes elsewhere, without a refresh', async () => {
       await openSaved(SANTA_CRUZ_ADMIN);
+      // The latest listener: the stand-in channel keeps every earlier test's too.
       const listenerFor = (table) =>
-        supabaseMock.supabase.channel().on.mock.calls.find(([, filter]) => filter?.table === table)?.[2];
+        supabaseMock.supabase.channel().on.mock.calls.filter(([, filter]) => filter?.table === table).pop()?.[2];
       const before = supabaseMock.writesTo('map_areas', 'select').length;
 
       // PGENRO proposes, somewhere else: the database tells the page.

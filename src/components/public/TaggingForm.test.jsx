@@ -36,7 +36,9 @@ describe('where a tag is', () => {
   it('works out the barangay from the PSA boundaries, not OpenStreetMap', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     renderForm(IN_LABUIN);
-    await waitFor(() => expect(barangaySelect()).toHaveValue('Labuin'));
+    // The first test in the file pays for loading the barangay boundaries,
+    // which takes over a second when the whole suite runs at once.
+    await waitFor(() => expect(barangaySelect()).toHaveValue('Labuin'), { timeout: 5000 });
     expect(screen.getByText(', Santa Cruz')).toBeInTheDocument();
     // No call out to a third party for a name it has to guess.
     expect(fetchSpy).not.toHaveBeenCalled();

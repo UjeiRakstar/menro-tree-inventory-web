@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
-import { X, Upload, TreePine, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { X, TreePine, Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import CertificatePrint from './CertificatePrint.jsx';
+import RequirementsDrop from './RequirementsDrop.jsx';
 
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'YOUR_CLOUD_NAME';
 const CLOUDINARY_UPLOAD_PRESET = 'tree_inventory_mobile';
@@ -11,23 +12,13 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
   const [contactInfo, setContactInfo] = useState('');
   const [reason, setReason] = useState('');
   const [files, setFiles] = useState([]);
-  const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [printData, setPrintData] = useState(null);
-  const fileInputRef = useRef(null);
 
   if (!isOpen || !tree) return null;
 
-  function handleDrop(e) {
-    e.preventDefault();
-    setDragOver(false);
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    setFiles(prev => [...prev, ...droppedFiles]);
-  }
-
-  function handleFileSelect(e) {
-    const selectedFiles = Array.from(e.target.files);
-    setFiles(prev => [...prev, ...selectedFiles]);
+  function addFiles(added) {
+    setFiles(prev => [...prev, ...added]);
   }
 
   function removeFile(index) {
@@ -201,44 +192,15 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
             </div>
           </div>
 
-          {/* Dropzone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`mt-6 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition ${
-              dragOver ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400'
-            }`}
-          >
-            <Upload size={28} className="mx-auto text-slate-400 mb-2" />
-            <p className="text-sm font-medium text-slate-600">Drag & drop requirements here</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Requires: 1. Additional Photos, 2. Barangay Clearance
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,.pdf"
-              onChange={handleFileSelect}
-              className="hidden"
+          {/* Requirements: one compact box, the files listed inside it */}
+          <div className="mt-6">
+            <RequirementsDrop
+              files={files}
+              onAdd={addFiles}
+              onRemove={removeFile}
+              hint="1. Additional photos, 2. Barangay clearance"
             />
           </div>
-
-          {/* File list */}
-          {files.length > 0 && (
-            <div className="mt-3 space-y-1">
-              {files.map((file, i) => (
-                <div key={i} className="flex items-center justify-between bg-slate-50 rounded px-3 py-1.5 text-xs">
-                  <span className="text-slate-700 truncate">{file.name}</span>
-                  <button onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-500 ml-2">
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Action Buttons */}
           <div className="mt-6 flex items-center justify-end gap-3">
