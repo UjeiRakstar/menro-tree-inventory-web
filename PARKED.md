@@ -87,10 +87,16 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 14. `supabase/planting_requests.sql` — planting sites are PGENRO's; a MENRO /
     CENRO's goes to PGENRO as a request (after steps 5, 9 and 12). Safe to run
     map_areas.sql again after it: requests stay off the public map.
+15. `supabase/office_settings.sql` — Settings: office profiles and logos,
+    barangay figures, the field team's last sign-in, and each office's own AI
+    key in Vault (after steps 1, 2, 5 and 10). Then, in Edge Functions: deploy
+    `identify-tree` and `ai-key-test` (new), and redeploy `rise-extract`.
+    Once `identify-tree` is live and the field app is rebuilt, delete
+    GEMINI_API_KEY from the field app's `.env`: the app then carries no key.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 8 suites, 296 checks — the final check query on its
+allow and refuse — 9 suites, 333 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Steps 1–12 are in the live database** (map layers and CLIRAM seen working, 15 October); step 13 is new. Not deployed: the
@@ -146,6 +152,16 @@ LGU's tag or a training one, and "adopt" any tree. And **old area documents
 stayed online** after the area was deleted or its PDF replaced.
 
 ## Asked for on 14 October, not built yet
+
+- **Messages, and News and Events** (16 October, from the mockups). Messages:
+  the About page's contact form asks which city or municipality, and that
+  MENRO / CENRO reads it in Messages (PGENRO reads all) — reply opens the
+  office's email with the message quoted; delete and archive. News and
+  Events: not yet designed beyond the menu item.
+- **The field app's tree identification change is not committed** (16
+  October): lib/ai_service.dart and lib/tree_details_screen.dart in
+  tree_inventory, sending the photos to `identify-tree`. Also: `flutter test`
+  there needs CMake installed (dartcv4 builds OpenCV), on this PC it does not run.
 
 - **One standard format for every Excel download** (15 October). The MENRO
   report, the PGENRO permit report and the inventory export each lay their
