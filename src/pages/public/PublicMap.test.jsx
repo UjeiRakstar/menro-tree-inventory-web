@@ -1295,6 +1295,27 @@ describe('the office map, round three', () => {
     expect(within(survey).getAllByText('Not uploaded yet')).toHaveLength(4);
   });
 
+  it('opens the legend with the key when a survey layer is chosen, and keeps the key out of the picker', async () => {
+    supabaseMock.setResponse('map_layers:select', {
+      data: [{
+        id: 'flood-1', kind: 'flood', active: true, picture_path: 'flood/1/picture.png',
+        meta: { kind: 'flood', bounds: [[13.95, 120.98], [14.61, 121.62]], legend: [{ value: 3, label: 'High', colour: [8, 48, 107, 190] }] },
+      }],
+      error: null,
+    });
+    renderOfficeWith();
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: /^Survey layer/ }));
+    const flood = await within(screen.getByRole('radiogroup', { name: 'Survey layer' })).findByRole('radio', { name: /Flood/ });
+    await waitFor(() => expect(flood).toBeEnabled());
+    expect(screen.queryByText('High')).not.toBeInTheDocument();
+
+    fireEvent.click(flood);
+    const legend = screen.getByRole('dialog', { name: 'Legend' });
+    expect(within(legend).getByText('High')).toBeInTheDocument();
+    expect(within(legend).getByText(/Flood hazard/)).toBeInTheDocument();
+  });
+
   it('keeps the legend shut until it is asked for', async () => {
     renderOfficeWith();
     await waitFor(() => expect(markers().length).toBeGreaterThan(0));

@@ -1640,8 +1640,15 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const pickerProps = (tool) => ({
     centre: pickerCentre,
     open: openTool === tool,
-    onOpenChange: (open) => setOpenTool(open ? tool : null),
+    // Closing leaves another panel alone if choosing just opened it.
+    onOpenChange: (open) => setOpenTool((current) => (open ? tool : current === tool ? null : current)),
   });
+  // A coloured layer means nothing without its key: on the office map, whose
+  // legend is shut until asked for, choosing one opens it.
+  const chooseSurvey = (kind) => {
+    setSurvey(kind);
+    if (admin && kind) setOpenTool('legend');
+  };
 
   /**
    * The office map's legend, for its corner panel: the Command Center's
@@ -2240,7 +2247,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           )}
           <SurveyPicker
             current={survey}
-            onChange={setSurvey}
+            onChange={chooseSurvey}
             available={mapLayers.layers}
             basemap={basemapId}
             {...pickerProps('survey')}

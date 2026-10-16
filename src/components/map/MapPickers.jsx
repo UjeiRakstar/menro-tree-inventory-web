@@ -89,7 +89,8 @@ export function SurveyKey({ kind, meta, className = '' }) {
 
 /**
  * Which survey layer is laid over the map, or none. Layers PGENRO has not
- * uploaded are shown, greyed, saying so.
+ * uploaded are shown, greyed, saying so. Its colour key is in the map's
+ * legend, not here: this row closes the moment a layer is chosen.
  */
 export function SurveyPicker({ current, onChange, available = {}, basemap, centre, open, onOpenChange }) {
   const base = BASEMAPS.find((b) => b.id === basemap) ?? BASEMAPS[0];
@@ -129,12 +130,6 @@ export function SurveyPicker({ current, onChange, available = {}, basemap, centr
       onChange={onChange}
       open={open}
       onOpenChange={onOpenChange}
-    >
-      {live && (
-        <div className="mt-2 max-h-40 overflow-y-auto border-t border-slate-100 pt-2 pr-1">
-          <SurveyKey kind={current} meta={available[current].meta} />
-        </div>
-      )}
-    </StackedPicker>
+    />
   );
 }
