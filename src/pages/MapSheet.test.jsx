@@ -134,7 +134,8 @@ describe('MapSheet', () => {
       error: null,
     });
     show();
-    await waitFor(() => expect(sheet()).toHaveTextContent(/Zaldy B\. Ybardolaza II/));
+    // Wrapped where it is long: each line its own text.
+    await waitFor(() => expect(sheet()).toHaveTextContent(/Zaldy B\. ?Ybardolaza II/));
     expect(sheet().querySelector('image[href="https://storage.test/office-logos/403426000/office.png"]')).toBeTruthy();
     forgetOfficeProfile('403426000');
   });
