@@ -122,7 +122,7 @@ function PublicShell() {
  * business using it. Each is told which, instead of being handed a dashboard
  * the database would then refuse to fill.
  */
-function ProtectedRoute() {
+function ProtectedRoute({ bare = false }) {
   const { session, profile } = useAuth();
   if (!session) return <Navigate to="/login" replace />;
   if (profile === undefined) return <PageLoading />;
@@ -131,7 +131,21 @@ function ProtectedRoute() {
   if (access.kind !== 'web') {
     return <AccountBlocked access={access} email={session.user?.email} />;
   }
-  return <Shell />;
+  return bare ? <BareShell /> : <Shell />;
+}
+
+/**
+ * A page that is its own piece of work in its own tab — the map sheet — with
+ * no navigation to wander off by: it brings its own bar and a Close.
+ */
+function BareShell() {
+  return (
+    <div className="min-h-screen bg-slate-100">
+      <Suspense fallback={<PageLoading />}>
+        <Outlet />
+      </Suspense>
+    </div>
+  );
 }
 
 /** PGENRO's pages. Anyone else gets the same Not Found an unknown page would. */
@@ -182,11 +196,15 @@ function AppRoutes() {
       </Route>
 
       {/* Protected routes */}
+      {/* Opened in its own tab from the map, and closed back to it. */}
+      <Route element={<ProtectedRoute bare />}>
+        <Route path="map-sheet" element={<MapSheet />} />
+      </Route>
+
       <Route element={<ProtectedRoute />}>
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
         <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
         <Route path="map" element={<MenroMap />} />
-        <Route path="map-sheet" element={<MapSheet />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />

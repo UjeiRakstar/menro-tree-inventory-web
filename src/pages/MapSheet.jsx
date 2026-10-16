@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Download, Loader2, Printer } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Download, Loader2, Printer, X } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro, ROLES, roleOf } from '../lib/roles.js';
@@ -45,6 +45,37 @@ import {
  */
 
 const SURVEY_KINDS = Object.keys(SURVEY_TITLES);
+
+// The tab's own icon, a folded map, so it is told apart from the app's tabs.
+const SHEET_ICON =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#15803d"/>' +
+      '<path d="M6 9l6-2.5 8 2.5 6-2.5v16.5l-6 2.5-8-2.5-6 2.5z" fill="#fff"/>' +
+      '<path d="M12 6.5v16.5M20 9v16.5" stroke="#15803d" stroke-width="1.6"/></svg>'
+  );
+
+/** The tab's title and icon while the sheet is open, put back after. */
+function useTabIdentity(title) {
+  useEffect(() => {
+    const before = document.title;
+    document.title = title;
+    return () => {
+      document.title = before;
+    };
+  }, [title]);
+  useEffect(() => {
+    const link = document.querySelector('link[rel~="icon"]');
+    if (!link) return undefined;
+    const before = { href: link.getAttribute('href'), type: link.getAttribute('type') };
+    link.setAttribute('href', SHEET_ICON);
+    link.setAttribute('type', 'image/svg+xml');
+    return () => {
+      link.setAttribute('href', before.href);
+      if (before.type) link.setAttribute('type', before.type);
+    };
+  }, []);
+}
 const FONT = 'Arial, Helvetica, sans-serif';
 const BOUNDARY = '#111827';
 
@@ -138,6 +169,7 @@ export default function MapSheet() {
   const { profile, lgu: ownLgu } = useAuth();
   const pgenro = isPgenro(profile);
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const mapLayers = useMapLayers();
   const set = (key, value) =>
     setParams((current) => {
@@ -410,9 +442,36 @@ export default function MapSheet() {
   const label = 'block text-xs font-semibold text-slate-600';
   const fileName = `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${titleText.replace(/[^A-Za-z]+/g, '-').replace(/^-|-$/g, '')}.png`;
   const loading = !mapLayers.loaded || Boolean(surveyLayer && !picture && !soil);
+  const titleCase = (text) => text.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+  useTabIdentity(`${titleCase(titleText)} — ${lgu?.label ?? 'Laguna'} · Green Tag`);
+
+  /**
+   * Back to the work it was opened from: the tab closes. A tab the page did
+   * not open itself cannot be closed by it, and then it goes to the map.
+   */
+  function closeSheet() {
+    window.close();
+    setTimeout(() => {
+      if (!window.closed) navigate('/map');
+    }, 200);
+  }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-10 flex items-center gap-3 bg-green-800 px-4 py-2.5 text-white shadow-md">
+        <img src={greenTagLogo} alt="" aria-hidden="true" className="h-7 w-7" />
+        <span className="text-sm font-extrabold tracking-wide">GREEN TAG</span>
+        <h1 className="text-sm font-normal text-green-100">Make a map</h1>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={closeSheet}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <X size={16} aria-hidden="true" /> Close
+        </button>
+      </header>
+    <div className="flex flex-1 flex-col gap-4 p-6 lg:flex-row lg:items-start">
       <style>{`
         @media print {
           @page { size: ${paper.width}mm ${paper.height}mm; margin: 0; }
@@ -423,7 +482,7 @@ export default function MapSheet() {
       `}</style>
 
       <aside aria-label="Map sheet settings" className="w-full space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-72 lg:shrink-0">
-        <h1 className="text-lg font-bold text-slate-900">Make a map</h1>
+        <h2 className="text-lg font-bold text-slate-900">Map settings</h2>
         <p className="text-xs text-slate-500">
           The CDRA map layout, Santa Cruz&apos;s as the template. Print it at 100%, or choose “Save as PDF” in the print
           dialog, and it is at the scale written on it.
@@ -659,6 +718,7 @@ export default function MapSheet() {
           ))}
         </svg>
       </div>
+    </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const auth = { profile: null, lgu: null };
 vi.mock('../supabaseClient.js', async () => {
@@ -89,6 +89,41 @@ describe('MapSheet', () => {
     // Wrapped over two lines, each its own text.
     expect(sheet()).toHaveTextContent(/URBAN TREES OF ?THE ?POBLACION/);
     expect(sheet()).toHaveTextContent('MENRO Santa Cruz, Forestry Unit');
+  });
+
+  it('names its tab after the sheet, with a tab icon of its own, and puts both back after', () => {
+    const icon = document.createElement('link');
+    icon.rel = 'icon';
+    icon.href = '/greentag-logo.png';
+    document.head.appendChild(icon);
+    document.title = 'Green Tag';
+    const { unmount } = show('?survey=flood');
+    expect(document.title).toBe('Tree Inventory Map — Santa Cruz · Green Tag');
+    expect(icon.getAttribute('href')).toMatch(/^data:image\/svg\+xml,/);
+    unmount();
+    expect(document.title).toBe('Green Tag');
+    expect(icon.getAttribute('href')).toBe('/greentag-logo.png');
+    icon.remove();
+  });
+
+  it('closes back to the work it was opened from, or goes to the map when it cannot', async () => {
+    const close = vi.spyOn(window, 'close').mockImplementation(() => {});
+    auth.profile = SANTA_CRUZ_OFFICE;
+    auth.lgu = { name: 'Santa Cruz' };
+    render(
+      <MemoryRouter initialEntries={['/map-sheet']}>
+        <Routes>
+          <Route path="/map-sheet" element={<MapSheet />} />
+          <Route path="/map" element={<p>The office map</p>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.queryByRole('link', { name: /BioDashboard|Action Board|Trees/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(close).toHaveBeenCalled();
+    // jsdom's window does not close, so the page falls back to the map.
+    expect(await screen.findByText('The office map')).toBeInTheDocument();
+    close.mockRestore();
   });
 
   it('prints at the paper’s size', () => {
