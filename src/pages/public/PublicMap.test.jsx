@@ -869,9 +869,9 @@ const OUT_FOR_CHECKING = { id: 7, species: 'Duhat', latitude: 14.283, longitude:
 const at = (tree) => JSON.stringify([tree.latitude, tree.longitude]);
 const officePin = (tree) => markers().find((m) => m.dataset.center === at(tree));
 
-function renderOffice({ fence = null, path = '/', profile = null } = {}) {
+function renderOffice({ fence = null, path = '/', profile = null, state = null } = {}) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[state ? { pathname: path, state } : path]}>
       <TreeMap mode="admin" fence={fence} profile={profile} />
     </MemoryRouter>
   );
@@ -1425,26 +1425,20 @@ describe('saving an area', () => {
     expect(await within(form).findByText(/Suggestions need PGENRO’s layers/)).toBeInTheDocument();
   });
 
-  describe('bringing an area in from a file', () => {
+  describe('an area brought in from a file, in Settings', () => {
     const square = (lng, lat, d = 0.001) => [[lng, lat], [lng + d, lat], [lng + d, lat + d], [lng, lat + d], [lng, lat]];
-    const geojson = (...areas) => {
-      const text = JSON.stringify({
-        type: 'FeatureCollection',
-        features: areas.map(([name, ring]) => ({ type: 'Feature', properties: { Name: name }, geometry: { type: 'Polygon', coordinates: [ring] } })),
+    // What Settings → Import areas hands the map.
+    async function handOver(name, ring) {
+      renderOffice({
+        fence: 'Santa Cruz',
+        profile: SANTA_CRUZ_ADMIN,
+        state: { importArea: { name, geometry: { type: 'Polygon', coordinates: [ring] } } },
       });
-      const file = new File([text], 'areas.geojson', { type: 'application/geo+json' });
-      // Every browser's File reads itself as text; jsdom's does not.
-      file.text = async () => text;
-      return file;
-    };
-    async function importFile(file) {
-      renderOffice({ fence: 'Santa Cruz', profile: SANTA_CRUZ_ADMIN });
       await waitFor(() => expect(screen.queryByText('Loading map data…')).not.toBeInTheDocument());
-      fireEvent.change(screen.getByLabelText('Area file (GeoJSON or shapefile)'), { target: { files: [file] } });
     }
 
-    it('opens the save form with the area drawn and its name filled in', async () => {
-      await importFile(geojson(['Labuin Riverbank', square(121.4163, 14.2823)]));
+    it('opens in the save form, drawn, with its name filled in', async () => {
+      await handOver('Labuin Riverbank', square(121.4163, 14.2823));
       const form = await screen.findByRole('form', { name: 'Save this area' });
       expect(within(form).getByLabelText(/^Name/)).toHaveValue('Labuin Riverbank');
       // 0.001° a side at 14°N: about 108 m by 111 m.
@@ -1452,18 +1446,17 @@ describe('saving an area', () => {
       expect(screen.getByRole('region', { name: 'Measure area' })).toHaveTextContent('Brought in from the file');
     });
 
-    it('asks which, when the file has several', async () => {
-      await importFile(geojson(['Small', square(121.4163, 14.2823)], ['Big', square(121.417, 14.283, 0.002)]));
-      const choose = await screen.findByRole('dialog', { name: 'Choose the area to bring in' });
-      fireEvent.click(within(choose).getByRole('button', { name: /^Small/ }));
-      expect(within(await screen.findByRole('form', { name: 'Save this area' })).getByLabelText(/^Name/)).toHaveValue('Small');
-    });
-
-    it('will not bring in an area outside the LGU', async () => {
+    it('will not take an area outside the LGU', async () => {
       // Calamba, not Santa Cruz.
-      await importFile(geojson(['Elsewhere', square(121.165, 14.21)]));
+      await handOver('Elsewhere', square(121.165, 14.21));
       expect(await screen.findByRole('alert')).toHaveTextContent('outside Santa Cruz');
       expect(screen.queryByRole('form', { name: 'Save this area' })).not.toBeInTheDocument();
+    });
+
+    it('has no import of its own any more — that is in Settings', async () => {
+      renderOffice({ fence: 'Santa Cruz', profile: SANTA_CRUZ_ADMIN });
+      await waitFor(() => expect(screen.queryByText('Loading map data…')).not.toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /Bring in an area/ })).not.toBeInTheDocument();
     });
   });
 

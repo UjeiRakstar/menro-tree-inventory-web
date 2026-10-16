@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, Layers, LogOut, MapPinned, ShieldCheck, Sprout, Users } from 'lucide-react';
+import { ChevronDown, FileText, Layers, LogOut, MapPinned, Settings as SettingsIcon, ShieldCheck, Sprout, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -221,6 +221,12 @@ export default function Header() {
               </nav>
 
               <div className="border-t border-slate-100 py-1">
+                {(pgenro || lguAdmin) && (
+                  <NavLink to="/settings" className={menuItem}>
+                    <SettingsIcon size={16} aria-hidden="true" className="text-slate-500" />
+                    Settings
+                  </NavLink>
+                )}
                 <NavLink to="/arborists" className={menuItem}>
                   <Users size={16} aria-hidden="true" className="text-slate-500" />
                   <span className="flex-1">Field officers</span>

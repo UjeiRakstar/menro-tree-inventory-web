@@ -14,8 +14,8 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useSearchParams } from 'react-router-dom';
-import { Crosshair, FileUp, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Printer, Smartphone, X } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Crosshair, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Printer, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   LAGUNA_BOUNDS,
@@ -35,8 +35,7 @@ import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
 import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
-import { ACCEPTED_FILES, areaCandidates, boundsOfShape, readAreaFiles, shapeFromGeometry } from '../../lib/areaImport.js';
-import { formatArea } from '../../lib/areaGeometry.js';
+import { boundsOfShape, shapeFromGeometry } from '../../lib/areaImport.js';
 import { ROLES, roleOf } from '../../lib/roles.js';
 import { centroidOf } from '../../lib/areaGeometry.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
@@ -944,11 +943,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const [drawing, setDrawing] = useState(false);
   const [shape, setShape] = useState(EMPTY_SHAPE);
   const [drawNotice, setDrawNotice] = useState('');
-  // Bringing an area in from a file: reading it, the areas to choose from
-  // when it has several, what went wrong, and the name it came with.
-  const importInput = useRef(null);
-  const [importing, setImporting] = useState(false);
-  const [importChoices, setImportChoices] = useState(null);
+  // An area brought in from a file in Settings: what went wrong with it, and
+  // the name it came with.
   const [importError, setImportError] = useState('');
   const [importedName, setImportedName] = useState('');
   // Saving what is drawn: { mode: 'new' | 'edit' | 'propose', featureId }.
@@ -1505,26 +1501,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   }
 
   // ---- Bringing an area in from a file ----------------------------------------
-  async function handleImportFiles(event) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = '';
-    if (files.length === 0) return;
-    setImporting(true);
-    setImportError('');
-    try {
-      const candidates = areaCandidates(await readAreaFiles(files));
-      if (candidates.length === 1) bringIn(candidates[0]);
-      else setImportChoices(candidates);
-    } catch (failure) {
-      setImportError(failure.message);
-    } finally {
-      setImporting(false);
-    }
-  }
-
   /** One area from a file, on the map as a drawing and in the save form. */
   function bringIn(candidate) {
-    setImportChoices(null);
     const { shape: imported, notes } = shapeFromGeometry(candidate.geometry);
     // The same rule as drawing: an LGU account's area is inside its LGU.
     const outside = imported.points.filter((point) => refusePoint(point)).length;
@@ -1544,6 +1522,20 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     openAreaEditor('new');
     setDrawNotice(['Brought in from the file. Move any point that is not right.', ...notes].join(' '));
   }
+
+  // An area handed over from Settings → Import areas, as { name, geometry }.
+  const routerLocation = useLocation();
+  const navigate = useNavigate();
+  const handedOver = routerLocation.state?.importArea ?? null;
+  useEffect(() => {
+    if (!handedOver || !canSaveAreas) return;
+    // Taken once: a refresh, or Back, does not bring it in again.
+    navigate(`${routerLocation.pathname}${routerLocation.search}`, { replace: true, state: null });
+    bringIn(handedOver);
+    // bringIn reads the fence and the drawing as they are now; the hand-over is
+    // what should run it, once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handedOver, canSaveAreas]);
 
   // ---- Saving what is drawn ------------------------------------------------------
   /**
@@ -2226,25 +2218,6 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
               onClick={openMapSheet}
             />
           )}
-          {canSaveAreas && !drawing && (
-            <>
-              <ToolTile
-                icon={importing ? Loader2 : FileUp}
-                label="Import"
-                description="Bring in an area from a GeoJSON or shapefile"
-                onClick={() => importInput.current?.click()}
-              />
-              <input
-                ref={importInput}
-                type="file"
-                multiple
-                accept={ACCEPTED_FILES}
-                onChange={handleImportFiles}
-                aria-label="Area file (GeoJSON or shapefile)"
-                className="hidden"
-              />
-            </>
-          )}
           <SurveyPicker
             current={survey}
             onChange={chooseSurvey}
@@ -2282,49 +2255,6 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           </button>
         </div>
       )}
-      {admin && importChoices && (
-        <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-slate-900/30 p-4" onClick={() => setImportChoices(null)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Choose the area to bring in"
-            onClick={(event) => event.stopPropagation()}
-            className="flex max-h-[80%] w-full max-w-md flex-col rounded-2xl bg-white p-4 shadow-2xl"
-          >
-            <h2 className="text-base font-bold text-slate-900">Choose the area to bring in</h2>
-            <p className="mt-1 text-[12.5px] text-slate-500">
-              The file has {importChoices.length} areas. Each is saved on its own, with its own details — bring in one,
-              save it, then import again for the next.
-            </p>
-            <ul className="mt-3 flex-1 space-y-1.5 overflow-y-auto">
-              {importChoices.map((candidate, i) => (
-                <li key={candidate.index}>
-                  <button
-                    type="button"
-                    onClick={() => bringIn(candidate)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left ring-1 ring-slate-200 hover:bg-green-50 hover:ring-green-300"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
-                      {candidate.name || `Area ${i + 1}`}
-                    </span>
-                    <span className="shrink-0 text-xs text-slate-500">
-                      {formatArea(candidate.areaM2, candidate.areaM2 >= 10000 ? 'ha' : 'm2')}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={() => setImportChoices(null)}
-              className="mt-3 rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* The measurement, live, while an area is drawn */}
       {admin && drawing && (
         <div className="absolute bottom-6 left-1/2 z-[650] -translate-x-1/2">

@@ -112,6 +112,7 @@ function createSupabaseMock() {
     resetPasswordForEmail: vi.fn(),
     getSession: vi.fn(),
     onAuthStateChange: vi.fn(),
+    updateUser: vi.fn(),
   };
 
   function resetAuthDefaults() {
@@ -140,6 +141,8 @@ function createSupabaseMock() {
       data: { session: null },
       error: null,
     });
+    auth.updateUser.mockReset();
+    auth.updateUser.mockResolvedValue({ data: { user: {} }, error: null });
     auth.onAuthStateChange.mockReset();
     auth.onAuthStateChange.mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },

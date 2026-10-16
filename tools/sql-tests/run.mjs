@@ -27,6 +27,7 @@ const SUITES = [
   ['permit archiving', 'permits.mjs'],
   ['RISE species fields', 'rise.mjs'],
   ['map areas', 'areas.mjs'],
+  ['office settings and AI keys', 'settings.mjs'],
 ];
 
 let failed = 0;

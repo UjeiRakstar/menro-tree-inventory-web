@@ -14,12 +14,14 @@
 // before saving. RISE issues are public DENR publications, and sending them to
 // Google was agreed on 14 October.
 //
-// The Gemini key lives in a Supabase secret, never in the website:
+// The Gemini key is never in the website. PGENRO's own key, set in Settings
+// (supabase/office_settings.sql), is used when there is one; otherwise the
+// shared one in the Supabase secret GEMINI_API_KEY. If PGENRO has switched
+// its AI off in Settings, nothing is sent.
 //
-//   DEPLOY: Supabase dashboard → Edge Functions → Secrets → add GEMINI_API_KEY
-//   (the same key the field app has in its .env). Then Deploy a new function →
-//   name it `rise-extract` → paste this file. SUPABASE_URL and
-//   SUPABASE_ANON_KEY are provided automatically.
+//   DEPLOY: Supabase dashboard → Edge Functions → rise-extract → paste this
+//   file → Deploy. SUPABASE_URL, SUPABASE_ANON_KEY and
+//   SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 //
 // Request (POST, with the caller's own session in the Authorization header):
 //   { "pdf": "<base64 of the PDF>", "file_name": "RISE-narra.pdf" }
@@ -176,10 +178,20 @@ Deno.serve(async (request) => {
     return reply(403, { error: 'Only an active PGENRO account can read RISE publications here.' });
   }
 
-  const key = Deno.env.get('GEMINI_API_KEY');
+  // PGENRO's own key when it has set one; the shared secret otherwise.
+  const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const [own, enabled] = await Promise.all([
+    service.rpc('office_ai_key', { p_office: 'pgenro' }),
+    service.rpc('office_ai_enabled', { p_office: 'pgenro' }),
+  ]);
+  // Before office_settings.sql is run neither function exists: carry on as before.
+  if (!enabled.error && enabled.data === false) {
+    return reply(403, { error: 'AI is switched off in PGENRO’s Settings.' });
+  }
+  const key = (!own.error && own.data) || Deno.env.get('GEMINI_API_KEY');
   if (!key) {
     return reply(500, {
-      error: 'GEMINI_API_KEY is not set. Add it under Edge Functions → Secrets in the Supabase dashboard.',
+      error: 'No Gemini key: add one in Settings, or GEMINI_API_KEY under Edge Functions → Secrets in the Supabase dashboard.',
     });
   }
 
