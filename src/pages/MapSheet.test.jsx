@@ -10,6 +10,7 @@ vi.mock('../context/AuthContext.jsx', () => ({ useAuth: () => auth }));
 
 import { supabaseMock } from '../test/supabaseMock.js';
 import MapSheet from './MapSheet.jsx';
+import { forgetOfficeProfile } from '../hooks/useOfficeProfile.js';
 
 const SANTA_CRUZ_OFFICE = { role: 'lgu_admin', status: 'active', lgu_psgc: 403426000 };
 const PGENRO = { role: 'pgenro', status: 'active' };
@@ -124,6 +125,18 @@ describe('MapSheet', () => {
     // jsdom's window does not close, so the page falls back to the map.
     expect(await screen.findByText('The office map')).toBeInTheDocument();
     close.mockRestore();
+  });
+
+  it('carries what the office saved in Settings: its own logo, and its head under Prepared by', async () => {
+    forgetOfficeProfile('403426000');
+    supabaseMock.setResponse('office_profiles:select', {
+      data: { office: '403426000', office_head: 'Zaldy B. Ybardolaza II', office_logo_url: 'https://storage.test/office-logos/403426000/office.png' },
+      error: null,
+    });
+    show();
+    await waitFor(() => expect(sheet()).toHaveTextContent(/Zaldy B\. Ybardolaza II/));
+    expect(sheet().querySelector('image[href="https://storage.test/office-logos/403426000/office.png"]')).toBeTruthy();
+    forgetOfficeProfile('403426000');
   });
 
   it('prints at the paper’s size', () => {

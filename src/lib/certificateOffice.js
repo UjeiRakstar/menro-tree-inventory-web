@@ -36,6 +36,7 @@ export function certificateOffice({ latitude, longitude, municipality } = {}) {
   return {
     name: lgu.name,
     label: lgu.label,
+    psgc: lgu.psgc,
     isCity: city,
     // "City of Calamba", "Municipality of Santa Cruz" — as each styles itself.
     government: city ? `City of ${lgu.name}` : `Municipality of ${lgu.name}`,

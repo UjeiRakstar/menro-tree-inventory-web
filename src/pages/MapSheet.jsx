@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro, ROLES, roleOf } from '../lib/roles.js';
 import { useMapLayers } from '../hooks/useMapLayers.js';
 import { useMapAreas } from '../hooks/useMapAreas.js';
+import { useOfficeProfile } from '../hooks/useOfficeProfile.js';
 import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityNamed } from '../lib/lagunaBoundaries.js';
 import { centroidOf } from '../lib/areaGeometry.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
@@ -196,8 +197,12 @@ export default function MapSheet() {
   // A layer named in the link but not uploaded is not on the sheet, nor in its title.
   const shownSurvey = survey && mapLayers.layers[survey] ? survey : null;
   const titleText = title || defaultTitle({ survey: shownSurvey, ...show });
-  const preparedText =
-    preparedBy || (pgenro ? 'Provincial Government Environment and Natural Resources Office (PGENRO), Laguna' : `${lgu?.label ?? ''} MENRO / CENRO`);
+  // What the office saved in Settings: its seal, its own logo, its head.
+  const saved = useOfficeProfile(lgu ? lgu.psgc : pgenro ? 'pgenro' : null);
+  const officeName = pgenro && !lgu
+    ? 'Provincial Government Environment and Natural Resources Office (PGENRO), Laguna'
+    : `${lgu?.label ?? ''} MENRO / CENRO`;
+  const preparedText = preparedBy || (saved?.office_head ? `${officeName} — ${saved.office_head}` : officeName);
 
   // ---- What goes on it -------------------------------------------------------------
   const areas = useMapAreas();
@@ -308,7 +313,7 @@ export default function MapSheet() {
   // Running down the column.
   let y = column.y + pad;
   const blocks = [];
-  const seal = lgu ? logoFor(lgu.name) : PROVINCE_LOGO;
+  const seal = saved?.lgu_logo_url || (lgu ? logoFor(lgu.name) : PROVINCE_LOGO);
   const sealSize = 17 * big;
   if (seal) {
     blocks.push(<image key="seal" href={seal} x={textMid - sealSize / 2} y={y} width={sealSize} height={sealSize} />);
@@ -430,7 +435,14 @@ export default function MapSheet() {
   const preparedLines = wrap(preparedText, Math.floor(chars * 1.1));
   const preparedHeight = 9 * big + 3 + preparedLines.length * 2.4 * big + 6;
   const preparedY = footY - preparedHeight;
-  const logos = [PROVINCE_LOGO, pgenroLogo, ...(lgu && logoFor(lgu.name) ? [logoFor(lgu.name)] : []), lspuLogo, greenTagLogo];
+  const logos = [
+    PROVINCE_LOGO,
+    pgenroLogo,
+    ...(lgu ? [saved?.lgu_logo_url || logoFor(lgu.name)].filter(Boolean) : []),
+    ...(lgu && saved?.office_logo_url ? [saved.office_logo_url] : []),
+    lspuLogo,
+    greenTagLogo,
+  ];
   const logoSize = 8 * big;
   const logoGap = Math.min(3, (inner.width - logos.length * logoSize) / Math.max(1, logos.length - 1));
   const logosWidth = logos.length * logoSize + (logos.length - 1) * logoGap;

@@ -1,5 +1,13 @@
 import { render, screen, cleanup } from '@testing-library/react';
+
+vi.mock('../supabaseClient.js', async () => {
+  const { supabaseMock } = await import('../test/supabaseMock.js');
+  return { supabase: supabaseMock.supabase };
+});
+
+import { supabaseMock } from '../test/supabaseMock.js';
 import CertificatePrint from './CertificatePrint.jsx';
+import { forgetOfficeProfile } from '../hooks/useOfficeProfile.js';
 import { certificateOffice } from '../lib/certificateOffice.js';
 
 afterEach(cleanup);
@@ -73,5 +81,30 @@ describe('CertificatePrint', () => {
     expect(certificate).not.toHaveTextContent('cubic');
     expect(certificate).toHaveTextContent('Municipality of Santa Cruz');
     expect(certificate).toHaveTextContent('2 (2) standing Mango trees');
+  });
+});
+
+describe('the office’s own letterhead', () => {
+  it('signs with the mayor saved in Settings, under the office’s own seal and contacts', async () => {
+    supabaseMock.reset();
+    // Read once a page; the tests above read Siniloan's as having none.
+    forgetOfficeProfile('403429000');
+    supabaseMock.setResponse('office_profiles:select', {
+      data: {
+        office: '403429000',
+        chief_executive: 'Hon. Juan dela Cruz',
+        office_logo_url: 'https://storage.test/office-logos/403429000/office.png',
+        address_line1: 'Municipal Hall, Siniloan',
+        phone: '(049) 501-1234',
+      },
+      error: null,
+    });
+    render(<CertificatePrint tree={SINILOAN_TREE} clientName="Ana Reyes" />);
+    expect(await screen.findByText('Hon. Juan dela Cruz')).toBeInTheDocument();
+    expect(screen.getByAltText(/Municipal Environment and Natural Resources Office, Siniloan seal/)).toHaveAttribute(
+      'src',
+      'https://storage.test/office-logos/403429000/office.png'
+    );
+    expect(screen.getByText(/Municipal Hall, Siniloan · Tel\. \(049\) 501-1234/)).toBeInTheDocument();
   });
 });
