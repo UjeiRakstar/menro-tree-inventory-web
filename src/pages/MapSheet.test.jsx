@@ -85,6 +85,42 @@ describe('MapSheet', () => {
     expect(sheet()).not.toHaveTextContent('THE AREA');
   });
 
+  it('has the attribute tables of the LGU in a tab beside the map, to save as Excel', async () => {
+    supabaseMock.setResponse('barangay_stats:select', { data: [{ barangay_psgc: 403426001, population: 1659, households: 414 }], error: null });
+    show();
+    fireEvent.click(screen.getByRole('tab', { name: 'Attribute tables' }));
+    const barangays = await screen.findByRole('region', { name: 'Barangays' });
+    await waitFor(() => expect(within(barangays).getByRole('rowheader', { name: 'Alipit' })).toBeInTheDocument());
+    expect(within(barangays).getByRole('rowheader', { name: 'Alipit' }).closest('tr')).toHaveTextContent('1,659');
+    expect(screen.getByRole('region', { name: 'Land cover' })).toHaveTextContent('None yet.');
+    expect(screen.getByRole('button', { name: /Excel/ })).toBeInTheDocument();
+    // The map is still there behind the tab, for the report's picture.
+    expect(sheet()).toBeInTheDocument();
+  });
+
+  it('writes the report from the figures, the office edits it, and AI only improves the wording', async () => {
+    supabaseMock.supabase.functions.invoke.mockResolvedValue({
+      data: { sections: [{ key: 'purpose', text: 'This report, improved, supports the CLUP.' }] },
+      error: null,
+    });
+    show();
+    fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
+    const purpose = await screen.findByRole('textbox', { name: 'Purpose — text' });
+    expect(purpose.value).toMatch(/Municipality of Santa Cruz, Laguna/);
+    fireEvent.change(purpose, { target: { value: 'Our own words.' } });
+    expect(screen.getByRole('textbox', { name: 'Purpose — text' })).toHaveValue('Our own words.');
+
+    fireEvent.click(screen.getByRole('button', { name: /Improve with AI/ }));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Purpose — text' })).toHaveValue('This report, improved, supports the CLUP.'));
+    expect(supabaseMock.supabase.functions.invoke).toHaveBeenCalledWith('improve-report', expect.objectContaining({
+      body: expect.objectContaining({ place: 'Municipality of Santa Cruz' }),
+    }));
+    expect(screen.getByRole('status')).toHaveTextContent(/Read it through before you use it/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Write again from the figures/ }));
+    expect(screen.getByRole('textbox', { name: 'Purpose — text' }).value).toMatch(/Municipality of Santa Cruz/);
+  });
+
   it('colours the trees by origin, keyed with how many of each', async () => {
     supabaseMock.setResponse('trees:select', {
       data: [

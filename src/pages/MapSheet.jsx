@@ -19,6 +19,12 @@ import pgenroLogo from '../assets/lgu-thumbs/PGENRO_LGU_logo.png';
 import lspuLogo from '../assets/lgu-thumbs/LSPU_LGU_logo.png';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 import philippines from '../data/Philippines.geojson';
+import { barangayForTree, loadBarangayIndex } from '../lib/barangayLookup.js';
+import { barangayTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
+import { writeReport } from '../lib/reportWriter.js';
+import { reportDocx } from '../lib/reportDocx.js';
+import TablesView from './sheet/TablesView.jsx';
+import ReportView from './sheet/ReportView.jsx';
 import {
   PAPERS,
   SHEET_BASEMAPS,
@@ -135,7 +141,8 @@ async function inlineImages(svg) {
   );
 }
 
-async function downloadPng(svgElement, paper, fileName) {
+/** The sheet as a PNG at 200 dpi: { blob, width, height }. */
+async function sheetPng(svgElement, paper) {
   const clone = svgElement.cloneNode(true);
   await inlineImages(clone);
   const dpi = 200;
@@ -158,15 +165,25 @@ async function downloadPng(svgElement, paper, fileName) {
     context.fillStyle = '#fff';
     context.fillRect(0, 0, width, height);
     context.drawImage(image, 0, 0, width, height);
-    const png = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(png);
-    link.download = fileName;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return { blob, width, height };
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** Hands the browser a file to save. */
+function saveFile(blob, fileName) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+}
+
+async function downloadPng(svgElement, paper, fileName) {
+  const { blob } = await sheetPng(svgElement, paper);
+  saveFile(blob, fileName);
 }
 
 export default function MapSheet() {
@@ -267,7 +284,7 @@ export default function MapSheet() {
     (async () => {
       const { data } = await supabase
         .from('trees')
-        .select('id, latitude, longitude, biodiversity_status, species_type, tree_category');
+        .select('id, species, latitude, longitude, biodiversity_status, species_type, tree_category');
       if (cancelled || !Array.isArray(data)) return;
       setTrees(
         data
@@ -323,6 +340,115 @@ export default function MapSheet() {
     const [x2, y2] = view.toPaper([bounds[1][1], bounds[0][0]]);
     return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
   }, [surveyLayer, view]);
+
+  // ---- The tables and the report ------------------------------------------------------
+  const [tab, setTab] = useState('map');
+  const [indexReady, setIndexReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    loadBarangayIndex()
+      .then(() => !cancelled && setIndexReady(true))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const [brgyStats, setBrgyStats] = useState(() => new Map());
+  useEffect(() => {
+    if (!lgu) return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.from('barangay_stats').select('*').eq('lgu_psgc', lgu.psgc);
+      if (!cancelled && !error && Array.isArray(data)) setBrgyStats(new Map(data.map((row) => [Number(row.barangay_psgc), row])));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lgu]);
+  // Each tree with where it stands and where it comes from.
+  const tableTrees = useMemo(
+    () => trees.map((tree) => ({ ...tree, barangay: barangayForTree(tree), origin: treeClassOf(tree, 'origin') })),
+    // indexReady re-runs this once the barangay boundaries are in hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trees, indexReady]
+  );
+  const scopeAreas = useMemo(
+    () => areas.features.filter((f) => f.properties.saved && (!lgu || f.properties.municipality === lgu.name)),
+    [areas.features, lgu]
+  );
+  const tables = useMemo(
+    () =>
+      [
+        lgu ? barangayTable({ barangays: barangays ?? [], stats: brgyStats, trees: tableTrees, areas: scopeAreas }) : null,
+        landCoverTable(scopeAreas),
+        plantingSiteTable(scopeAreas),
+      ].filter(Boolean),
+    [lgu, barangays, brgyStats, tableTrees, scopeAreas]
+  );
+  const tablesByKey = Object.fromEntries(tables.map((table) => [table.key === 'barangays' ? 'barangays' : table.key === 'land-cover' ? 'landCover' : 'plantingSites', table]));
+  const climate = lgu ? mapLayers.climateByLgu.get(lgu.psgc) ?? null : null;
+  const written = useMemo(
+    () => writeReport({ place: lgu, tables: tablesByKey, trees: tableTrees, climate }),
+    // tablesByKey is rebuilt from tables each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lgu, tables, tableTrees, climate]
+  );
+  // The office's edits, by section; a section not edited follows the figures.
+  const [edits, setEdits] = useState({});
+  const [reportNote, setReportNote] = useState(null);
+  const [reportBusy, setReportBusy] = useState('');
+  const sections = written.map((section) => ({ ...section, text: edits[section.key] ?? section.text }));
+  const reportTitle = `${titleText} — REPORT`;
+
+  async function improveReport() {
+    setReportBusy('improve');
+    setReportNote(null);
+    const placeName = lgu ? `${lgu.isCity ? 'City' : 'Municipality'} of ${lgu.label}` : 'Province of Laguna';
+    const { data, error } = await supabase.functions.invoke('improve-report', { body: { place: placeName, sections } });
+    setReportBusy('');
+    if (error || !Array.isArray(data?.sections)) {
+      setReportNote({
+        ok: false,
+        text: /not found|404|Failed to send/i.test(error?.message ?? '')
+          ? 'Improve with AI is not deployed yet: deploy supabase/functions/improve-report.'
+          : data?.error ?? error?.message ?? 'The AI could not improve it.',
+      });
+      return;
+    }
+    setEdits((current) => ({ ...current, ...Object.fromEntries(data.sections.map((section) => [section.key, section.text])) }));
+    setReportNote({ ok: true, text: 'Improved by Gemini. Read it through before you use it: every figure should still match the tables.' });
+  }
+
+  async function downloadDocx() {
+    setReportBusy('docx');
+    setReportNote(null);
+    try {
+      let map = null;
+      try {
+        const png = await sheetPng(sheetRef.current, paper);
+        map = { data: await png.blob.arrayBuffer(), width: png.width, height: png.height };
+      } catch {
+        // The report goes without the map rather than not at all.
+      }
+      const blob = await reportDocx({ heading: headingOf(lgu), title: reportTitle, preparedBy: preparedText, sections, tables, map });
+      saveFile(blob, `${fileStem}_Report.docx`);
+    } catch (failure) {
+      setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
+    } finally {
+      setReportBusy('');
+    }
+  }
+
+  const [excelBusy, setExcelBusy] = useState(false);
+  async function downloadExcel() {
+    setExcelBusy(true);
+    try {
+      const blob = await tablesWorkbook(tables, { place: lgu ? `${lgu.isCity ? 'City' : 'Municipality'} of ${lgu.label}, Laguna` : 'Province of Laguna', preparedBy: preparedText });
+      saveFile(blob, `${fileStem}_Tables.xlsx`);
+    } finally {
+      setExcelBusy(false);
+    }
+  }
 
   // ---- The column ----------------------------------------------------------------------
   const pad = 3;
@@ -536,7 +662,8 @@ export default function MapSheet() {
   // ---- Controls ------------------------------------------------------------------------
   const control = 'mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm';
   const label = 'block text-xs font-semibold text-slate-600';
-  const fileName = `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${titleText.replace(/[^A-Za-z]+/g, '-').replace(/^-|-$/g, '')}.png`;
+  const fileStem = `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${titleText.replace(/[^A-Za-z]+/g, '-').replace(/^-|-$/g, '')}`;
+  const fileName = `${fileStem}.png`;
   const loading = !mapLayers.loaded || Boolean(surveyLayer && !picture && !soil);
   const titleCase = (text) => text.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
   useTabIdentity(`${titleCase(titleText)} — ${lgu?.label ?? 'Laguna'} · Green Tag`);
@@ -567,15 +694,73 @@ export default function MapSheet() {
           <X size={16} aria-hidden="true" /> Close
         </button>
       </header>
-    <div className="flex flex-1 flex-col gap-4 p-6 lg:flex-row lg:items-start">
-      <style>{`
-        @media print {
-          @page { size: ${paper.width}mm ${paper.height}mm; margin: 0; }
-          body * { visibility: hidden !important; }
-          .map-sheet, .map-sheet * { visibility: visible !important; }
-          .map-sheet { position: fixed; left: 0; top: 0; width: ${paper.width}mm; height: ${paper.height}mm; box-shadow: none !important; }
-        }
-      `}</style>
+      <div role="tablist" aria-label="Map, tables and report" className="flex gap-1 border-b border-slate-200 bg-white px-4 print:hidden">
+        {[
+          ['map', 'Map'],
+          ['tables', 'Attribute tables'],
+          ['report', 'Report'],
+        ].map(([id, text]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+              tab === id ? 'border-green-700 text-green-800' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+      <style>{tab === 'map'
+        ? `@media print {
+            @page { size: ${paper.width}mm ${paper.height}mm; margin: 0; }
+            body * { visibility: hidden !important; }
+            .map-sheet, .map-sheet * { visibility: visible !important; }
+            .map-sheet { position: fixed; left: 0; top: 0; width: ${paper.width}mm; height: ${paper.height}mm; box-shadow: none !important; }
+          }`
+        : `@media print {
+            @page { size: ${tab === 'tables' ? '297mm 210mm' : '210mm 297mm'}; margin: 12mm; }
+            body * { visibility: hidden !important; }
+            .print-target, .print-target * { visibility: visible !important; }
+            .print-target { position: absolute; left: 0; top: 0; width: 100%; }
+          }`}</style>
+      {tab === 'tables' && (
+        <div className="p-6">
+          <TablesView
+            heading={headingOf(lgu)}
+            title={titleText}
+            preparedBy={preparedText}
+            tables={tables}
+            chooseLgu={!lgu}
+            onExcel={downloadExcel}
+            exporting={excelBusy}
+          />
+        </div>
+      )}
+      {tab === 'report' && (
+        <div className="p-6">
+          <ReportView
+            heading={headingOf(lgu)}
+            title={reportTitle}
+            preparedBy={preparedText}
+            sections={sections}
+            onChange={(key, text) => setEdits((current) => ({ ...current, [key]: text }))}
+            onRewrite={() => {
+              setEdits({});
+              setReportNote(null);
+            }}
+            onImprove={improveReport}
+            onDocx={downloadDocx}
+            busy={reportBusy}
+            note={reportNote}
+          />
+        </div>
+      )}
+    {/* The map stays mounted behind the other tabs: the report takes its picture. */}
+    <div className={tab === 'map' ? 'flex flex-1 flex-col gap-4 p-6 lg:flex-row lg:items-start' : 'hidden'}>
 
       <aside aria-label="Map sheet settings" className="w-full space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-72 lg:shrink-0">
         <h2 className="text-lg font-bold text-slate-900">Map settings</h2>

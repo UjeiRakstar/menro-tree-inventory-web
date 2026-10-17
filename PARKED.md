@@ -93,6 +93,7 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     `identify-tree` and `ai-key-test` (new), and redeploy `rise-extract`.
     Once `identify-tree` is live and the field app is rebuilt, delete
     GEMINI_API_KEY from the field app's `.env`: the app then carries no key.
+    Also deploy `improve-report` (17 October): the Report tab's Improve with AI.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
