@@ -22,6 +22,7 @@ import {
   PAPERS,
   SHEET_BASEMAPS,
   SURVEY_TITLES,
+  TREE_COLOURINGS,
   defaultTitle,
   fitView,
   graticule,
@@ -32,6 +33,7 @@ import {
   sheetLayout,
   sourcesOf,
   tilesFor,
+  treeClassOf,
 } from '../lib/mapSheet.js';
 
 /**
@@ -190,13 +192,15 @@ export default function MapSheet() {
     sites: params.get('sites') !== '0',
     barangays: params.get('barangays') !== '0',
   };
+  const treeColour = TREE_COLOURINGS[params.get('treeColour')] ? params.get('treeColour') : 'one';
+  const colouring = TREE_COLOURINGS[treeColour];
   const paper = PAPERS[params.get('paper')] ?? PAPERS.a4;
   const basemap = SHEET_BASEMAPS.find((b) => b.id === params.get('basemap')) ?? SHEET_BASEMAPS[0];
   const [title, setTitle] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   // A layer named in the link but not uploaded is not on the sheet, nor in its title.
   const shownSurvey = survey && mapLayers.layers[survey] ? survey : null;
-  const titleText = title || defaultTitle({ survey: shownSurvey, ...show });
+  const titleText = title || defaultTitle({ survey: shownSurvey, ...show, treeColour });
   // What the office saved in Settings: its seal, its own logo, its head.
   const saved = useOfficeProfile(lgu ? lgu.psgc : pgenro ? 'pgenro' : null);
   const officeName = pgenro && !lgu
@@ -240,12 +244,14 @@ export default function MapSheet() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.from('trees').select('id, latitude, longitude');
+      const { data } = await supabase
+        .from('trees')
+        .select('id, latitude, longitude, biodiversity_status, species_type, tree_category');
       if (cancelled || !Array.isArray(data)) return;
       setTrees(
         data
-          .map((tree) => [Number(tree.latitude), Number(tree.longitude)])
-          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng) && containsPoint(place.geometry, [lat, lng]))
+          .map((tree) => ({ ...tree, lat: Number(tree.latitude), lng: Number(tree.longitude) }))
+          .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng) && containsPoint(place.geometry, [lat, lng]))
       );
     })();
     return () => {
@@ -307,7 +313,18 @@ export default function MapSheet() {
     legend.push({ kind: 'area', label: 'Land cover', stroke: '#15803d', fill: 'rgba(34,197,94,0.25)' });
     legend.push({ kind: 'area', label: 'Tree planting site', stroke: '#ca8a04', fill: 'rgba(250,204,21,0.35)' });
   }
-  if (show.trees) legend.push({ kind: 'dot', label: 'Tagged tree', fill: '#16a34a' });
+  if (show.trees) {
+    // Each class with a tree in it, and how many, in the legend.
+    const counts = new Map();
+    for (const tree of trees) {
+      const id = treeClassOf(tree, treeColour);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    for (const cls of colouring.classes) {
+      if (treeColour !== 'one' && !counts.get(cls.id)) continue;
+      legend.push({ kind: 'dot', label: treeColour === 'one' ? cls.label : `${cls.label} (${counts.get(cls.id)})`, fill: cls.fill });
+    }
+  }
   const surveyKey = surveyLayer ? layerKey(survey, surveyLayer.meta) : [];
 
   // Running down the column.
@@ -534,6 +551,16 @@ export default function MapSheet() {
             </label>
           ))}
         </fieldset>
+        {show.trees && (
+          <label className={label}>
+            Colour the trees by
+            <select value={treeColour} onChange={(e) => set('treeColour', e.target.value === 'one' ? null : e.target.value)} className={control}>
+              {Object.entries(TREE_COLOURINGS).map(([id, c]) => (
+                <option key={id} value={id}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className={label}>
           Base map
           <select value={basemap.id} onChange={(e) => set('basemap', e.target.value)} className={control}>
@@ -552,7 +579,7 @@ export default function MapSheet() {
         </label>
         <label className={label}>
           Title
-          <input value={title} placeholder={defaultTitle({ survey: shownSurvey, ...show })} onChange={(e) => setTitle(e.target.value)} className={control} />
+          <input value={title} placeholder={defaultTitle({ survey: shownSurvey, ...show, treeColour })} onChange={(e) => setTitle(e.target.value)} className={control} />
         </label>
         <label className={label}>
           Prepared by
@@ -641,9 +668,10 @@ export default function MapSheet() {
                 stroke={feature.properties.kind === 'planting-site' ? '#ca8a04' : '#15803d'} strokeWidth={0.3} />
             ))}
             {show.trees &&
-              trees.map(([lat, lng], i) => {
-                const [cx, cy] = view.toPaper([lng, lat]);
-                return <circle key={i} cx={cx} cy={cy} r={0.55} fill="#16a34a" stroke="#fff" strokeWidth={0.15} />;
+              trees.map((tree, i) => {
+                const [cx, cy] = view.toPaper([tree.lng, tree.lat]);
+                const fill = colouring.classes.find((cls) => cls.id === treeClassOf(tree, treeColour))?.fill ?? '#16a34a';
+                return <circle key={tree.id ?? i} cx={cx} cy={cy} r={0.55} fill={fill} stroke="#fff" strokeWidth={0.15} />;
               })}
             <path d={pathOf(place.geometry, view.toPaper, { rings: 'outer' })} fill="none" stroke={BOUNDARY} strokeWidth={0.6} strokeLinejoin="round" />
             <path d={pathOf(place.geometry, view.toPaper, { rings: 'holes' })} fill="none" stroke={BOUNDARY} strokeWidth={0.15} />

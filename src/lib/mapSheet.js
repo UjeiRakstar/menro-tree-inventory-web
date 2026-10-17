@@ -183,9 +183,52 @@ export const SURVEY_TITLES = Object.freeze({
   elevation: { title: 'ELEVATION MAP', legend: 'Elevation (m above sea level)', source: 'Copernicus DEM' },
 });
 
+/**
+ * How the trees are coloured on a sheet (17 October): one colour; by origin —
+ * endemic or native against invasive; or by what they are grown for.
+ */
+export const TREE_COLOURINGS = Object.freeze({
+  one: { label: 'One colour', classes: [{ id: 'all', label: 'Tagged tree', fill: '#16a34a' }] },
+  origin: {
+    label: 'Origin — native or invasive',
+    title: 'NATIVE AND INVASIVE TREES MAP',
+    classes: [
+      { id: 'native', label: 'Endemic / native', fill: '#16a34a' },
+      { id: 'invasive', label: 'Invasive', fill: '#dc2626' },
+      { id: 'unrecorded', label: 'Origin not recorded', fill: '#94a3b8' },
+    ],
+  },
+  use: {
+    label: 'Use — fruit, timber, ornamental',
+    title: 'FRUIT, TIMBER AND ORNAMENTAL TREES MAP',
+    classes: [
+      { id: 'fruit', label: 'Fruit', fill: '#ea580c' },
+      { id: 'timber', label: 'Timber', fill: '#a16207' },
+      { id: 'ornamental', label: 'Ornamental', fill: '#7c3aed' },
+      { id: 'unrecorded', label: 'Use not recorded', fill: '#94a3b8' },
+    ],
+  },
+});
+
+/** Which class of a colouring a tree falls in. */
+export function treeClassOf(tree, colouring) {
+  const word = (value) => String(value ?? '').trim().toLowerCase();
+  if (colouring === 'origin') {
+    const status = word(tree?.biodiversity_status) || word(tree?.species_type);
+    if (status.includes('invasive')) return 'invasive';
+    return status ? 'native' : 'unrecorded';
+  }
+  if (colouring === 'use') {
+    const use = word(tree?.tree_category);
+    return ['fruit', 'timber', 'ornamental'].find((kind) => use.includes(kind)) ?? 'unrecorded';
+  }
+  return 'all';
+}
+
 /** The title the sheet starts with; the office may change it. */
-export function defaultTitle({ survey, trees, sites }) {
+export function defaultTitle({ survey, trees, sites, treeColour = 'one' }) {
   if (survey && SURVEY_TITLES[survey]) return SURVEY_TITLES[survey].title;
+  if (trees && TREE_COLOURINGS[treeColour]?.title) return TREE_COLOURINGS[treeColour].title;
   if (trees) return 'TREE INVENTORY MAP';
   if (sites) return 'LAND COVER AND TREE PLANTING SITES MAP';
   return 'BASE MAP';

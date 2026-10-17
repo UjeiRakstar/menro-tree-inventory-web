@@ -53,6 +53,22 @@ describe('MapSheet', () => {
     await waitFor(() => expect(sheet().querySelectorAll('circle[r="0.55"]')).toHaveLength(1));
   });
 
+  it('colours the trees by origin, keyed with how many of each', async () => {
+    supabaseMock.setResponse('trees:select', {
+      data: [
+        { id: 't1', latitude: 14.2805, longitude: 121.4105, biodiversity_status: 'Endemic' },
+        { id: 't2', latitude: 14.2795, longitude: 121.4121, species_type: 'Invasive' },
+      ],
+      error: null,
+    });
+    show('?treeColour=origin');
+    expect(sheet()).toHaveAccessibleName('NATIVE AND INVASIVE TREES MAP — Santa Cruz');
+    await waitFor(() => expect(sheet().querySelectorAll('circle[r="0.55"]')).toHaveLength(2));
+    expect(sheet()).toHaveTextContent('Invasive (1)');
+    expect(sheet()).toHaveTextContent('Endemic / native (1)');
+    expect(sheet().querySelector('circle[r="0.55"][fill="#dc2626"]')).toBeTruthy();
+  });
+
   it('draws the survey layer chosen on the map, and names the sheet after it', async () => {
     show('?survey=flood');
     await waitFor(() => expect(sheet()).toHaveAccessibleName('FLOOD SUSCEPTIBILITY MAP — Santa Cruz'));

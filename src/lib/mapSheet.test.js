@@ -14,6 +14,7 @@ import {
   sheetLayout,
   sourcesOf,
   tilesFor,
+  treeClassOf,
   worldOf,
 } from './mapSheet.js';
 
@@ -107,5 +108,17 @@ describe('tilesFor', () => {
     expect(Math.min(...tiles.map((t) => t.x))).toBeLessThanOrEqual(frame.x);
     expect(Math.max(...tiles.map((t) => t.x + t.size))).toBeGreaterThanOrEqual(frame.x + frame.width);
     expect(tilesFor(view, frame, SHEET_BASEMAPS.find((b) => b.id === 'none'))).toEqual([]);
+  });
+});
+
+describe('treeClassOf', () => {
+  it('reads origin as native or invasive, and use as fruit, timber or ornamental', () => {
+    expect(treeClassOf({ biodiversity_status: 'Endemic' }, 'origin')).toBe('native');
+    expect(treeClassOf({ species_type: 'Invasive' }, 'origin')).toBe('invasive');
+    expect(treeClassOf({}, 'origin')).toBe('unrecorded');
+    expect(treeClassOf({ tree_category: 'Fruit Tree' }, 'use')).toBe('fruit');
+    expect(treeClassOf({ tree_category: 'timber' }, 'use')).toBe('timber');
+    expect(treeClassOf({ tree_category: '' }, 'use')).toBe('unrecorded');
+    expect(defaultTitle({ trees: true, treeColour: 'use' })).toBe('FRUIT, TIMBER AND ORNAMENTAL TREES MAP');
   });
 });
