@@ -22,6 +22,8 @@ const KNOWN_SYSTEMS = {
   3123: '+proj=tmerc +lat_0=0 +lon_0=121 +k=0.99995 +x_0=500000 +y_0=0 +ellps=clrk66 +towgs84=-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06 +units=m +no_defs',
   3124: '+proj=tmerc +lat_0=0 +lon_0=123 +k=0.99995 +x_0=500000 +y_0=0 +ellps=clrk66 +towgs84=-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06 +units=m +no_defs',
   25393: '+proj=tmerc +lat_0=0 +lon_0=121 +k=0.99995 +x_0=500000 +y_0=0 +ellps=clrk66 +towgs84=-133,-77,-51,0,0,0,0 +units=m +no_defs',
+  4253: '+proj=longlat +ellps=clrk66 +towgs84=-133,-77,-51,0,0,0,0 +no_defs',
+  4683: '+proj=longlat +ellps=clrk66 +towgs84=-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06 +no_defs',
   3857: '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs',
 };
 const SYSTEM_NAMES = {
@@ -30,6 +32,8 @@ const SYSTEM_NAMES = {
   3123: 'PRS92 / Philippines zone III',
   3124: 'PRS92 / Philippines zone IV',
   25393: 'Luzon 1911 / Philippines zone III',
+  4253: 'Luzon 1911',
+  4683: 'PRS92',
   3857: 'Web Mercator',
 };
 
@@ -110,31 +114,73 @@ export async function geoJsonFromText(text, fileName = 'the file') {
   return collection;
 }
 
-/** A shapefile, zipped or as its parts, in longitude and latitude (shpjs reads the .prj). */
+/**
+ * The shift from a Philippine datum to WGS 84, which a .prj saved by ArcGIS or
+ * QGIS names but leaves out. Without it a Luzon 1911 file lands some 225 m
+ * north-west of where it is (definitions from EPSG, as above).
+ */
+const DATUM_SHIFTS = [
+  [/Luzon[ _]1911/i, '-133,-77,-51,0,0,0,0'],
+  [/Philippine_Reference_System_1992|PRS[ _]?1992|PRS[ _]?92/i, '-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06'],
+];
+
+/** The .prj with its datum shift written in, when it names a Philippine datum without one. */
+export function withDatumShift(prj) {
+  if (/TOWGS84/i.test(prj)) return prj;
+  const shift = DATUM_SHIFTS.find(([datum]) => datum.test(prj))?.[1];
+  return shift ? prj.replace(/(SPHEROID\[[^\]]*\])/i, `$1,TOWGS84[${shift}]`) : prj;
+}
+
+const NO_PRJ = 'Choose the .prj with the .shp: it says which coordinate system the shapefile is in.';
+
+/** A shapefile, zipped or as its parts, in longitude and latitude (shpjs converts by the .prj). */
 async function shapefileFrom(files) {
   const { default: shp } = await import('shpjs');
+  const read = async ({ shpData, dbfData, prjText, cpgText }) =>
+    shp({ shp: shpData, dbf: dbfData, prj: withDatumShift(prjText), cpg: cpgText });
   const zip = files.find((file) => /\.zip$/i.test(file.name));
-  let result;
+  let results;
   if (zip) {
-    result = await shp(await zip.arrayBuffer());
+    // Opened here rather than by shpjs, so each .prj gets its datum shift.
+    const { default: JSZip } = await import('jszip');
+    const archive = await JSZip.loadAsync(await zip.arrayBuffer());
+    const entries = Object.values(archive.files).filter((entry) => !entry.dir && !/(^|\/)(__MACOSX|\.)/.test(entry.name));
+    const sibling = (stem, ext) => entries.find((entry) => entry.name.toLowerCase() === `${stem}${ext}`);
+    const stems = entries.filter((entry) => /\.shp$/i.test(entry.name)).map((entry) => entry.name.slice(0, -4).toLowerCase());
+    if (stems.length === 0) throw new Error('There is no .shp in this zip.');
+    results = [];
+    for (const stem of stems) {
+      const prj = sibling(stem, '.prj');
+      if (!prj) throw new Error(NO_PRJ);
+      const dbf = sibling(stem, '.dbf');
+      const cpg = sibling(stem, '.cpg');
+      results.push(
+        await read({
+          shpData: await sibling(stem, '.shp').async('arraybuffer'),
+          dbfData: dbf ? await dbf.async('arraybuffer') : undefined,
+          prjText: await prj.async('string'),
+          cpgText: cpg ? await cpg.async('string') : undefined,
+        })
+      );
+    }
   } else {
     const part = (ext) => files.find((file) => file.name.toLowerCase().endsWith(ext));
     const shpFile = part('.shp');
     if (!shpFile) throw new Error('A shapefile needs its .shp — choose the .shp, .dbf and .prj together, or zip them.');
     const prj = part('.prj');
-    if (!prj) {
-      throw new Error('Choose the .prj with the .shp: it says which coordinate system the shapefile is in.');
-    }
+    if (!prj) throw new Error(NO_PRJ);
     const dbf = part('.dbf');
     const cpg = part('.cpg');
-    result = await shp({
-      shp: await shpFile.arrayBuffer(),
-      dbf: dbf ? await dbf.arrayBuffer() : undefined,
-      prj: await prj.text(),
-      cpg: cpg ? await cpg.text() : undefined,
-    });
+    results = [
+      await read({
+        shpData: await shpFile.arrayBuffer(),
+        dbfData: dbf ? await dbf.arrayBuffer() : undefined,
+        prjText: await prj.text(),
+        cpgText: cpg ? await cpg.text() : undefined,
+      }),
+    ];
   }
-  const collections = Array.isArray(result) ? result : [result];
+  const collections = results.flatMap((result) => (Array.isArray(result) ? result : [result]));
   return { type: 'FeatureCollection', features: collections.flatMap((c) => c?.features ?? []) };
 }
 

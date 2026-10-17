@@ -2,6 +2,7 @@
 // Node has File and Blob.arrayBuffer, which reading an upload needs.
 import { describe, it, expect } from 'vitest';
 import proj4 from 'proj4';
+import JSZip from 'jszip';
 import {
   areaCandidates,
   boundsOfShape,
@@ -9,6 +10,7 @@ import {
   geoJsonFromText,
   readAreaFiles,
   shapeFromGeometry,
+  withDatumShift,
 } from './areaImport.js';
 
 // A square about 110 m a side in Santa Cruz, longitude first.
@@ -175,5 +177,41 @@ describe('reading a shapefile', () => {
 
   it('asks for the .prj rather than guess the system', async () => {
     await expect(readAreaFiles([fileOf(polygonShp(utm), 'site.shp')])).rejects.toThrow(/\.prj/);
+  });
+
+  // As the Kalayaan protection forest files were saved: Luzon 1911, its shift to WGS 84 left out.
+  const LUZON_UTM51_PRJ =
+    'PROJCS["Luzon_1911_UTM_Zone_51N",GEOGCS["GCS_Luzon_1911",DATUM["D_Luzon_1911",SPHEROID["Clarke_1866",6378206.4,294.9786982]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",123.0],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]';
+  const LUZON_UTM51 = '+proj=utm +zone=51 +ellps=clrk66 +towgs84=-133,-77,-51,0,0,0,0 +units=m +no_defs';
+  const luzon = clockwise.map((point) => proj4('EPSG:4326', LUZON_UTM51, point));
+
+  it('shifts a Luzon 1911 file to WGS 84, so it is not 225 m off', async () => {
+    const collection = await readAreaFiles([
+      fileOf(polygonShp(luzon), 'forest.shp'),
+      fileOf(nameDbf('Protection forest'), 'forest.dbf'),
+      fileOf(LUZON_UTM51_PRJ, 'forest.prj'),
+    ]);
+    const [lng, lat] = areaCandidates(collection)[0].geometry.coordinates[0][0];
+    expect(lng).toBeCloseTo(121.41, 5);
+    expect(lat).toBeCloseTo(14.28, 5);
+  });
+
+  it('does the same for a zipped shapefile', async () => {
+    const zip = new JSZip();
+    zip.file('Forest/forest.shp', polygonShp(luzon));
+    zip.file('Forest/forest.dbf', nameDbf('Protection forest'));
+    zip.file('Forest/forest.prj', LUZON_UTM51_PRJ);
+    const collection = await readAreaFiles([fileOf(await zip.generateAsync({ type: 'arraybuffer' }), 'forest.zip')]);
+    const [candidate] = areaCandidates(collection);
+    expect(candidate.name).toBe('Protection forest');
+    expect(candidate.geometry.coordinates[0][0][0]).toBeCloseTo(121.41, 5);
+    expect(candidate.geometry.coordinates[0][0][1]).toBeCloseTo(14.28, 5);
+  });
+
+  it('leaves a .prj that has its shift, or another datum, as it is', () => {
+    const shifted = withDatumShift(LUZON_UTM51_PRJ);
+    expect(shifted).toContain('SPHEROID["Clarke_1866",6378206.4,294.9786982],TOWGS84[-133,-77,-51,0,0,0,0]]');
+    expect(withDatumShift(shifted)).toBe(shifted);
+    expect(withDatumShift(UTM51_PRJ)).toBe(UTM51_PRJ);
   });
 });
