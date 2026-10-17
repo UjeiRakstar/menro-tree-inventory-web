@@ -13,6 +13,7 @@
 const n = (value) => Number(value || 0).toLocaleString('en-US');
 const hectares = (value) => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 const percent = (part, whole) => (whole ? `${Math.round((part / whole) * 100)}%` : '0%');
+const tonnes = (value) => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: value < 10 ? 2 : 1 });
 
 /** "A, B and C" */
 export function listOf(items) {
@@ -28,9 +29,54 @@ function mostCommon(values, limit = 3) {
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit);
 }
 
+/** What the tagged trees hold and take up, from the carbon table's totals. */
+function carbonSentence(totals) {
+  if (!totals?.trees) return '';
+  if (!totals.measured) return 'None has a merchantable height recorded yet, so their carbon cannot be estimated.';
+  return `${totals.measured === totals.trees ? 'All of them have' : `${n(totals.measured)} of them have`} a diameter and merchantable height recorded: ` +
+    `together they hold an estimated ${tonnes(totals.carbonT)} t of carbon (${tonnes(totals.co2T)} t CO₂) and take up about ` +
+    `${tonnes(totals.sequestrationT)} t of CO₂ a year.`;
+}
+
+/** The places with the most of their ground in a hazard's high and medium levels — up to three. */
+function mostExposed(table, kind) {
+  return (table?.rows ?? [])
+    .filter((row) => row.areaHa && (row[`${kind}High`] ?? 0) + (row[`${kind}Medium`] ?? 0) > 0)
+    .map((row) => ({ ...row, serious: ((row[`${kind}High`] ?? 0) + (row[`${kind}Medium`] ?? 0)) / row.areaHa }))
+    .filter((row) => row.serious >= 0.1)
+    .sort((a, b) => b.serious - a.serious)
+    .slice(0, 3);
+}
+
+function hazardSentences(table, short) {
+  const totals = table?.totals;
+  if (!table?.rows?.length || !totals) return '';
+  const sentences = [];
+  for (const [kind, words] of [
+    ['flood', 'the flood hazard extent'],
+    ['landslide', 'the rain-induced landslide extent'],
+  ]) {
+    if (totals[`${kind}Ha`] === null) continue;
+    const ranked = [...table.rows]
+      .filter((row) => (row[`${kind}Share`] ?? 0) > 0)
+      .sort((a, b) => b[`${kind}Share`] - a[`${kind}Share`])
+      .slice(0, 3);
+    sentences.push(
+      totals[`${kind}Ha`] > 0
+        ? `${hectares(totals[`${kind}Ha`])} ha (${percent(totals[`${kind}Ha`], totals.areaHa)}) of ${short} lies within ${words}, ` +
+            `${totals[`${kind}High`] > 0 ? `${hectares(totals[`${kind}High`])} ha of it` : 'none of it'} at the high level. The largest shares are in ${listOf(
+              ranked.map((row) => `${row.name} (${percent(row[`${kind}Share`], 1)})`)
+            )}.`
+        : `None of ${short} lies within ${words}.`
+    );
+  }
+  if (sentences.length === 0) return '';
+  return sentences.join(' ');
+}
+
 /**
  *   place        { label, isCity } — or null for the province
- *   tables       { barangays, landCover, plantingSites } (attributeTables.js)
+ *   tables       { barangays, hazards, carbon, landCover, plantingSites } (attributeTables.js)
  *   trees        the inventory rows in scope, each with \`barangay\`
  *   climate      the LGU's CLIRAM row, or null
  *   date         when it is written
@@ -79,7 +125,10 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
           invasiveSpecies.length ? ` The invasive trees are mostly ${listOf(invasiveSpecies.map(([name, count]) => `${name} (${n(count)})`))}.` : ''
         }`,
         `By use, ${n(totals.fruit)} are fruit trees, ${n(totals.timber)} timber trees and ${n(totals.ornamental)} ornamental.`,
-      ].join(' '),
+        carbonSentence(tables.carbon?.totals),
+      ]
+        .filter(Boolean)
+        .join(' '),
     });
   }
 
@@ -110,6 +159,11 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
         .join(' '),
     });
   }
+
+  // Exposure to hazards, over each barangay (or city and municipality) whole.
+  const hazards = tables.hazards;
+  const exposed = hazardSentences(hazards, short);
+  if (exposed) sections.push({ key: 'hazards', heading: 'Exposure to hazards', text: exposed });
 
   // Land cover.
   const cover = tables.landCover;
@@ -178,6 +232,20 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
   if (empty) recommendations.push(`Extend the inventory to the ${n(empty)} ${empty === 1 ? 'barangay' : 'barangays'} not yet surveyed.`);
   const flooded = (sites?.rows ?? []).filter((row) => (row.floodShare ?? 0) >= 0.3).map((row) => row.name);
   if (flooded.length) recommendations.push(`Choose flood-tolerant species for ${listOf(flooded)}.`);
+  const floodFirst = mostExposed(hazards, 'flood');
+  if (floodFirst.length) {
+    recommendations.push(`Give priority to riverbank and flood-tolerant planting in ${listOf(floodFirst.map((row) => row.name))}, the most exposed to flooding.`);
+  }
+  const slopeFirst = mostExposed(hazards, 'landslide');
+  if (slopeFirst.length) {
+    recommendations.push(`Keep and restore deep-rooted tree cover on the slopes of ${listOf(slopeFirst.map((row) => row.name))}, the most exposed to landslides.`);
+  }
+  const carbon = tables.carbon?.totals;
+  if (carbon?.trees && carbon.measured < carbon.trees) {
+    recommendations.push(
+      `Record the merchantable height of the ${n(carbon.trees - carbon.measured)} trees without one, so that the carbon of the whole inventory can be estimated.`
+    );
+  }
   if (!cover?.rows?.length) recommendations.push('Map the land cover, so that tree cover can be measured and planned for.');
   sections.push({
     key: 'recommendations',
@@ -190,8 +258,11 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
     heading: 'Data and limitations',
     text:
       'Trees: the Green Tag field inventory, tagged by the field officers and verified by the office. Boundaries: PSA and NAMRIA. ' +
-      'Hazards: UP NOAH. Elevation: Copernicus DEM. Soils: DA–BSWM. Climate: DOST-PAGASA CLIRAM. Land cover and tree planting ' +
-      'sites are as the offices drew them on the map. The inventory counts only the trees tagged so far, not every tree standing.',
+      'Hazards: UP NOAH, measured over each barangay on a grid of about 60 m. Elevation: Copernicus DEM. Soils: DA–BSWM. ' +
+      'Climate: DOST-PAGASA CLIRAM. Carbon: the DENR volume equations for Southern Luzon (FMB Technical Bulletin No. 3) with ' +
+      'IPCC defaults for wood density, biomass expansion and carbon fraction — estimates, from the trees with a diameter and ' +
+      'merchantable height recorded. Land cover and tree planting sites are as the offices drew them on the map. The inventory ' +
+      'counts only the trees tagged so far, not every tree standing.',
   });
 
   return sections;

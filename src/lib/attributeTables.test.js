@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { barangayTable, formatCell, landCoverTable, plantingSiteTable } from './attributeTables.js';
+import { barangayTable, carbonTable, formatCell, hazardTable, landCoverTable, plantingSiteTable } from './attributeTables.js';
+import { carbonDioxideKg } from './treeVolume.js';
 import { listOf, writeReport } from './reportWriter.js';
 
 // About a hectare, in Santa Cruz.
@@ -11,7 +12,7 @@ const BARANGAYS = [
   { properties: { barangay: 'Gatid', barangay_psgc: 403426007, area_km2: 0.16 } },
 ];
 const TREES = [
-  { species: 'Narra', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Timber', origin: 'native' },
+  { species: 'Narra', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Timber', origin: 'native', dbh: 30, merchantable_height: 8 },
   { species: 'Mahogany', barangay: 'Alipit', species_type: 'Invasive', tree_category: 'Timber', origin: 'invasive' },
   { species: 'Mango', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Fruit', origin: 'native' },
 ];
@@ -42,6 +43,45 @@ describe('barangayTable', () => {
   });
 });
 
+// What measure.js finds over each barangay whole, in m².
+const MEASURED = new Map([
+  ['Alipit', { flood: { low: 200000, medium: 300000, high: 100000, total: 600000 }, soil: [{ series: 'Lipa loam', share: 0.8 }], elevation: { min: 4, max: 31, mean: 9 } }],
+  ['Gatid', { flood: { low: 0, medium: 0, high: 0, total: 0 } }],
+]);
+const PLACES = [{ name: 'Alipit', areaHa: 190 }, { name: 'Gatid', areaHa: 16 }];
+
+describe('hazardTable', () => {
+  it('gives each barangay its ground in flood by level, without any land cover drawn', () => {
+    const table = hazardTable({ places: PLACES, measured: MEASURED });
+    const [alipit, gatid] = table.rows;
+    expect(alipit).toMatchObject({ name: 'Alipit', floodLow: 20, floodMedium: 30, floodHigh: 10, floodHa: 60, soil: 'Lipa loam', elevation: '4–31 m' });
+    expect(alipit.floodShare).toBeCloseTo(60 / 190, 5);
+    expect(gatid).toMatchObject({ floodHa: 0, floodShare: 0 });
+    expect(table.totals).toMatchObject({ floodHa: 60, areaHa: 206, name: '2 barangays' });
+  });
+
+  it('leaves a hazard blank, not zero, when its layer is not uploaded — and everything while not measured', () => {
+    expect(hazardTable({ places: PLACES, measured: MEASURED }).rows[0]).toMatchObject({ landslideHa: null, landslideShare: null });
+    const unmeasured = hazardTable({ places: PLACES, measured: null });
+    expect(unmeasured.rows[0]).toMatchObject({ floodHa: null, soil: null });
+    expect(unmeasured.totals.floodHa).toBeNull();
+  });
+});
+
+describe('carbonTable', () => {
+  it('adds up the carbon of the measured trees by barangay, and says how many were measured', () => {
+    const table = carbonTable({ places: PLACES, trees: TREES });
+    const [alipit, gatid] = table.rows;
+    expect(alipit).toMatchObject({ trees: 3, measured: 1 });
+    expect(alipit.co2T).toBeCloseTo(carbonDioxideKg(TREES[0]) / 1000, 6);
+    expect(alipit.carbonT).toBeCloseTo(alipit.co2T * (12 / 44), 6);
+    expect(alipit.sequestrationT).toBeGreaterThan(0);
+    expect(gatid).toMatchObject({ trees: 0, measured: 0, co2T: null });
+    expect(table.totals).toMatchObject({ trees: 3, measured: 1 });
+    expect(formatCell(alipit.co2T, 'tonnes')).toMatch(/^\d+(\.\d+)?$/);
+  });
+});
+
 describe('the land cover and planting site tables', () => {
   it('give each area its exposure to flood and landslide, soil and elevation', () => {
     const [forest] = landCoverTable(AREAS).rows;
@@ -63,6 +103,8 @@ describe('the land cover and planting site tables', () => {
 describe('writeReport', () => {
   const tables = {
     barangays: barangayTable({ barangays: BARANGAYS, trees: TREES, areas: AREAS }),
+    hazards: hazardTable({ places: PLACES, measured: MEASURED }),
+    carbon: carbonTable({ places: PLACES, trees: TREES }),
     landCover: landCoverTable(AREAS),
     plantingSites: plantingSiteTable(AREAS),
   };
@@ -91,10 +133,21 @@ describe('writeReport', () => {
     expect(section('climate')).toMatch(/about 2,765 mm .* about 26\.6 °C/);
   });
 
+  it('says what the trees hold in carbon, and how many of them that speaks for', () => {
+    expect(section('inventory')).toMatch(/1 of them have a diameter and merchantable height recorded: together they hold an estimated [\d.]+ t of carbon \([\d.]+ t CO₂\) and take up about [\d.]+ t of CO₂ a year/);
+  });
+
+  it('says how much of the place lies in each hazard, and where most', () => {
+    expect(section('hazards')).toMatch(/^60 ha \(29%\) of Santa Cruz lies within the flood hazard extent, 10 ha of it at the high level\. The largest shares are in Alipit \(32%\)\./);
+    expect(section('hazards')).not.toMatch(/landslide/);
+  });
+
   it('recommends what follows from the figures', () => {
     expect(section('recommendations')).toMatch(/Replace invasive Mahogany with endemic or native species/);
     expect(section('recommendations')).toMatch(/Extend the inventory to the 1 barangay not yet surveyed/);
     expect(section('recommendations')).toMatch(/Choose flood-tolerant species for Alipit Riverbank/);
+    expect(section('recommendations')).toMatch(/riverbank and flood-tolerant planting in Alipit, the most exposed to flooding/);
+    expect(section('recommendations')).toMatch(/Record the merchantable height of the 2 trees without one/);
   });
 
   it('lists names as people write them', () => {

@@ -7,11 +7,13 @@ import { isPgenro, ROLES, roleOf } from '../lib/roles.js';
 import { useMapLayers } from '../hooks/useMapLayers.js';
 import { useMapAreas } from '../hooks/useMapAreas.js';
 import { useOfficeProfile } from '../hooks/useOfficeProfile.js';
-import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityNamed } from '../lib/lagunaBoundaries.js';
-import { centroidOf, formatArea } from '../lib/areaGeometry.js';
+import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityAt, municipalityNamed } from '../lib/lagunaBoundaries.js';
+import { centroidOf, formatArea, geometryAreaM2 } from '../lib/areaGeometry.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
-import { repaintPicture } from '../lib/layers/browser.js';
+import { loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
+import { LAGUNA_GRID } from '../lib/layers/grid.js';
+import { areaFacts } from '../lib/layers/measure.js';
 import { layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
 import { PLANNING_ONLY } from '../lib/namriaCover.js';
 import { PROVINCE_LOGO, logoFor } from '../lib/lguLogos.js';
@@ -20,7 +22,7 @@ import lspuLogo from '../assets/lgu-thumbs/LSPU_LGU_logo.png';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 import philippines from '../data/Philippines.geojson';
 import { barangayForTree, loadBarangayIndex } from '../lib/barangayLookup.js';
-import { barangayTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
+import { barangayTable, carbonTable, hazardTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
 import { writeReport } from '../lib/reportWriter.js';
 import { reportDocx } from '../lib/reportDocx.js';
 import TablesView from './sheet/TablesView.jsx';
@@ -284,7 +286,7 @@ export default function MapSheet() {
     (async () => {
       const { data } = await supabase
         .from('trees')
-        .select('id, species, latitude, longitude, biodiversity_status, species_type, tree_category');
+        .select('id, species, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height');
       if (cancelled || !Array.isArray(data)) return;
       setTrees(
         data
@@ -367,25 +369,83 @@ export default function MapSheet() {
   }, [lgu]);
   // Each tree with where it stands and where it comes from.
   const tableTrees = useMemo(
-    () => trees.map((tree) => ({ ...tree, barangay: barangayForTree(tree), origin: treeClassOf(tree, 'origin') })),
+    () =>
+      trees.map((tree) => ({
+        ...tree,
+        barangay: barangayForTree(tree),
+        municipality: lgu ? lgu.name : municipalityAt([tree.lat, tree.lng]),
+        origin: treeClassOf(tree, 'origin'),
+      })),
     // indexReady re-runs this once the barangay boundaries are in hand.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trees, indexReady]
+    [trees, indexReady, lgu]
   );
+
+  // The places the hazard and carbon tables go by: an LGU's barangays, or the
+  // province's cities and municipalities.
+  const places = useMemo(() => {
+    if (lgu) {
+      return (barangays ?? []).map((feature) => ({
+        name: feature.properties.barangay,
+        areaHa: (Number(feature.properties.area_km2) || 0) * 100,
+        geometry: feature.geometry,
+      }));
+    }
+    return LAGUNA_MUNICIPALITIES.features.map((feature) => ({
+      name: feature.properties.municipality_label,
+      key: feature.properties.municipality,
+      areaHa: geometryAreaM2(feature.geometry) / 10000,
+      geometry: feature.geometry,
+    }));
+  }, [lgu, barangays]);
+  // Each place measured against PGENRO's layers — once the tables or the
+  // report are first opened, so a sheet only printed never downloads the grids.
+  const [measured, setMeasured] = useState({ status: 'idle', facts: null });
+  const wantsFigures = tab !== 'map';
+  useEffect(() => {
+    if (!wantsFigures || !mapLayers.loaded || places.length === 0) return undefined;
+    if (!Object.values(mapLayers.layers).some(Boolean)) {
+      setMeasured({ status: 'none', facts: null });
+      return undefined;
+    }
+    let cancelled = false;
+    setMeasured((current) => (current.facts ? current : { status: 'measuring', facts: null }));
+    loadMeasuringLayers(supabase, mapLayers.layers).then((grids) => {
+      if (cancelled) return;
+      const facts = new Map(
+        places.map((placeRow) => [
+          placeRow.name,
+          areaFacts(LAGUNA_GRID, placeRow.geometry, grids, { areaM2: placeRow.areaHa * 10000 }),
+        ])
+      );
+      setMeasured({ status: 'done', facts });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsFigures, mapLayers.loaded, mapLayers.layers, places]);
   const scopeAreas = useMemo(
     () => areas.features.filter((f) => f.properties.saved && (!lgu || f.properties.municipality === lgu.name)),
     [areas.features, lgu]
   );
-  const tables = useMemo(
-    () =>
-      [
-        lgu ? barangayTable({ barangays: barangays ?? [], stats: brgyStats, trees: tableTrees, areas: scopeAreas }) : null,
-        landCoverTable(scopeAreas),
-        plantingSiteTable(scopeAreas),
-      ].filter(Boolean),
-    [lgu, barangays, brgyStats, tableTrees, scopeAreas]
-  );
-  const tablesByKey = Object.fromEntries(tables.map((table) => [table.key === 'barangays' ? 'barangays' : table.key === 'land-cover' ? 'landCover' : 'plantingSites', table]));
+  const tables = useMemo(() => {
+    const placeLabel = lgu ? 'Barangay' : 'City / municipality';
+    const labelOf = new Map(places.map((placeRow) => [placeRow.key ?? placeRow.name, placeRow.name]));
+    return [
+      lgu ? barangayTable({ barangays: barangays ?? [], stats: brgyStats, trees: tableTrees, areas: scopeAreas }) : null,
+      hazardTable({ places, measured: measured.facts, placeLabel }),
+      carbonTable({
+        places,
+        trees: tableTrees,
+        placeLabel,
+        placeOf: lgu ? (tree) => tree.barangay : (tree) => labelOf.get(tree.municipality),
+      }),
+      landCoverTable(scopeAreas),
+      plantingSiteTable(scopeAreas),
+    ].filter(Boolean);
+  }, [lgu, barangays, brgyStats, tableTrees, scopeAreas, places, measured.facts]);
+  const TABLE_NAMES = { 'land-cover': 'landCover', 'planting-sites': 'plantingSites' };
+  const tablesByKey = Object.fromEntries(tables.map((table) => [TABLE_NAMES[table.key] ?? table.key, table]));
   const climate = lgu ? mapLayers.climateByLgu.get(lgu.psgc) ?? null : null;
   const written = useMemo(
     () => writeReport({ place: lgu, tables: tablesByKey, trees: tableTrees, climate }),
@@ -418,6 +478,27 @@ export default function MapSheet() {
     setEdits((current) => ({ ...current, ...Object.fromEntries(data.sections.map((section) => [section.key, section.text])) }));
     setReportNote({ ok: true, text: 'Improved by Gemini. Read it through before you use it: every figure should still match the tables.' });
   }
+
+  // The map as a picture, for the report's first page — made when the report
+  // is opened, from the sheet as it is then.
+  const [mapImage, setMapImage] = useState(null);
+  useEffect(() => {
+    if (tab !== 'report' || !sheetRef.current) return undefined;
+    let cancelled = false;
+    let url = null;
+    sheetPng(sheetRef.current, paper)
+      .then((png) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(png.blob);
+        setMapImage(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+      setMapImage(null);
+    };
+  }, [tab, paper]);
 
   async function downloadDocx() {
     setReportBusy('docx');
@@ -722,10 +803,12 @@ export default function MapSheet() {
             .map-sheet { position: fixed; left: 0; top: 0; width: ${paper.width}mm; height: ${paper.height}mm; box-shadow: none !important; }
           }`
         : `@media print {
-            @page { size: ${tab === 'tables' ? '297mm 210mm' : '210mm 297mm'}; margin: 12mm; }
+            @page { size: ${tab === 'tables' ? '297mm 210mm' : '210mm 297mm'}; margin: 0; }
             body * { visibility: hidden !important; }
             .print-target, .print-target * { visibility: visible !important; }
             .print-target { position: absolute; left: 0; top: 0; width: 100%; }
+            .paper { break-after: page; min-height: calc(${tab === 'tables' ? 210 : 297}mm - 1mm) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .paper:last-child { break-after: auto; }
           }`}</style>
       {tab === 'tables' && (
         <div className="p-6">
@@ -735,6 +818,7 @@ export default function MapSheet() {
             preparedBy={preparedText}
             tables={tables}
             chooseLgu={!lgu}
+            measuring={measured.status}
             onExcel={downloadExcel}
             exporting={excelBusy}
           />
@@ -747,6 +831,10 @@ export default function MapSheet() {
             title={reportTitle}
             preparedBy={preparedText}
             sections={sections}
+            tables={tables}
+            mapImage={mapImage}
+            measuring={measured.status}
+            lgu={Boolean(lgu)}
             onChange={(key, text) => setEdits((current) => ({ ...current, [key]: text }))}
             onRewrite={() => {
               setEdits({});

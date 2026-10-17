@@ -1,5 +1,6 @@
 import { treeClassOf } from './mapSheet.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from './mapSites.js';
+import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON, volumeOf } from './treeVolume.js';
 
 /**
  * The attribute tables behind a map sheet (decided 17 October) — what the
@@ -7,13 +8,21 @@ import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from './mapSites.js';
  *
  *   barangays      each barangay: its area, people and households, the land
  *                  cover mapped in it, and its trees by origin and by use
+ *   hazards        each barangay (each city and municipality, for the
+ *                  province): the ground in it exposed to flood and landslide
+ *                  by level, its main soil and its elevation — measured from
+ *                  PGENRO's layers over the whole barangay, so it needs no
+ *                  land cover drawn
+ *   carbon         the same places: the carbon the tagged trees hold, and
+ *                  take up each year
  *   land cover     each land cover area: its class, area, exposure to flood
  *                  and landslide, soil and elevation
  *   planting sites each planting site: the same, with what to plant there and
  *                  how many seedlings fit
  *
  * Each table is { key, title, columns: [{ key, label, align, kind }], rows,
- * totals } — \`kind\` 'number' | 'ha' | 'text' says how a value is written.
+ * totals } — `kind` 'number' | 'ha' | 'percent' | 'tonnes' | 'text' says how a
+ * value is written.
  */
 
 const ha = (m2) => (Number(m2) || 0) / 10000;
@@ -104,6 +113,109 @@ export function barangayTable({ barangays = [], stats = new Map(), trees = [], a
   };
 }
 
+/**
+ * Each place's exposure to flood and landslide, as CLIRAM's exposure tables
+ * give it: hectares at each level, and the share of the place exposed at all.
+ *
+ *   places     [{ name, areaHa }] — the barangays, or the cities and municipalities
+ *   measured   Map(name → measure.js areaFacts), or null while not measured;
+ *              a hazard whose layer is not uploaded is left blank, not zero
+ *   placeLabel the first column's heading
+ */
+export function hazardTable({ places = [], measured = null, placeLabel = 'Barangay' }) {
+  const levels = (facts, kind) => {
+    const hazard = facts?.[kind];
+    return {
+      [`${kind}Low`]: hazard ? ha(hazard.low) : null,
+      [`${kind}Medium`]: hazard ? ha(hazard.medium) : null,
+      [`${kind}High`]: hazard ? ha(hazard.high) : null,
+      [`${kind}Ha`]: hazard ? ha(hazard.total) : null,
+    };
+  };
+  const rows = places
+    .map(({ name, areaHa }) => {
+      const facts = measured?.get(name) ?? null;
+      const row = { name, areaHa, ...levels(facts, 'flood'), ...levels(facts, 'landslide') };
+      row.floodShare = row.floodHa === null || !areaHa ? null : row.floodHa / areaHa;
+      row.landslideShare = row.landslideHa === null || !areaHa ? null : row.landslideHa / areaHa;
+      row.soil = facts?.soil?.[0]?.series ?? null;
+      row.elevation = facts?.elevation ? `${facts.elevation.min}–${facts.elevation.max} m` : null;
+      return row;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const sum = (key) => (rows.some((row) => row[key] !== null) ? rows.reduce((total, row) => total + (row[key] ?? 0), 0) : null);
+  const areaHa = sum('areaHa');
+  const totals = { name: `${rows.length} ${placeLabel === 'Barangay' ? 'barangays' : 'cities and municipalities'}`, areaHa };
+  for (const key of ['floodLow', 'floodMedium', 'floodHigh', 'floodHa', 'landslideLow', 'landslideMedium', 'landslideHigh', 'landslideHa']) totals[key] = sum(key);
+  totals.floodShare = totals.floodHa === null || !areaHa ? null : totals.floodHa / areaHa;
+  totals.landslideShare = totals.landslideHa === null || !areaHa ? null : totals.landslideHa / areaHa;
+  return {
+    key: 'hazards',
+    title: `Exposure to hazards by ${placeLabel === 'Barangay' ? 'barangay' : 'city and municipality'}`,
+    columns: [
+      { key: 'name', label: placeLabel, kind: 'text' },
+      { key: 'areaHa', label: 'Area (ha)', kind: 'ha' },
+      { key: 'floodLow', label: 'Flood, low (ha)', kind: 'ha' },
+      { key: 'floodMedium', label: 'Flood, medium (ha)', kind: 'ha' },
+      { key: 'floodHigh', label: 'Flood, high (ha)', kind: 'ha' },
+      { key: 'floodShare', label: 'Flood (% of area)', kind: 'percent' },
+      { key: 'landslideLow', label: 'Landslide, low (ha)', kind: 'ha' },
+      { key: 'landslideMedium', label: 'Landslide, medium (ha)', kind: 'ha' },
+      { key: 'landslideHigh', label: 'Landslide, high (ha)', kind: 'ha' },
+      { key: 'landslideShare', label: 'Landslide (% of area)', kind: 'percent' },
+      { key: 'soil', label: 'Main soil', kind: 'text' },
+      { key: 'elevation', label: 'Elevation', kind: 'text' },
+    ],
+    rows,
+    totals,
+  };
+}
+
+/**
+ * The carbon in the tagged trees, by place: the stock they hold now and what
+ * they take up in a year, from the DENR volume equation (treeVolume.js). Only
+ * trees with a diameter and a merchantable height count; the table says how
+ * many those are, and leaves a place blank rather than call it zero.
+ *
+ *   places     [{ name }]
+ *   trees      inventory rows
+ *   placeOf    which place a tree stands in, by name
+ */
+export function carbonTable({ places = [], trees = [], placeOf = (tree) => tree.barangay, placeLabel = 'Barangay' }) {
+  const byPlace = new Map(places.map(({ name }) => [name, []]));
+  for (const tree of trees) byPlace.get(placeOf(tree))?.push(tree);
+  const figures = (list) => {
+    const measured = list.filter((tree) => volumeOf(tree) !== null);
+    if (measured.length === 0) return { trees: list.length, measured: 0, carbonT: null, co2T: null, sequestrationT: null };
+    const co2 = measured.reduce((total, tree) => total + carbonDioxideKg(tree), 0) / 1000;
+    return {
+      trees: list.length,
+      measured: measured.length,
+      carbonT: co2 / CO2_PER_CARBON,
+      co2T: co2,
+      sequestrationT: measured.reduce((total, tree) => total + (annualCo2Kg(tree) ?? 0), 0) / 1000,
+    };
+  };
+  const rows = [...byPlace].map(([name, list]) => ({ name, ...figures(list) })).sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    key: 'carbon',
+    title: `Carbon in the tagged trees by ${placeLabel === 'Barangay' ? 'barangay' : 'city and municipality'}`,
+    columns: [
+      { key: 'name', label: placeLabel, kind: 'text' },
+      { key: 'trees', label: 'Tagged trees', kind: 'number' },
+      { key: 'measured', label: 'Measured (DBH and height)', kind: 'number' },
+      { key: 'carbonT', label: 'Carbon stock (t C)', kind: 'tonnes' },
+      { key: 'co2T', label: 'CO₂ stored (t)', kind: 'tonnes' },
+      { key: 'sequestrationT', label: 'CO₂ taken up a year (t)', kind: 'tonnes' },
+    ],
+    rows,
+    totals: {
+      name: `${rows.length} ${placeLabel === 'Barangay' ? 'barangays' : 'cities and municipalities'}`,
+      ...figures([...byPlace.values()].flat()),
+    },
+  };
+}
+
 const exposureColumns = [
   { key: 'floodHa', label: 'Exposed to flooding (ha)', kind: 'ha' },
   { key: 'floodShare', label: 'Flooding (%)', kind: 'percent' },
@@ -188,6 +300,7 @@ export function plantingSiteTable(areas = []) {
 export function formatCell(value, kind) {
   if (value === null || value === undefined || value === '') return '—';
   if (kind === 'ha') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (kind === 'tonnes') return Number(value).toLocaleString('en-US', { maximumFractionDigits: Number(value) < 10 ? 2 : 1 });
   if (kind === 'percent') return `${Math.round(Number(value) * 100)}%`;
   if (kind === 'number') return Number(value).toLocaleString('en-US');
   return String(value);
@@ -216,7 +329,7 @@ export async function tablesWorkbook(tables, { place, preparedBy, date = new Dat
         table.columns.map((column) => {
           const value = row[column.key];
           if (value === null || value === undefined) return null;
-          if (column.kind === 'ha') return Math.round(Number(value) * 100) / 100;
+          if (column.kind === 'ha' || column.kind === 'tonnes') return Math.round(Number(value) * 100) / 100;
           if (column.kind === 'percent') return Math.round(Number(value) * 1000) / 10;
           return value;
         })

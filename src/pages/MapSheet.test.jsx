@@ -93,6 +93,11 @@ describe('MapSheet', () => {
     await waitFor(() => expect(within(barangays).getByRole('rowheader', { name: 'Alipit' })).toBeInTheDocument());
     expect(within(barangays).getByRole('rowheader', { name: 'Alipit' }).closest('tr')).toHaveTextContent('1,659');
     expect(screen.getByRole('region', { name: 'Land cover' })).toHaveTextContent('None yet.');
+    // Each barangay's exposure and carbon, without any land cover drawn.
+    expect(within(screen.getByRole('region', { name: 'Exposure to hazards by barangay' })).getByRole('rowheader', { name: 'Alipit' })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Carbon in the tagged trees by barangay' })).getByRole('rowheader', { name: 'Alipit' })).toBeInTheDocument();
+    // On A4 landscape pages.
+    expect(screen.getByRole('region', { name: /^Page 1: Barangays$/ })).toHaveStyle({ width: '297mm' });
     expect(screen.getByRole('button', { name: /Excel/ })).toBeInTheDocument();
     // The map is still there behind the tab, for the report's picture.
     expect(sheet()).toBeInTheDocument();
