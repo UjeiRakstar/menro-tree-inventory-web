@@ -1654,6 +1654,14 @@ describe('saving an area', () => {
       expect(within(panel).getByRole('button', { name: /Withdraw/ })).toBeInTheDocument();
     });
 
+    it('makes a map of this one area, from its panel', async () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const panel = await openSaved(SANTA_CRUZ_ADMIN);
+      fireEvent.click(within(panel).getByRole('button', { name: /Make a map of this area/ }));
+      expect(open).toHaveBeenCalledWith('/map-sheet?area=area-1', '_blank', 'noopener');
+      open.mockRestore();
+    });
+
     it('can be edited and deleted by the office that drew it', async () => {
       const panel = await openSaved(SANTA_CRUZ_ADMIN);
       expect(within(panel).getByRole('button', { name: /Edit/ })).toBeInTheDocument();

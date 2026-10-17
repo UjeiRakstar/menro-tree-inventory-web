@@ -53,6 +53,38 @@ describe('MapSheet', () => {
     await waitFor(() => expect(sheet().querySelectorAll('circle[r="0.55"]')).toHaveLength(1));
   });
 
+  it('maps one area: framed on it, named for it, with what the layers say of it', async () => {
+    supabaseMock.setResponse('map_areas:select', {
+      data: [{
+        id: 'a1', kind: 'planting-site', name: 'Labuin Riverbank', municipality: 'Santa Cruz', barangay: 'Labuin',
+        lgu_psgc: 403426000, approval: 'approved', spacing_m: 4, recommended: [{ common: 'Narra' }],
+        geometry: { type: 'Polygon', coordinates: [[[121.41, 14.28], [121.412, 14.28], [121.412, 14.282], [121.41, 14.282], [121.41, 14.28]]] },
+        layer_facts: { flood: { low: 9000, medium: 0, high: 0, total: 9000 }, elevation: { min: 7, max: 10, mean: 8 } },
+      }],
+      error: null,
+    });
+    show('?area=a1');
+    await waitFor(() => expect(sheet()).toHaveAccessibleName('LABUIN RIVERBANK TREE PLANTING SITE — Santa Cruz'));
+    expect(sheet()).toHaveTextContent('THE AREA');
+    expect(sheet()).toHaveTextContent(/Flood exposure9,000(\.0)? m² \(19%\)/);
+    expect(sheet()).toHaveTextContent('Landslide exposureNot assessed');
+    expect(sheet()).toHaveTextContent('RecommendedNarra');
+    // Framed on the area, not the whole town: a far larger scale.
+    expect(sheet()).toHaveTextContent('1:5,000');
+  });
+
+  it('will not map another LGU’s area for an office', async () => {
+    supabaseMock.setResponse('map_areas:select', {
+      data: [{ id: 'c1', kind: 'land-cover', cover_class: 'open-forest', name: 'Calamba Forest', municipality: 'Calamba', lgu_psgc: 403405000,
+        geometry: { type: 'Polygon', coordinates: [[[121.16, 14.2], [121.17, 14.2], [121.17, 14.21], [121.16, 14.2]]] } }],
+      error: null,
+    });
+    show('?area=c1');
+    await waitFor(() => expect(supabaseMock.calls.some((c) => c.table === 'map_areas')).toBe(true));
+    expect(sheet()).toHaveTextContent('MUNICIPALITY OF SANTA CRUZ');
+    expect(sheet()).not.toHaveTextContent('THE AREA');
+  });
+
   it('colours the trees by origin, keyed with how many of each', async () => {
     supabaseMock.setResponse('trees:select', {
       data: [

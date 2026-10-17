@@ -2126,7 +2126,9 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           onClose={clearSelectedSite}
           onCollapsedChange={setSitePanelCollapsed}
           footer={
-            admin && areaPermission(profile, selectedSite) ? (
+            admin && selectedSite.properties.saved ? (
+              <div className="space-y-2">
+              {areaPermission(profile, selectedSite) && (
               <AreaActions
                 feature={selectedSite}
                 row={savedAreas.rowsById.get(selectedSite.properties.id)}
@@ -2144,6 +2146,20 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
                   savedAreas.reload();
                 }}
               />
+              )}
+              {/* A sheet of this one area, with the survey layer shown now. */}
+              <button
+                type="button"
+                onClick={() => {
+                  const params = new URLSearchParams({ area: selectedSite.properties.id });
+                  if (survey && mapLayers.layers[survey]) params.set('survey', survey);
+                  window.open(`/map-sheet?${params}`, '_blank', 'noopener');
+                }}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-bold text-green-800 ring-1 ring-green-300 hover:bg-green-50"
+              >
+                <Printer size={14} aria-hidden="true" /> Make a map of this area
+              </button>
+              </div>
             ) : null
           }
         />

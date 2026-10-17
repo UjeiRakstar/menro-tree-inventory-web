@@ -8,7 +8,8 @@ import { useMapLayers } from '../hooks/useMapLayers.js';
 import { useMapAreas } from '../hooks/useMapAreas.js';
 import { useOfficeProfile } from '../hooks/useOfficeProfile.js';
 import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityNamed } from '../lib/lagunaBoundaries.js';
-import { centroidOf } from '../lib/areaGeometry.js';
+import { centroidOf, formatArea } from '../lib/areaGeometry.js';
+import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
 import { repaintPicture } from '../lib/layers/browser.js';
 import { layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
@@ -182,8 +183,24 @@ export default function MapSheet() {
       return next;
     }, { replace: true });
 
-  // Whose sheet: an office's own LGU, always; PGENRO's choice, or the province.
-  const lguName = pgenro ? params.get('lgu') || null : roleOf(profile) === ROLES.LGU_ADMIN ? ownLgu?.name ?? null : null;
+  // A sheet of one saved area (?area=…): framed on it, the LGU it is in round
+  // it. An office maps its own LGU's areas; PGENRO any.
+  const areas = useMapAreas();
+  const areaId = params.get('area');
+  const ownLguName = roleOf(profile) === ROLES.LGU_ADMIN ? ownLgu?.name ?? null : null;
+  const focusArea = useMemo(() => {
+    const found = areaId ? areas.features.find((f) => f.properties.id === areaId && f.properties.saved) : null;
+    if (!found || !found.geometry) return null;
+    return pgenro || found.properties.municipality === ownLguName ? found : null;
+  }, [areaId, areas.features, pgenro, ownLguName]);
+
+  // Whose sheet: an office's own LGU, always; PGENRO's choice, or the province;
+  // the area's own LGU when the sheet is of one area.
+  const lguName = focusArea
+    ? focusArea.properties.municipality
+    : pgenro
+      ? params.get('lgu') || null
+      : ownLguName;
   const lgu = MUNICIPALITY_LIST.find((item) => item.name === lguName) ?? null;
   const place = lgu ? municipalityNamed(lgu.name) : LAGUNA_PROVINCE.features[0];
   const survey = SURVEY_KINDS.includes(params.get('survey')) ? params.get('survey') : null;
@@ -200,7 +217,12 @@ export default function MapSheet() {
   const [preparedBy, setPreparedBy] = useState('');
   // A layer named in the link but not uploaded is not on the sheet, nor in its title.
   const shownSurvey = survey && mapLayers.layers[survey] ? survey : null;
-  const titleText = title || defaultTitle({ survey: shownSurvey, ...show, treeColour });
+  const areaTitle = focusArea
+    ? `${focusArea.properties.name.toUpperCase()}${focusArea.properties.kind === 'planting-site' ? ' TREE PLANTING SITE' : ''}${
+        shownSurvey ? ` — ${SURVEY_TITLES[shownSurvey].legend.toUpperCase()}` : ''
+      }`
+    : null;
+  const titleText = title || areaTitle || defaultTitle({ survey: shownSurvey, ...show, treeColour });
   // What the office saved in Settings: its seal, its own logo, its head.
   const saved = useOfficeProfile(lgu ? lgu.psgc : pgenro ? 'pgenro' : null);
   const officeName = pgenro && !lgu
@@ -209,7 +231,6 @@ export default function MapSheet() {
   const preparedText = preparedBy || (saved?.office_head ? `${officeName} — ${saved.office_head}` : officeName);
 
   // ---- What goes on it -------------------------------------------------------------
-  const areas = useMapAreas();
   const surveyLayer = survey ? mapLayers.layers[survey] : null;
   const [picture, setPicture] = useState(null);
   const [soil, setSoil] = useState(null);
@@ -272,7 +293,11 @@ export default function MapSheet() {
 
   // ---- Layout ------------------------------------------------------------------------
   const { frame, column } = useMemo(() => sheetLayout(paper), [paper]);
-  const view = useMemo(() => fitView(place.geometry, frame), [place, frame]);
+  // On one area, room round it to see where it sits.
+  const view = useMemo(
+    () => (focusArea ? fitView(focusArea.geometry, frame, { room: 2.4 }) : fitView(place.geometry, frame)),
+    [focusArea, place, frame]
+  );
   const placePath = useMemo(() => pathOf(place.geometry, view.toPaper), [place, view]);
   const tiles = useMemo(() => tilesFor(view, frame, basemap), [view, frame, basemap]);
   const ticks = useMemo(() => graticule(view, frame), [view, frame]);
@@ -396,6 +421,48 @@ export default function MapSheet() {
     y += perColumn * row + 1.5;
   }
 
+  // The area itself, when the sheet is of one: what the layers say of it.
+  if (focusArea) {
+    const props = focusArea.properties;
+    const areaM2 = siteAreaM2(focusArea);
+    const exposure = (kind) => {
+      const m2 = hazardAreaM2(focusArea, kind);
+      if (m2 === null) return 'Not assessed';
+      return m2 <= 0 ? 'None mapped' : `${formatArea(m2, m2 >= 10000 ? 'ha' : 'm2')} (${Math.round((m2 / areaM2) * 100)}%)`;
+    };
+    const seedlings = props.kind === 'planting-site' ? seedlingCapacity(areaM2, props.spacingM) : null;
+    const facts = [
+      ['Area', formatArea(areaM2, areaM2 >= 10000 ? 'ha' : 'm2')],
+      [props.kind === 'planting-site' ? 'Kind' : 'Land cover', props.kind === 'planting-site' ? 'Tree planting site' : props.coverLabel ?? '—'],
+      ['Barangay', props.barangay ?? '—'],
+      ['Soil', props.soilType ?? 'Not recorded'],
+      ['Elevation', props.elevationRange ? `${props.elevationType ?? ''} ${props.elevationRange.min}–${props.elevationRange.max} m`.trim() : props.elevationType ?? 'Not recorded'],
+      ['Flood exposure', exposure('flood')],
+      ['Landslide exposure', exposure('landslide')],
+      ...(props.kind === 'planting-site'
+        ? [
+            ['Recommended', (props.recommended ?? []).map((tree) => tree.common).join(', ') || '—'],
+            ['Room for', seedlings ? `about ${seedlings.toLocaleString('en-US')} seedlings at ${props.spacingM} m` : '—'],
+          ]
+        : []),
+    ];
+    blocks.push(<text key="af" x={inner.x} y={y + 2.4 * big} fontSize={2.3 * big} fontWeight={700}>THE AREA</text>);
+    y += 4 * big;
+    facts.forEach(([name, value], i) => {
+      const lines = wrap(value, Math.floor(chars * 0.62));
+      blocks.push(
+        <g key={`fact${i}`}>
+          <text x={inner.x} y={y + 1.8 * big} fontSize={1.8 * big} fontWeight={700}>{name}</text>
+          {lines.map((line, j) => (
+            <text key={j} x={inner.x + inner.width * 0.36} y={y + 1.8 * big + j * 2.3 * big} fontSize={1.8 * big}>{line}</text>
+          ))}
+        </g>
+      );
+      y += Math.max(1, lines.length) * 2.3 * big + 0.6;
+    });
+    y += 2;
+  }
+
   // Locator maps: Laguna with the LGU, and the Philippines with Laguna.
   const locatorSize = (inner.width - 2) / 2;
   const locators = [
@@ -516,7 +583,15 @@ export default function MapSheet() {
           The CDRA map layout, Santa Cruz&apos;s as the template. Print it at 100%, or choose “Save as PDF” in the print
           dialog, and it is at the scale written on it.
         </p>
-        {pgenro && (
+        {focusArea && (
+          <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-900 ring-1 ring-green-200">
+            A map of <strong>{focusArea.properties.name}</strong>, {focusArea.properties.municipality}.{' '}
+            <button type="button" onClick={() => set('area', null)} className="font-semibold underline">
+              Map the whole LGU instead
+            </button>
+          </p>
+        )}
+        {pgenro && !focusArea && (
           <label className={label}>
             City / municipality
             <select value={lguName ?? ''} onChange={(e) => set('lgu', e.target.value || null)} className={control}>
@@ -579,7 +654,7 @@ export default function MapSheet() {
         </label>
         <label className={label}>
           Title
-          <input value={title} placeholder={defaultTitle({ survey: shownSurvey, ...show, treeColour })} onChange={(e) => setTitle(e.target.value)} className={control} />
+          <input value={title} placeholder={areaTitle || defaultTitle({ survey: shownSurvey, ...show, treeColour })} onChange={(e) => setTitle(e.target.value)} className={control} />
         </label>
         <label className={label}>
           Prepared by
@@ -674,6 +749,16 @@ export default function MapSheet() {
                 return <circle key={tree.id ?? i} cx={cx} cy={cy} r={0.55} fill={fill} stroke="#fff" strokeWidth={0.15} />;
               })}
             <path d={pathOf(place.geometry, view.toPaper, { rings: 'outer' })} fill="none" stroke={BOUNDARY} strokeWidth={0.6} strokeLinejoin="round" />
+            {focusArea && (
+              <path
+                d={pathOf(focusArea.geometry, view.toPaper)}
+                fillRule="evenodd"
+                fill={focusArea.properties.kind === 'planting-site' ? 'rgba(250,204,21,0.25)' : 'rgba(34,197,94,0.2)'}
+                stroke={focusArea.properties.kind === 'planting-site' ? '#a16207' : '#166534'}
+                strokeWidth={0.9}
+                strokeLinejoin="round"
+              />
+            )}
             <path d={pathOf(place.geometry, view.toPaper, { rings: 'holes' })} fill="none" stroke={BOUNDARY} strokeWidth={0.15} />
             {innerLines.map((feature, i) => {
               const centre = centroidOf(feature.geometry);
