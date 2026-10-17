@@ -1,10 +1,10 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro } from '../lib/roles.js';
 import { classifyHazard, HAZARD_STATUS } from '../lib/hazardStatus.js';
-import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { ChevronRight, MapPin } from 'lucide-react';
 import DispatchModal from '../components/DispatchModal.jsx';
 import IssuePermitModal from '../components/IssuePermitModal.jsx';
 import WalkInPermitForm from '../components/WalkInPermitForm.jsx';
@@ -103,7 +103,7 @@ function OfficeBoard() {
         </button>
         <button type="button" onClick={() => setActiveTab('walkins')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'walkins' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          📋 Public Walk-in Requests
+          📋 Permit Issuance
         </button>
         <button type="button" onClick={() => setActiveTab('permits')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'permits' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
@@ -123,17 +123,12 @@ function OfficeBoard() {
             <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">No hazardous trees found.</div>
           )}
           {status === 'loaded' && hazardTrees.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {hazardTrees.map((tree) => (
-                <HazardCard
-                  key={tree.id}
-                  tree={tree}
-                  onDispatch={() => setDispatchTree(tree)}
-                  onIssuePermit={() => handleIssuePermit(tree)}
-                  onViewOnMap={() => handleViewOnMap(tree)}
-                />
-              ))}
-            </div>
+            <HazardsByBarangay
+              trees={hazardTrees}
+              onDispatch={(tree) => setDispatchTree(tree)}
+              onIssuePermit={(tree) => handleIssuePermit(tree)}
+              onViewOnMap={(tree) => handleViewOnMap(tree)}
+            />
           )}
         </div>
       ) : activeTab === 'walkins' ? (
@@ -166,173 +161,168 @@ function OfficeBoard() {
   );
 }
 
-/** Hazard Card — shows tree info, hazard indicators, photo carousel, and action buttons */
-function HazardCard({ tree, onDispatch, onIssuePermit, onViewOnMap }) {
-  const [slideIndex, setSlideIndex] = useState(0);
-
-  // Collect all available hazard evidence photos
-  const photos = [
-    tree.photo_url && { url: tree.photo_url, label: 'Main' },
-    ...(Array.isArray(tree.leaning_photos) ? tree.leaning_photos.map(p => ({ url: typeof p === 'string' ? p : p?.url, label: 'Leaning' })) : []),
-    ...(Array.isArray(tree.powerline_photos) ? tree.powerline_photos.map(p => ({ url: typeof p === 'string' ? p : p?.url, label: 'Powerline' })) : []),
-    ...(Array.isArray(tree.decayed_photos) ? tree.decayed_photos.map(p => ({ url: typeof p === 'string' ? p : p?.url, label: 'Decayed' })) : []),
-    ...(Array.isArray(tree.root_photos) ? tree.root_photos.map(p => ({ url: typeof p === 'string' ? p : p?.url, label: 'Root' })) : []),
-  ].filter(Boolean).filter(p => p.url);
-
-  const hasPhotos = photos.length > 0;
-  const hasMultiple = photos.length > 1;
-  const isAssigned = !!tree.assigned_to;
-  const hasPermit = tree.has_cutting_permit || tree.hasCuttingPermit;
-
-  // Hazard flags
+/** A tree's hazards, in words. */
+function hazardsOf(tree) {
   const hazards = [];
   if (tree.isLeaning || tree.is_leaning) hazards.push('Leaning');
   if (tree.hasPowerlineConflict || tree.has_powerline_conflict) hazards.push('Powerline');
   if (tree.isDecayed || tree.is_decayed) hazards.push('Decayed');
   if (tree.isRootProblem || tree.is_root_problem) hazards.push('Root Problem');
+  return hazards;
+}
+
+/** The first photo of a tree's evidence, if there is one. */
+const photoOf = (tree) => {
+  const first = (list) => (Array.isArray(list) && list.length ? (typeof list[0] === 'string' ? list[0] : list[0]?.url) : null);
+  return tree.photo_url || first(tree.leaning_photos) || first(tree.powerline_photos) || first(tree.decayed_photos) || first(tree.root_photos) || null;
+};
+
+/**
+ * The hazard queue by barangay (decided 17 October): one line per barangay —
+ * how many, how many nobody has been sent to — opening into a list of its
+ * trees, each with its actions. Barangays with someone still to send come
+ * first.
+ */
+function HazardsByBarangay({ trees, onDispatch, onIssuePermit, onViewOnMap }) {
+  const groups = useMemo(() => {
+    const byName = new Map();
+    for (const tree of trees) {
+      const name = tree.barangay || 'No barangay';
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push(tree);
+    }
+    return [...byName]
+      .map(([name, list]) => ({ name, trees: list, waiting: list.filter((tree) => !tree.assigned_to).length }))
+      .sort((a, b) => b.waiting - a.waiting || b.trees.length - a.trees.length || a.name.localeCompare(b.name));
+  }, [trees]);
+  const [opened, setOpened] = useState(() => new Set(groups.length === 1 ? [groups[0].name] : []));
+  const allOpen = opened.size === groups.length;
+  const toggle = (name) =>
+    setOpened((current) => {
+      const next = new Set(current);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
 
   return (
-    <article className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex">
-      {/* Left content */}
-      <div className="flex-1 p-4 flex flex-col justify-between">
-        {/* Species — primary identifier */}
-        <div className="mb-1">
-          <div className="text-base font-bold text-slate-900 leading-tight">
-            {tree.species || 'Unknown species'}
-          </div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {tree.barangay || '—'}
-          </div>
-        </div>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-600">
+          {trees.length} {trees.length === 1 ? 'hazard' : 'hazards'} in {groups.length} {groups.length === 1 ? 'barangay' : 'barangays'}
+        </p>
+        <button
+          type="button"
+          onClick={() => setOpened(allOpen ? new Set() : new Set(groups.map((g) => g.name)))}
+          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+        >
+          {allOpen ? 'Close all' : 'Open all'}
+        </button>
+      </div>
+      <ul className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {groups.map((group) => {
+          const isOpen = opened.has(group.name);
+          return (
+            <li key={group.name} className="border-b border-slate-100 last:border-b-0">
+              <button
+                type="button"
+                onClick={() => toggle(group.name)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              >
+                <ChevronRight size={16} aria-hidden="true" className={`shrink-0 text-slate-500 transition ${isOpen ? 'rotate-90' : ''}`} />
+                <span className="flex-1 text-sm font-bold text-slate-900">{group.name}</span>
+                {group.waiting > 0 && (
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                    {group.waiting} nobody sent
+                  </span>
+                )}
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                  {group.trees.length} {group.trees.length === 1 ? 'tree' : 'trees'}
+                </span>
+              </button>
+              {isOpen && (
+                <div className="overflow-x-auto border-t border-slate-100">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                      <tr>
+                        <th scope="col" className="w-14 px-3 py-2"><span className="sr-only">Photo</span></th>
+                        <th scope="col" className="px-3 py-2">Tree</th>
+                        <th scope="col" className="px-3 py-2">Problem</th>
+                        <th scope="col" className="px-3 py-2">Assigned to</th>
+                        <th scope="col" className="px-3 py-2"><span className="sr-only">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {group.trees.map((tree) => (
+                        <HazardRow
+                          key={tree.id}
+                          tree={tree}
+                          onDispatch={() => onDispatch(tree)}
+                          onIssuePermit={() => onIssuePermit(tree)}
+                          onViewOnMap={() => onViewOnMap(tree)}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
-        {/* Hazard indicators */}
-        <div className="flex flex-wrap items-center gap-1 mb-2 mt-2">
-          <span className="text-xs font-medium text-red-700">Hazard</span>
-          {hazards.map(h => (
-            <span key={h} className="inline-flex items-center rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-600">{h}</span>
+/** One hazard tree: its photo, what is wrong, who is on it, and what to do. */
+function HazardRow({ tree, onDispatch, onIssuePermit, onViewOnMap }) {
+  const photo = photoOf(tree);
+  const isAssigned = !!tree.assigned_to;
+  const hasPermit = tree.has_cutting_permit || tree.hasCuttingPermit;
+  return (
+    <tr data-tree-id={tree.id} className="align-middle">
+      <td className="px-3 py-2">
+        {photo ? (
+          <a href={photo} target="_blank" rel="noreferrer" title="Open the photo">
+            <img src={photo} alt="" className="h-10 w-10 rounded-md object-cover ring-1 ring-slate-200" onError={(e) => { e.target.style.display = 'none'; }} />
+          </a>
+        ) : (
+          <span className="block h-10 w-10 rounded-md bg-slate-100" aria-hidden="true" />
+        )}
+      </td>
+      <th scope="row" className="px-3 py-2 font-semibold text-slate-900">{tree.species || 'Unknown species'}</th>
+      <td className="px-3 py-2">
+        <span className="flex flex-wrap gap-1">
+          {hazardsOf(tree).map((h) => (
+            <span key={h} className="rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700">{h}</span>
           ))}
-        </div>
-
-        {/* Assigned to */}
-        <div className="text-xs text-slate-500 mb-3">
-          Assigned To <span className="ml-1 text-slate-700 font-medium">{tree.assigned_to ?? '—'}</span>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-2">
+        </span>
+      </td>
+      <td className="px-3 py-2 text-xs text-slate-600">{tree.assigned_to ?? '—'}</td>
+      <td className="px-3 py-2">
+        <div className="flex flex-wrap justify-end gap-1.5">
           {isAssigned ? (
-            <button onClick={onDispatch} className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 transition">
+            <button onClick={onDispatch} className="rounded-lg bg-orange-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-orange-600">
               Re-Assign
             </button>
           ) : (
-            <button onClick={onDispatch} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 transition">
+            <button onClick={onDispatch} className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-900">
               Dispatch
             </button>
           )}
           {hasPermit ? (
-            <span className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700">
-              Permit Issued
-            </span>
+            <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">Permit Issued</span>
           ) : (
-            <button onClick={onIssuePermit} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 transition">
+            <button onClick={onIssuePermit} className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-900">
               Issue Permit
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Right: Photo thumbnail + View on Map */}
-      <div className="w-36 flex flex-col border-l border-slate-100">
-        {/* Photo carousel — fixed square */}
-        <div className="relative w-36 h-36 bg-slate-100">
-          {hasPhotos ? (
-            <>
-              <img
-                src={photos[slideIndex % photos.length].url}
-                alt={photos[slideIndex % photos.length].label}
-                className="w-36 h-36 object-cover"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-              {hasMultiple && (
-                <>
-                  <button onClick={() => setSlideIndex(i => (i - 1 + photos.length) % photos.length)}
-                    className="absolute left-0.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/40 text-white flex items-center justify-center text-xs">
-                    ‹
-                  </button>
-                  <button onClick={() => setSlideIndex(i => (i + 1) % photos.length)}
-                    className="absolute right-0.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/40 text-white flex items-center justify-center text-xs">
-                    ›
-                  </button>
-                </>
-              )}
-              <span className="absolute bottom-0.5 right-0.5 bg-black/50 text-white text-[8px] px-1 rounded">
-                {photos[slideIndex % photos.length].label}
-              </span>
-            </>
-          ) : (
-            <div className="w-36 h-36 flex items-center justify-center text-slate-400 text-xs">
-              No photo
-            </div>
-          )}
-        </div>
-
-        {/* View on Map button */}
-        <button
-          onClick={onViewOnMap}
-          className="flex items-center justify-center gap-1 py-2 bg-green-700 text-white text-xs font-medium hover:bg-green-800 transition"
-        >
-          <MapPin size={12} />
-          View on Map
-        </button>
-      </div>
-    </article>
-  );
-}
-
-/** Crowdsourced tree card — shows citizen-submitted trees awaiting field verification */
-function CrowdsourcedCard({ tree, onViewOnMap, onReassign }) {
-  const photo = tree.photo_url || tree.leaves_url || tree.bark_url || tree.fruits_url;
-
-  return (
-    <article className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-      {/* Photo */}
-      <div className="h-32 bg-slate-100 relative">
-        {photo ? (
-          <img src={photo} alt={tree.species} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">No photo</div>
-        )}
-        <span className="absolute top-2 left-2 bg-slate-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
-          Crowdsourced
-        </span>
-      </div>
-
-      {/* Info */}
-      <div className="p-4">
-        <h4 className="text-sm font-bold text-slate-800">{tree.species || 'Unknown Species'}</h4>
-        <p className="text-xs text-slate-500 mt-0.5">{tree.barangay || 'Unknown barangay'}</p>
-
-        <div className="mt-2 text-xs text-slate-500 space-y-0.5">
-          <p>Assigned to: <span className="font-medium text-slate-700">{tree.assigned_to || '—'}</span></p>
-          <p>Status: <span className="font-medium text-amber-600">Awaiting Field Verification</span></p>
-        </div>
-
-        <div className="flex gap-2 mt-3">
-          <button
-            onClick={onViewOnMap}
-            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-white bg-green-700 rounded-lg hover:bg-green-800 transition"
-          >
-            <MapPin size={12} />
-            View on Map
-          </button>
-          <button
-            onClick={onReassign}
-            className="flex-1 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition"
-          >
-            Re-Assign
+          <button onClick={onViewOnMap} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-300 hover:bg-green-50">
+            <MapPin size={12} aria-hidden="true" /> View on Map
           </button>
         </div>
-      </div>
-    </article>
+      </td>
+    </tr>
   );
 }

@@ -58,15 +58,29 @@ export function useOffice() {
 const LOGOUT_TIMEOUT_MS = 5000;
 
 /** A red count on a tab or the seal. Said in words to a screen reader. */
-function Badge({ count, label, shape = 'count' }) {
+/**
+ * Something is waiting: a "!" rather than a number (decided 17 October). How
+ * many, and of what, is in its label — read aloud, and shown on hover.
+ */
+function Badge({ count, label }) {
   if (!count) return null;
   return (
     <span
       className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white ring-2 ring-green-800"
       aria-label={label}
+      title={label}
       role="status"
     >
-      {shape === 'alert' ? '!' : count > 99 ? '99+' : count}
+      !
+    </span>
+  );
+}
+
+/** The same, in the seal's menu, beside what is waiting. */
+function MenuAlert({ label }) {
+  return (
+    <span title={label} aria-label={label} className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">
+      !
     </span>
   );
 }
@@ -193,7 +207,7 @@ export default function Header() {
               className="h-11 w-11 rounded-full bg-white object-contain p-0.5"
             />
             <ChevronDown size={16} aria-hidden="true" className="text-white/80" />
-            <Badge count={waiting} shape="alert" label={waitingLabel} />
+            <Badge count={waiting} label={waitingLabel} />
           </button>
 
           {menuOpen && (
@@ -231,18 +245,14 @@ export default function Header() {
                   <Users size={16} aria-hidden="true" className="text-slate-500" />
                   <span className="flex-1">Field officers</span>
                   {attention.approvals > 0 && (
-                    <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
-                      {attention.approvals} waiting
-                    </span>
+                    <MenuAlert label={`${attention.approvals} waiting for approval`} />
                   )}
                 </NavLink>
                 {attention.proposals > 0 && (
                   <NavLink to={`/map?area=${encodeURIComponent(attention.firstProposalArea)}`} className={menuItem}>
                     <MapPinned size={16} aria-hidden="true" className="text-slate-500" />
                     <span className="flex-1">Proposals from PGENRO</span>
-                    <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
-                      {attention.proposals} to decide
-                    </span>
+                    <MenuAlert label={`${attention.proposals} to decide`} />
                   </NavLink>
                 )}
                 {(pgenro || lguAdmin) && (
@@ -250,9 +260,7 @@ export default function Header() {
                     <Sprout size={16} aria-hidden="true" className="text-slate-500" />
                     <span className="flex-1">Planting site requests</span>
                     {attention.requests > 0 && (
-                      <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
-                        {attention.requests} {pgenro ? 'to decide' : 'declined'}
-                      </span>
+                      <MenuAlert label={`${attention.requests} ${pgenro ? 'to decide' : 'declined'}`} />
                     )}
                   </NavLink>
                 )}

@@ -11,6 +11,7 @@ const {
   fitBoundsSpy,
   featureHandlers,
   siteHandlers,
+  labelClicks,
   panes,
   mapState,
   mapEventHandlers,
@@ -22,6 +23,8 @@ const {
   // Drawn areas carry a `municipality` of their own, so keying everything by
   // that name would have the forest in Santa Cruz overwrite Santa Cruz itself.
   siteHandlers: new Map(),
+  // A barangay's name label, by the barangay, when it takes a click.
+  labelClicks: new Map(),
   panes: new Map(),
   // Street level by default, where the test trees stand far enough apart to be
   // drawn one by one. A test that wants them grouped turns this down.
@@ -54,6 +57,11 @@ vi.mock('react-leaflet', () => ({
       onEachFeature?.(feature, {
         feature,
         bindTooltip: () => {},
+        getTooltip: () => ({
+          on: (event, fn) => {
+            if (event === 'click' && feature.properties.barangay) labelClicks.set(feature.properties.barangay, fn);
+          },
+        }),
         setStyle: () => {},
         bringToFront: () => {},
         on: (handlers) => into.set(keyOf(feature), handlers),
@@ -1179,6 +1187,23 @@ describe('the public map stays the public map', () => {
     fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Base map' })).getByRole('radio', { name: /Satellite/ }));
     expect(screen.getByTestId('tile-layer').dataset.url).toMatch(/arcgisonline/);
     expect(screen.getByRole('button', { name: /^Base map: Satellite/ })).toBeInTheDocument();
+  });
+
+  it('opens a barangay from its name: its area, people and households, and its trees', async () => {
+    supabaseMock.setResponse('barangay_stats:select', { data: { population: 1659, households: 414 }, error: null });
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(5));
+    act(() => featureHandlers.get('Santa Cruz').click());
+    await waitFor(() => expect(labelClicks.has('Alipit')).toBe(true));
+
+    act(() => labelClicks.get('Alipit')());
+    const panel = await screen.findByRole('complementary', { name: 'Biodiversity of Brgy. Alipit' });
+    expect(panel).toHaveTextContent('Barangay of Santa Cruz');
+    await waitFor(() => expect(panel).toHaveTextContent('Population1,659'));
+    expect(panel).toHaveTextContent('Households414');
+    expect(panel).toHaveTextContent(/Area[\d,.]+ ha/);
+    // A barangay has no barangays of its own to list.
+    expect(within(panel).queryByText('Tagged trees by barangay')).not.toBeInTheDocument();
   });
 
   it('draws the barangays of the town in focus, and only of that town', async () => {

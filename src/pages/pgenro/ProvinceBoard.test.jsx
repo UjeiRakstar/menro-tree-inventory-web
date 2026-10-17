@@ -86,7 +86,7 @@ describe('the province overview', () => {
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — Santa Cruz' });
-    const links = within(dialog).getAllByRole('link', { name: /View on map/ });
+    const links = within(dialog).getAllByRole('link', { name: /On the map/ });
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['/map?tree=a', '/map?tree=b']);
   });
 
@@ -94,6 +94,20 @@ describe('the province overview', () => {
     renderBoard();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
     expect(screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' })).toBeInTheDocument();
+  });
+
+  it('lists the province’s by city or municipality, each opened when wanted, with no tree ids', async () => {
+    renderBoard();
+    fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
+    const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' });
+    expect(dialog).toHaveTextContent('2 trees in 1 city or municipality');
+    const santaCruz = within(dialog).getByRole('button', { name: /Santa Cruz/ });
+    // One town only: it opens already.
+    expect(santaCruz).toHaveAttribute('aria-expanded', 'true');
+    const links = within(dialog).getAllByRole('link', { name: /On the map/ });
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/map?tree=a', '/map?tree=b']);
+    fireEvent.click(santaCruz);
+    expect(within(dialog).queryAllByRole('link')).toHaveLength(0);
   });
 
   it('shows progress across the province: areas mapped, sites open, and which LGUs have an office', async () => {
@@ -111,7 +125,7 @@ describe('the province overview', () => {
     // An area count opens the areas, each a link to it on the map.
     fireEvent.click(within(pila).getByRole('button', { name: '1 — Tree planting sites open for planting, Pila' }));
     const dialog = screen.getByRole('dialog', { name: 'Tree planting sites open for planting — Pila' });
-    expect(within(dialog).getByRole('link', { name: /View on map/ })).toHaveAttribute('href', '/map?area=s1');
+    expect(within(dialog).getByRole('link', { name: /On the map/ })).toHaveAttribute('href', '/map?area=s1');
   });
 
   it('is read-only: nothing on it dispatches or issues a permit', async () => {

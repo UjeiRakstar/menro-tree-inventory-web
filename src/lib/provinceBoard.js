@@ -226,3 +226,20 @@ export function mapLinkFor(row, { of = 'trees' } = {}) {
   if (of === 'areas') return `/map?area=${encodeURIComponent(row.id)}`;
   return `/map?tree=${encodeURIComponent(of === 'tags' ? `pending-${row.id}` : row.id)}`;
 }
+
+/**
+ * The rows behind a province-wide number, by the city or municipality each is
+ * in: [{ lgu, rows }], the LGU with most first, those placed nowhere last.
+ */
+export function rowsByLgu(rows, { of = 'trees' } = {}) {
+  const lguOf = of === 'trees' ? lguOfTree : lguOfRow;
+  const groups = new Map();
+  for (const row of rows ?? []) {
+    const lgu = lguOf(row);
+    if (!groups.has(lgu)) groups.set(lgu, []);
+    groups.get(lgu).push(row);
+  }
+  return [...groups]
+    .map(([lgu, list]) => ({ lgu, rows: list }))
+    .sort((a, b) => (a.lgu === null) - (b.lgu === null) || b.rows.length - a.rows.length);
+}

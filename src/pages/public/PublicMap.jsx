@@ -582,7 +582,7 @@ const loadBarangays = () => {
  * their names once the map is close enough to read them. Not clickable — the
  * areas and trees over them are what take a click.
  */
-function BarangayLayer({ municipality, color }) {
+function BarangayLayer({ municipality, color, onSelect = null }) {
   const map = useMap();
   const [all, setAll] = useState(null);
   const [zoom, setZoom] = useState(() => map.getZoom?.() ?? 11);
@@ -625,8 +625,12 @@ function BarangayLayer({ municipality, color }) {
           layer.bindTooltip(feature.properties.barangay, {
             permanent: true,
             direction: 'center',
-            className: 'barangay-label',
+            className: onSelect ? 'barangay-label barangay-label-link' : 'barangay-label',
+            // The name takes the click, not the area under it: areas and
+            // trees above the barangay lines keep theirs.
+            interactive: Boolean(onSelect),
           });
+          if (onSelect) layer.getTooltip?.()?.on?.('click', () => onSelect(feature.properties));
         }
       }}
     />
@@ -919,6 +923,9 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   // The area panel is shown by picking a place, and hidden by opening a tree:
   // both live in the same strip down the left of the map.
   const [areaPanelOpen, setAreaPanelOpen] = useState(false);
+  // A barangay opened from its name on the map: { psgc, name, municipality, areaKm2 }.
+  const [selectedBarangay, setSelectedBarangay] = useState(null);
+  const [barangayFigures, setBarangayFigures] = useState(null);
   const [areaPanelCollapsed, setAreaPanelCollapsed] = useState(false);
   // Drawn areas open on the RIGHT, so a visitor can hold a tree and the forest
   // it stands in on screen at once instead of watching one replace the other.
@@ -1193,6 +1200,73 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
     [shownTrees, treeAreas, selectedLgu]
   );
   const areaTotals = useMemo(() => summarise(areaTrees), [areaTrees]);
+
+  // ---- A barangay, opened from its name ----------------------------------------
+  const barangayTrees = useMemo(
+    () =>
+      selectedBarangay
+        ? shownTrees.filter(
+            (tree) => treeAreas.get(tree.id) === selectedBarangay.municipality && barangayForTree(tree) === selectedBarangay.name
+          )
+        : [],
+    // barangaysReady re-runs this once the boundaries are in hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shownTrees, treeAreas, selectedBarangay, barangaysReady]
+  );
+  const barangayTotals = useMemo(() => summarise(barangayTrees), [barangayTrees]);
+  useEffect(() => {
+    setBarangayFigures(null);
+    if (!selectedBarangay) return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('barangay_stats')
+        .select('population, households')
+        .eq('barangay_psgc', selectedBarangay.psgc)
+        .maybeSingle();
+      if (!cancelled && !error) setBarangayFigures(Array.isArray(data) ? data[0] ?? null : data ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBarangay]);
+  const barangayFacts = selectedBarangay
+    ? [
+        {
+          label: 'Area',
+          value: selectedBarangay.areaKm2 != null
+            ? `${(selectedBarangay.areaKm2 * 100).toLocaleString('en-US', { maximumFractionDigits: 1 })} ha`
+            : '—',
+          note: 'From the PSA boundary',
+        },
+        {
+          label: 'Population',
+          value: barangayFigures?.population != null ? Number(barangayFigures.population).toLocaleString('en-US') : 'Not recorded',
+        },
+        {
+          label: 'Households',
+          value: barangayFigures?.households != null ? Number(barangayFigures.households).toLocaleString('en-US') : 'Not recorded',
+        },
+      ]
+    : [];
+
+  // Another town chosen: the barangay of the last one is not what is in focus.
+  useEffect(() => {
+    if (selectedBarangay && !fence && selectedLgu !== selectedBarangay.municipality) setSelectedBarangay(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLgu]);
+
+  function selectBarangay(properties) {
+    setSelectedBarangay({
+      psgc: Number(properties.barangay_psgc),
+      name: properties.barangay,
+      municipality: properties.municipality,
+      municipalityLabel: properties.municipality_label ?? properties.municipality,
+      areaKm2: properties.area_km2 ?? null,
+    });
+    setAreaPanelOpen(false);
+    setAreaPanelCollapsed(false);
+  }
   const areaBarangays = useMemo(
     // barangaysReady is not read here; it is what re-runs this once the
     // boundaries are in hand.
@@ -1359,7 +1433,8 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   // Either panel covers the left of the map, so the controls over there travel
   // with whichever is showing rather than hiding underneath.
   const treePanelShowing = Boolean(selectedTree) && !panelCollapsed;
-  const areaPanelShowing = areaPanelOpen && Boolean(selectedLgu) && !areaPanelCollapsed;
+  const areaPanelShowing =
+    ((areaPanelOpen && Boolean(selectedLgu)) || Boolean(selectedBarangay)) && !areaPanelCollapsed;
   const panelShowing = treePanelShowing || areaPanelShowing;
 
   // ---- The fence ----------------------------------------------------------
@@ -1789,6 +1864,14 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         .leaflet-tooltip.barangay-label::before {
           display: none;
         }
+        .leaflet-tooltip.barangay-label-link {
+          cursor: pointer;
+          pointer-events: auto;
+        }
+        .leaflet-tooltip.barangay-label-link:hover {
+          color: #166534;
+          text-decoration: underline;
+        }
 
         /* A pin that has just come out of a group is a new element, so this
            plays exactly when something de-clusters — on the pins that appeared,
@@ -1881,6 +1964,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
           <BarangayLayer
             municipality={fence || selectedLgu}
             color={basemapId === 'satellite' ? '#ffffff' : '#475569'}
+            onSelect={selectBarangay}
           />
         )}
 
@@ -2007,7 +2091,22 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
       )}
 
       {/* The place in focus, in full */}
-      {areaPanelOpen && selectedLgu && (
+      {selectedBarangay && (
+        <AreaDetailPanel
+          key={selectedBarangay.psgc}
+          municipality={selectedBarangay.municipality}
+          label={`Brgy. ${selectedBarangay.name}`}
+          placeKind={`Barangay of ${selectedBarangay.municipalityLabel}`}
+          facts={barangayFacts}
+          totals={barangayTotals}
+          showBarangays={false}
+          onClose={() => setSelectedBarangay(null)}
+          onCollapsedChange={setAreaPanelCollapsed}
+          onRequestData={() => setRequestOpen(true)}
+        />
+      )}
+
+      {!selectedBarangay && areaPanelOpen && selectedLgu && (
         <AreaDetailPanel
           municipality={selectedLgu}
           label={selectedLabel || labelOf(selectedLgu)}

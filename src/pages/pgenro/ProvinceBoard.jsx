@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Building2, Eye, Loader2, MapPin, X } from 'lucide-react';
+import { Building2, ChevronRight, Eye, Loader2, MapPin, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   BOARD_METRICS,
@@ -9,6 +9,7 @@ import {
   metricByKey,
   officesByLgu,
   rowsBehind,
+  rowsByLgu,
   tallyBoard,
 } from '../../lib/provinceBoard.js';
 import { namriaClassById } from '../../lib/namriaCover.js';
@@ -65,9 +66,45 @@ function rowDetail(row, metric) {
     .join(' · ');
 }
 
-/** The trees, tags or areas behind one number, each a link to it on the map. */
-function RowsDialog({ metric, lguLabel, rows, onClose }) {
+/** One row: what it is, where, and what is wrong — the whole row a link to it on the map. */
+function RowLink({ row, metric }) {
+  return (
+    <li>
+      <Link
+        to={mapLinkFor(row, { of: metric.of })}
+        className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-5 py-2 text-sm hover:bg-green-50 focus:bg-green-50 focus:outline-none"
+      >
+        <span className="font-semibold text-slate-800">
+          {metric.of === 'areas' ? row.name : row.species || 'Unknown species'}
+        </span>
+        <span className="text-xs text-slate-500">
+          {row.barangay ? `Brgy. ${row.barangay}` : metric.of === 'areas' ? '' : 'No barangay'}
+        </span>
+        <span className="text-xs text-slate-600">{rowDetail(row, metric)}</span>
+        <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-green-700">
+          <MapPin size={12} aria-hidden="true" /> On the map
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+/**
+ * The trees, tags or areas behind one number. Across the province they come
+ * by city or municipality, each opened when wanted — a list of every tree in
+ * Laguna is a list nobody reads.
+ */
+function RowsDialog({ metric, lguLabel, rows, onClose, labelOf = String, byLgu = false }) {
   const noun = { tags: ['tag', 'tags'], areas: ['area', 'areas'], trees: ['tree', 'trees'] }[metric.of];
+  const groups = byLgu ? rowsByLgu(rows, { of: metric.of }) : null;
+  const [opened, setOpened] = useState(() => new Set(groups?.length === 1 ? [groups[0].lgu] : []));
+  const toggle = (lgu) =>
+    setOpened((current) => {
+      const next = new Set(current);
+      if (next.has(lgu)) next.delete(lgu);
+      else next.add(lgu);
+      return next;
+    });
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div
@@ -82,30 +119,43 @@ function RowsDialog({ metric, lguLabel, rows, onClose }) {
             <h2 className="text-base font-bold text-slate-900">{metric.label}</h2>
             <p className="text-sm text-slate-500">
               {lguLabel} · {rows.length} {rows.length === 1 ? noun[0] : noun[1]}
+              {groups && ` in ${groups.length} ${groups.length === 1 ? 'city or municipality' : 'cities and municipalities'}`}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-slate-500 hover:bg-slate-100">
             <X size={18} />
           </button>
         </div>
-        <ul className="divide-y divide-slate-100 overflow-y-auto">
-          {rows.map((row) => (
-            <li key={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-sm">
-              <span className="font-semibold text-slate-800">
-                {metric.of === 'areas' ? row.name : row.species || 'Unknown species'}
-              </span>
-              {row.tree_id && <span className="font-mono text-xs text-slate-500">{row.tree_id}</span>}
-              <span className="text-xs text-slate-500">{row.barangay || (metric.of === 'areas' ? '' : 'No barangay')}</span>
-              <span className="text-xs text-slate-600">{rowDetail(row, metric)}</span>
-              <Link
-                to={mapLinkFor(row, { of: metric.of })}
-                className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800"
-              >
-                <MapPin size={12} aria-hidden="true" /> View on map
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {groups ? (
+          <ul className="divide-y divide-slate-100 overflow-y-auto">
+            {groups.map(({ lgu, rows: list }) => {
+              const isOpen = opened.has(lgu);
+              return (
+                <li key={lgu ?? 'none'}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(lgu)}
+                    aria-expanded={isOpen}
+                    className="flex w-full items-center gap-2 bg-slate-50 px-5 py-2.5 text-left text-sm font-bold text-slate-800 hover:bg-slate-100"
+                  >
+                    <ChevronRight size={15} aria-hidden="true" className={`shrink-0 text-slate-500 transition ${isOpen ? 'rotate-90' : ''}`} />
+                    <span className="flex-1">{labelOf(lgu)}</span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">{list.length}</span>
+                  </button>
+                  {isOpen && (
+                    <ul className="divide-y divide-slate-100">
+                      {list.map((row) => <RowLink key={row.id} row={row} metric={metric} />)}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <ul className="divide-y divide-slate-100 overflow-y-auto">
+            {rows.map((row) => <RowLink key={row.id} row={row} metric={metric} />)}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -389,6 +439,8 @@ export default function ProvinceBoard() {
           lguLabel={open.lgu === undefined ? 'All of Laguna' : labelOf(open.lgu)}
           rows={openRows}
           onClose={() => setOpen(null)}
+          labelOf={labelOf}
+          byLgu={open.lgu === undefined}
         />
       )}
     </section>

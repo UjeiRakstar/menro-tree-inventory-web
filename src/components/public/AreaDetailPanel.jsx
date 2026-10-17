@@ -121,6 +121,11 @@ export default function AreaDetailPanel({
   onClose,
   onCollapsedChange,
   onRequestData,
+  // A barangay: what kind of place it says it is, the facts about the place
+  // itself ([{ label, value, note }]), and no list of barangays within it.
+  placeKind = null,
+  facts = [],
+  showBarangays = true,
 }) {
   const [collapsed, setCollapsed] = useState(false);
   // Mount off-screen, then slide in on the next frame.
@@ -166,7 +171,7 @@ export default function AreaDetailPanel({
   }
 
   const showing = entered && !collapsed && !leaving;
-  const kind = /\bcity\b/i.test(label) ? 'City' : 'Municipality';
+  const kind = placeKind ?? `${/\bcity\b/i.test(label) ? 'City' : 'Municipality'} of Laguna`;
 
   return (
     <>
@@ -190,7 +195,7 @@ export default function AreaDetailPanel({
           )}
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-bold leading-tight text-green-800">{label}</h2>
-            <p className="text-[11px] text-slate-500">{kind} of Laguna · Biodiversity at a glance</p>
+            <p className="text-[11px] text-slate-500">{kind} · Biodiversity at a glance</p>
           </div>
           <button
             type="button"
@@ -203,6 +208,22 @@ export default function AreaDetailPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
+          {facts.length > 0 && (
+            <section className="mb-4">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">The place</h3>
+              <dl className="mt-1.5 divide-y divide-slate-100 rounded-xl border border-slate-200">
+                {facts.map((fact) => (
+                  <div key={fact.label} className="flex items-baseline justify-between gap-3 px-3 py-2">
+                    <dt className="text-[12px] text-slate-600">{fact.label}</dt>
+                    <dd className="text-right text-[13px] font-bold text-slate-900">
+                      {fact.value}
+                      {fact.note && <span className="block text-[10.5px] font-normal text-slate-400">{fact.note}</span>}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
           {/* The same six figures as the analytics page, in the same pairs */}
           <div className="space-y-4">
             {METRIC_PAIRS.map((pair) => (
@@ -225,6 +246,7 @@ export default function AreaDetailPanel({
           </div>
 
           {/* Where they stand within it */}
+          {showBarangays && (
           <section className="mt-5">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
               Tagged trees by barangay
@@ -233,6 +255,7 @@ export default function AreaDetailPanel({
               <BarangayList barangays={barangays} municipality={label} />
             </div>
           </section>
+          )}
         </div>
 
         {/* What to do with it */}

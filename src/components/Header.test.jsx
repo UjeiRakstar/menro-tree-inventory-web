@@ -153,8 +153,9 @@ describe('the badges', () => {
       error: null,
     });
     renderHeader();
-    expect(await within(mainNav()).findByText('2')).toBeInTheDocument();
-    expect(screen.getByLabelText('2 hazards need dispatching')).toBeInTheDocument();
+    // A '!', not a number; how many is in its label.
+    expect(await within(mainNav()).findByLabelText('2 hazards need dispatching')).toHaveTextContent('!');
+    expect(within(mainNav()).queryByText('2')).not.toBeInTheDocument();
   });
 
   it('counts only the LGU’s own hazards for an LGU account', async () => {
@@ -173,7 +174,7 @@ describe('the badges', () => {
     renderHeader();
     expect(await screen.findByLabelText('2 field officers are waiting for approval')).toHaveTextContent('!');
     openMenu();
-    expect(screen.getByText('2 waiting')).toBeInTheDocument();
+    expect(screen.getByLabelText('2 waiting for approval')).toHaveTextContent('!');
   });
 
   it('tells an LGU office when PGENRO proposes a change to one of its areas', async () => {

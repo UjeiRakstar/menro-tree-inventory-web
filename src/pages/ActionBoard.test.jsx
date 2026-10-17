@@ -74,8 +74,15 @@ function renderBoard() {
   );
 }
 
-/** Every hazard card on screen. */
-const cards = () => screen.queryAllByRole('article');
+/**
+ * Every hazard tree on screen, its barangays opened first: the queue comes by
+ * barangay, each closed until opened (one barangay alone opens by itself).
+ */
+const cards = () => {
+  const openAll = screen.queryByRole('button', { name: 'Open all' });
+  if (openAll) fireEvent.click(openAll);
+  return [...document.querySelectorAll('tr[data-tree-id]')];
+};
 
 beforeEach(() => {
   supabaseMock.reset();
@@ -105,6 +112,22 @@ describe('ActionBoard', () => {
     expect(within(card).getByText('Leaning')).toBeInTheDocument();
     // The safe tree is not a ticket.
     expect(screen.queryByText('Acacia')).not.toBeInTheDocument();
+  });
+
+  it('comes by barangay, those with someone still to send first, each opened when wanted', async () => {
+    loadTrees([
+      { ...HAZARD_TREE, id: 'a', barangay: 'Alipit', assigned_to: 'arb@menro.gov.ph' },
+      { ...HAZARD_TREE, id: 'b', barangay: 'Gatid' },
+      { ...HAZARD_TREE, id: 'c', barangay: 'Gatid' },
+    ]);
+    renderBoard();
+    const gatid = await screen.findByRole('button', { name: /Gatid/ });
+    const alipit = screen.getByRole('button', { name: /Alipit/ });
+    expect(gatid).toHaveTextContent('2 nobody sent');
+    expect(gatid.compareDocumentPosition(alipit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelectorAll('tr[data-tree-id]')).toHaveLength(0);
+    fireEvent.click(gatid);
+    expect(document.querySelectorAll('tr[data-tree-id]')).toHaveLength(2);
   });
 
   it('says so when nothing is hazardous, rather than showing an empty board', async () => {
@@ -182,7 +205,7 @@ describe('ActionBoard', () => {
     renderBoard();
     await waitFor(() => expect(cards()).toHaveLength(1));
 
-    fireEvent.click(screen.getByRole('button', { name: /Public Walk-in Requests/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Permit Issuance/ }));
     await waitFor(() => expect(cards()).toHaveLength(0));
 
     fireEvent.click(screen.getByRole('button', { name: /Permit Logs/ }));
@@ -243,7 +266,7 @@ describe('ActionBoard', () => {
           await waitFor(() => expect(cards()).toHaveLength(1));
 
           const labels = {
-            walkins: /Public Walk-in Requests/,
+            walkins: /Permit Issuance/,
             permits: /Permit Logs/,
             hazards: /Hazard Management/,
           };
