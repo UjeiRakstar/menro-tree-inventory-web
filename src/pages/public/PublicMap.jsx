@@ -1620,8 +1620,10 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
    */
   function openAreaEditor(editMode, feature = null) {
     if (feature) {
-      setShape(geometryToShape(feature.geometry));
-      setDrawing(true);
+      const saved = geometryToShape(feature.geometry);
+      setShape(saved);
+      // An area of several parts keeps its outline: its details are edited, not its boundary.
+      setDrawing(!saved.geometry);
       setDrawNotice('');
     }
     setAreaEditor({ mode: editMode, featureId: feature?.properties.id ?? null });

@@ -1,6 +1,6 @@
-import { centroidOf } from './areaGeometry.js';
+import { centroidOf, geometryAreaM2 } from './areaGeometry.js';
 import { containsPoint } from './lagunaBoundaries.js';
-import { lengthM, areaM2 } from './drawing.js';
+import { distanceM, lengthM, areaM2 } from './drawing.js';
 import { maiCoverOf, namriaClassById } from './namriaCover.js';
 import { ROLES, roleOf } from './roles.js';
 import { elevationTypeOf } from './layers/elevation.js';
@@ -20,14 +20,26 @@ export function shapeToGeometry(shape) {
   return { type: 'Polygon', coordinates: [ring] };
 }
 
-/** A saved polygon back into a closed shape the drawing tools can edit. */
+/** Whether a geometry is more than one outline: several parts, or holes. */
+export const isComplexGeometry = (geometry) =>
+  (geometry?.type === 'MultiPolygon' && geometry.coordinates?.length > 1) ||
+  (geometry?.type === 'MultiPolygon' ? geometry.coordinates?.[0] : geometry?.coordinates)?.length > 1;
+
+/**
+ * A saved polygon back into a closed shape the drawing tools can edit.
+ *
+ * An area of several parts or with holes — most come from a file — cannot be
+ * one drawn outline; it keeps its geometry whole (`shape.geometry`), and the
+ * drawing tools leave it alone, so editing its details never cuts it down to
+ * its first part.
+ */
 export function geometryToShape(geometry) {
   const rings = geometry?.type === 'MultiPolygon' ? geometry.coordinates?.[0] : geometry?.coordinates;
   const ring = rings?.[0] ?? [];
   const points = ring.map(([lng, lat]) => [lat, lng]);
   const last = points[points.length - 1];
   if (points.length > 1 && last[0] === points[0][0] && last[1] === points[0][1]) points.pop();
-  return { points, closed: points.length >= 3 };
+  return isComplexGeometry(geometry) ? { points, closed: points.length >= 3, geometry } : { points, closed: points.length >= 3 };
 }
 
 /** The tagged trees standing inside a geometry. */
@@ -43,6 +55,16 @@ export function treesInside(trees, geometry) {
 
 /** What the map measured, for the review step and the row. */
 export function measure(shape) {
+  if (shape?.geometry) {
+    const polygons = shape.geometry.type === 'MultiPolygon' ? shape.geometry.coordinates : [shape.geometry.coordinates];
+    let perimeterM = 0;
+    for (const rings of polygons) {
+      for (let i = 1; i < rings[0].length; i += 1) {
+        perimeterM += distanceM([rings[0][i - 1][1], rings[0][i - 1][0]], [rings[0][i][1], rings[0][i][0]]);
+      }
+    }
+    return { geometry: shape.geometry, areaM2: geometryAreaM2(shape.geometry), perimeterM, centroid: centroidOf(shape.geometry) };
+  }
   const geometry = shapeToGeometry(shape);
   return {
     geometry,

@@ -152,6 +152,42 @@ describe('Settings, for an LGU office', () => {
     expect(await screen.findByText('Map, handed Riverbank')).toBeInTheDocument();
   });
 
+  it('brings a tax map in as land cover, merged by class and barangay, with the owners taken out first', async () => {
+    show();
+    open('Import areas');
+    const ring = (lng, d) => [[lng, 14.28], [lng + d, 14.28], [lng + d, 14.28 + d], [lng, 14.28 + d], [lng, 14.28]];
+    const parcel = (lng, CLASSIFICA, OWNER) => ({ type: 'Feature', properties: { OWNER, TAXDEC: '09-0001', CLASSIFICA }, geometry: { type: 'Polygon', coordinates: [ring(lng, 0.001)] } });
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [parcel(121.41, 'PROTECTION FOREST', 'JUAN DELA CRUZ'), parcel(121.411, 'PROTECTION FOREST', 'ANA SANTOS'), parcel(121.4125, 'RESIDENTIAL', 'PEDRO REYES')],
+    });
+    const file = new File([text], 'forest.geojson');
+    file.text = async () => text;
+    fireEvent.change(screen.getByLabelText('Area file (GeoJSON or shapefile)'), { target: { files: [file] } });
+
+    const privacy = await screen.findByRole('note', { name: 'Personal data' });
+    expect(privacy).toHaveTextContent('OWNER — a person’s name (owner)');
+    expect(privacy).toHaveTextContent('TAXDEC — a tax declaration');
+    // Forest ticked, as tree cover; the house lot left out.
+    expect(screen.getByRole('checkbox', { name: 'PROTECTION FOREST' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'RESIDENTIAL' })).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Land cover for PROTECTION FOREST' })).toHaveValue('open-forest');
+
+    fireEvent.click(screen.getByRole('button', { name: /Merge and cut to the barangays/ }));
+    const list = await screen.findByRole('list', { name: 'Areas to save' }, { timeout: 5000 });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(list).toHaveTextContent(/^Protection Forest — /);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save 1 land cover area' }));
+    expect(await screen.findByText('Saved 1 land cover area.')).toBeInTheDocument();
+    const [insert] = supabaseMock.writesTo('map_areas', 'insert');
+    const [row] = insert.payload;
+    expect(row).toMatchObject({ kind: 'land-cover', cover_class: 'open-forest', municipality: 'Santa Cruz' });
+    expect(row.geometry.type).toBe('Polygon');
+    expect(row.notes).toMatch(/2 shapes where CLASSIFICA is “PROTECTION FOREST”.*Taken out for privacy before it was read: OWNER, TAXDEC\./);
+    expect(JSON.stringify(insert.payload)).not.toMatch(/DELA CRUZ|SANTOS|09-0001/);
+  });
+
   it('changes the account’s own password, the same twice', async () => {
     show();
     open('Password');

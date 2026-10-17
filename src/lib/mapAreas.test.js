@@ -7,6 +7,7 @@ import {
   emptyAreaForm,
   formFromRow,
   geometryToShape,
+  measure,
   groundOf,
   proposalChanges,
   rowFromForm,
@@ -37,6 +38,17 @@ describe('geometry', () => {
 
   it('comes back as the same shape, ready to edit', () => {
     expect(geometryToShape(shapeToGeometry(SHAPE))).toEqual(SHAPE);
+  });
+
+  it('keeps an area of several parts whole, so editing its details never cuts it to one', () => {
+    const part = (lng) => [[[lng, 14.28], [lng + 0.001, 14.28], [lng + 0.001, 14.281], [lng, 14.281], [lng, 14.28]]];
+    const geometry = { type: 'MultiPolygon', coordinates: [part(121.41), part(121.42)] };
+    const shape = geometryToShape(geometry);
+    expect(shape.geometry).toBe(geometry);
+    const measured = measure(shape);
+    expect(measured.geometry).toBe(geometry);
+    expect(measured.areaM2).toBeGreaterThan(2 * 11000);
+    expect(geometryToShape(shapeToGeometry(SHAPE)).geometry).toBeUndefined();
   });
 
   it('finds the trees standing inside, leaving out tags and stumps', () => {

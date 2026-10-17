@@ -274,7 +274,7 @@ function simplify(points, tolerance) {
  * so neither half starts and ends on the same point (where every distance
  * would be zero and the whole outline would fold away).
  */
-function simplifyRing(ring, tolerance) {
+export function simplifyRing(ring, tolerance) {
   let far = 0;
   let farthest = -1;
   for (let i = 1; i < ring.length; i += 1) {

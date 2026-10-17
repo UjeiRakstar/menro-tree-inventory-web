@@ -384,6 +384,12 @@ export default function AreaForm({
               </p>
             )}
             {shown.shape && <p className="mt-1 text-[11px] font-semibold text-red-700">{shown.shape}</p>}
+            {shape?.geometry && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                This area is in several parts or has holes, as it came from a file: its boundary is kept as it is. To change
+                it, delete it and import the file again.
+              </p>
+            )}
           </section>
 
           {['soil', 'elevation', 'flood', 'landslide'].some((kind) => !liveLayers[kind]) && (
