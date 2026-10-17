@@ -129,6 +129,17 @@ describe('the BioDashboard of a MENRO / CENRO', () => {
     await waitFor(() => expect(JSON.parse(screen.getByTestId('chart').dataset.rows)).toHaveLength(3));
   });
 
+  it('narrows what needs action to the barangay chosen too, and flies the map to it', async () => {
+    show(SANTA_CRUZ);
+    const action = await screen.findByRole('region', { name: 'What needs action' });
+    await within(action).findByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' });
+    flyToBoundsSpy.mockClear();
+    fireEvent.change(screen.getByLabelText('Barangay'), { target: { value: 'Barangay III' } });
+    expect(action).toHaveTextContent('Brgy. Barangay III, Santa Cruz — what needs action');
+    expect(within(action).getByRole('button', { name: '1 — Hazards, nobody sent, Brgy. Barangay III' })).toBeInTheDocument();
+    await waitFor(() => expect(flyToBoundsSpy).toHaveBeenCalled());
+  });
+
   it('keeps the community tags to verify in a tab of their own', async () => {
     show(SANTA_CRUZ);
     fireEvent.click(await screen.findByRole('tab', { name: /Community tags \(1\)/ }));

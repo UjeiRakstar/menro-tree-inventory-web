@@ -31,6 +31,7 @@ import {
   boundsOfMunicipality,
   municipalityAt,
   municipalityNamed,
+  boundsOf,
 } from '../../lib/lagunaBoundaries.js';
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
@@ -392,6 +393,18 @@ export default function PublicDashboard() {
   return <BioDashboardView />;
 }
 
+/** An office's map follows its barangay: in to the one chosen, out to the LGU. */
+function BarangayFocus({ shapes, barangay, lgu }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!shapes || !lgu) return;
+    const feature = barangay ? shapes.features.find((f) => f.properties.barangay === barangay) : null;
+    const bounds = feature ? boundsOf(feature.geometry) : boundsOfMunicipality(lgu);
+    if (bounds) map.flyToBounds?.(bounds, { padding: [24, 24], duration: 0.8 });
+  }, [shapes, barangay, lgu, map]);
+  return null;
+}
+
 // The barangay lines, fetched only when an office's dashboard needs them.
 let barangaysOnce = null;
 const loadBarangayShapes = () => {
@@ -723,7 +736,7 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
         </div>
 
         {/* What needs doing, before what there is to read */}
-        {top && <div className="mt-5">{top}</div>}
+        {top && <div className="mt-5">{typeof top === 'function' ? top({ barangay }) : top}</div>}
 
         {loadError && (
           <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -807,10 +820,13 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
                 onEachFeature={(feature, layer) => {
                   const name = feature.properties.barangay;
                   layer.bindTooltip?.(name, { sticky: true, direction: 'top', className: 'text-xs' });
+                  // The one chosen drawn over its neighbours, its whole outline showing.
+                  if (name === barangay) setTimeout(() => layer.bringToFront?.(), 0);
                   layer.on({ click: () => setBarangay(name === barangayRef.current ? '' : name) });
                 }}
               />
             )}
+            <BarangayFocus shapes={barangayShapes} barangay={barangay} lgu={lockedLgu} />
             <FocusController selected={selectedLgu} />
 
             {mapPins.map((position, i) => (

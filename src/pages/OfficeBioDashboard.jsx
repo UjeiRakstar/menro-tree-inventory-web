@@ -36,10 +36,15 @@ export default function OfficeBioDashboard() {
     [board.data.tags]
   );
 
-  const top = (
+  // Rendered by the dashboard, which knows the barangay chosen.
+  const top = ({ barangay }) => (
     <section aria-label="What needs action" className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
       <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">
-        {chosen ? `${chosen.label} — what needs action` : 'Laguna — what needs action'}
+        {barangay
+          ? `Brgy. ${barangay}, ${chosen?.label} — what needs action`
+          : chosen
+            ? `${chosen.label} — what needs action`
+            : 'Laguna — what needs action'}
       </h2>
       <div className="mt-3">
         {board.loading ? (
@@ -49,7 +54,7 @@ export default function OfficeBioDashboard() {
         ) : board.loadError ? (
           <p role="alert" className="text-sm text-red-700">{board.loadError}</p>
         ) : (
-          <ActionSummary data={board.data} labelOf={board.labelOf} lgu={chosen ? chosen.psgc : undefined} />
+          <ActionSummary data={board.data} labelOf={board.labelOf} lgu={chosen ? chosen.psgc : undefined} barangay={barangay} />
         )}
       </div>
     </section>

@@ -74,7 +74,10 @@ function Shell() {
   // so its panels and controls are placed against it, not the window.
   const mainClassName = isMapRoute
     ? 'relative flex-1 overflow-hidden'
-    : 'flex-1 overflow-auto p-6';
+    // relative: what a page positions absolutely (a hint's pop-up, say) is
+    // placed against this scrolling area, not the window, which it otherwise
+    // stretched far below the footer.
+    : 'relative flex-1 overflow-auto p-6';
   return (
     <div className="h-screen flex flex-col">
       <Header />

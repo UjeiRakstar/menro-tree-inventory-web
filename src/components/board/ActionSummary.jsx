@@ -15,6 +15,7 @@ import {
   tallyBoard,
 } from '../../lib/provinceBoard.js';
 import { namriaClassById } from '../../lib/namriaCover.js';
+import { barangayForTree } from '../../lib/barangayLookup.js';
 
 /**
  * What needs doing, what to watch, and how far along things are — the
@@ -194,6 +195,13 @@ function Count({ value, metric, where, onOpen }) {
   );
 }
 
+// Each group's look, so its tiles read as one set across a single row.
+const GROUP_STYLE = {
+  action: 'border-t-red-500',
+  watch: 'border-t-amber-500',
+  progress: 'border-t-green-600',
+};
+
 function Tile({ metric, value, note, onOpen, where = 'all of Laguna' }) {
   const tone = TONE[metric.tone];
   return (
@@ -202,14 +210,15 @@ function Tile({ metric, value, note, onOpen, where = 'all of Laguna' }) {
       disabled={!value}
       onClick={onOpen}
       aria-label={`${value} — ${metric.label}, ${where}`}
-      className="rounded-2xl border border-slate-200 bg-white p-3 text-left transition enabled:hover:shadow-md disabled:cursor-default"
+      title={metric.label}
+      className={`rounded-xl border border-t-4 border-slate-200 bg-white px-3 py-2 text-left transition enabled:hover:shadow-md disabled:cursor-default ${GROUP_STYLE[metric.group] ?? ''}`}
     >
-      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        <span className={`h-2.5 w-2.5 rounded-full ${tone.dot}`} aria-hidden="true" /> {metric.short}
+      <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${tone.dot}`} aria-hidden="true" /> {metric.short}
       </span>
-      <span className={`mt-1 block text-2xl font-bold ${value ? tone.text : 'text-slate-300'}`}>{value}</span>
-      <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">{metric.label}</span>
-      {note && <span className="mt-0.5 block text-[11px] font-semibold leading-tight text-slate-600">{note}</span>}
+      <span className={`block text-xl font-bold leading-tight ${value ? tone.text : 'text-slate-300'}`}>{value}</span>
+      <span className="block text-[10.5px] leading-tight text-slate-500">{metric.label}</span>
+      {note && <span className="block text-[10.5px] font-semibold leading-tight text-slate-600">{note}</span>}
     </button>
   );
 }
@@ -217,6 +226,8 @@ function Tile({ metric, value, note, onOpen, where = 'all of Laguna' }) {
 function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, lguLabel = '' }) {
   const one = lgu !== undefined;
   const [showAll, setShowAll] = useState(false);
+  // The table of every LGU is long; it opens when wanted, below the tiles.
+  const [showTable, setShowTable] = useState(false);
   const { byLgu, totals } = useMemo(() => tallyBoard(trees, tags, areas), [trees, tags, areas]);
   const lgusWithOffice = lgus.filter((lgu) => offices.get(lgu.psgc)).length;
 
@@ -240,11 +251,20 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
     metric.key === 'mapped' && shown.coverHa > 0 ? `${hectares(shown.coverHa)} ha of tree cover` : '';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
+      {/* One row of tiles, coloured by group — the three groups used to be
+          three rows of four with half of each row empty. */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+        {GROUPS.map(([group, title]) => (
+          <span key={group} className="inline-flex items-center gap-1.5">
+            <span className={`h-1 w-4 rounded-full border-t-4 ${GROUP_STYLE[group]}`} aria-hidden="true" />
+            {title}
+          </span>
+        ))}
+      </div>
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${one ? 'xl:grid-cols-8' : 'xl:grid-cols-9'}`}>
       {GROUPS.map(([group, title]) => (
-        <section key={group} aria-label={title}>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">{title}</h2>
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <section key={group} aria-label={title} className="contents">
             {BOARD_METRICS.filter((metric) => metric.group === group).map((metric) => (
               <Tile
                 key={metric.key}
@@ -256,22 +276,22 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
               />
             ))}
             {group === 'progress' && !one && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <Building2 size={12} aria-hidden="true" /> Offices
+              <div className="rounded-xl border border-t-4 border-slate-200 border-t-green-600 bg-white px-3 py-2">
+                <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
+                  <Building2 size={11} aria-hidden="true" /> Offices
                 </span>
-                <span className="mt-1 block text-2xl font-bold text-slate-800">
+                <span className="block text-xl font-bold leading-tight text-slate-800">
                   {lgusWithOffice}
                   <span className="text-sm font-semibold text-slate-400"> of {lgus.length}</span>
                 </span>
-                <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+                <span className="block text-[10.5px] leading-tight text-slate-500">
                   LGUs with an active MENRO / CENRO account
                 </span>
               </div>
             )}
-          </div>
         </section>
       ))}
+      </div>
 
       {one ? (
         <p className="text-xs text-slate-500">
@@ -283,6 +303,18 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
         <p className="text-xs text-slate-500">
           {totals.trees} standing trees in the inventory. Tap a number to see what is behind it.
         </p>
+        <button
+          type="button"
+          onClick={() => setShowTable((v) => !v)}
+          aria-expanded={showTable}
+          className="rounded-lg px-3 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-300 hover:bg-green-50"
+        >
+          {showTable ? 'Hide' : 'Show'} the numbers by city and municipality
+        </button>
+      </div>
+      {showTable && (
+      <>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <label className="flex items-center gap-2 text-xs text-slate-600">
           <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
           Show LGUs with nothing yet
@@ -352,6 +384,8 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
       </p>
       </>
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -402,12 +436,26 @@ export function useBoardData() {
  * The summary itself. `lgu` (a PSGC code) narrows it to one LGU; without
  * it, the province.
  */
-export default function ActionSummary({ data, labelOf, lgu = undefined }) {
+export default function ActionSummary({ data: all, labelOf, lgu = undefined, barangay = '' }) {
   const [open, setOpen] = useState(null); // { metric, lgu }
+  // One barangay of the LGU, when the dashboard is narrowed to it. A tree's
+  // barangay is where it stands, as the dashboard's figures count it.
+  const data = useMemo(
+    () =>
+      barangay
+        ? {
+            ...all,
+            trees: all.trees.filter((tree) => barangayForTree(tree) === barangay),
+            tags: all.tags.filter((tag) => tag.barangay === barangay),
+            areas: all.areas.filter((area) => area.barangay === barangay),
+          }
+        : all,
+    [all, barangay]
+  );
   const offices = useMemo(() => officesByLgu(data.profiles), [data.profiles]);
   const openMetric = open && metricByKey(open.metric);
   const openRows = open ? rowsBehind(open.metric, open.lgu, data.trees, data.tags, data.areas) : [];
-  const lguLabel = lgu !== undefined ? labelOf(lgu) : 'all of Laguna';
+  const lguLabel = barangay ? `Brgy. ${barangay}` : lgu !== undefined ? labelOf(lgu) : 'all of Laguna';
 
   return (
     <>
@@ -424,7 +472,7 @@ export default function ActionSummary({ data, labelOf, lgu = undefined }) {
       {openMetric && (
         <RowsDialog
           metric={openMetric}
-          lguLabel={open.lgu === undefined ? 'All of Laguna' : labelOf(open.lgu)}
+          lguLabel={open.lgu === undefined ? 'All of Laguna' : barangay ? lguLabel : labelOf(open.lgu)}
           rows={openRows}
           onClose={() => setOpen(null)}
           labelOf={labelOf}

@@ -44,12 +44,14 @@ function renderBoard() {
 }
 
 /** The province's summary — on PGENRO's BioDashboard now, not the Action Board. */
-function renderOverview() {
-  return render(
+async function renderOverview({ table = true } = {}) {
+  render(
     <MemoryRouter>
       <ProvinceOverview />
     </MemoryRouter>
   );
+  // The table of every LGU opens when wanted, below the tiles.
+  if (table) fireEvent.click(await screen.findByRole('button', { name: /Show the numbers by city and municipality/ }));
 }
 
 beforeEach(() => {
@@ -79,7 +81,7 @@ afterEach(cleanup);
 
 describe('the province overview', () => {
   it('counts each LGU’s hazards, tags and stem quality, worst first', async () => {
-    renderOverview();
+    await renderOverview();
     const table = await screen.findByRole('table');
     const rows = within(table).getAllByRole('row').slice(1);
     // Santa Cruz has two hazards nobody is on; Pila has none.
@@ -92,7 +94,7 @@ describe('the province overview', () => {
   });
 
   it('opens the trees behind a number, each a link to the map', async () => {
-    renderOverview();
+    await renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — Santa Cruz' });
@@ -101,13 +103,13 @@ describe('the province overview', () => {
   });
 
   it('opens the province’s from the totals at the top', async () => {
-    renderOverview();
+    await renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
     expect(screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' })).toBeInTheDocument();
   });
 
   it('lists the province’s by city or municipality, each opened when wanted, with no tree ids', async () => {
-    renderOverview();
+    await renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
     const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' });
     expect(dialog).toHaveTextContent('2 trees in 1 city or municipality');
@@ -121,7 +123,7 @@ describe('the province overview', () => {
   });
 
   it('shows progress across the province: areas mapped, sites open, and which LGUs have an office', async () => {
-    renderOverview();
+    await renderOverview();
     const progress = await screen.findByRole('region', { name: 'Progress' });
     expect(within(progress).getByRole('button', { name: '1 — Land cover areas mapped, all of Laguna' })).toHaveTextContent('2.5 ha of tree cover');
     expect(within(progress).getByText('LGUs with an active MENRO / CENRO account').parentElement).toHaveTextContent(/1\s*of 2/);
@@ -138,8 +140,14 @@ describe('the province overview', () => {
     expect(within(dialog).getByRole('link', { name: /On the map/ })).toHaveAttribute('href', '/map?area=s1');
   });
 
+  it('keeps the tiles in one row, and the long table shut until asked for', async () => {
+    await renderOverview({ table: false });
+    expect(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
   it('is read-only: nothing on it dispatches or issues a permit', async () => {
-    renderOverview();
+    await renderOverview();
     await screen.findByRole('table');
     expect(screen.queryByRole('button', { name: /Dispatch|Re-assign|Issue permit/ })).not.toBeInTheDocument();
   });
