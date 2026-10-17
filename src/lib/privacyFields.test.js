@@ -19,6 +19,11 @@ describe('personal data in a map file', () => {
     expect(personalByName('Owner_Name')).toMatch(/name/);
     expect(personalByName('CONTACT_NO')).toMatch(/contact/);
     expect(personalByName('CLASSIFICA')).toBe('');
+    // Headed in Filipino, as some LGU files are.
+    expect(personalByName('MAY_ARI')).toMatch(/name/);
+    expect(personalByName('Pangalan')).toMatch(/name/);
+    expect(personalByName('TIRAHAN')).toMatch(/address/);
+    expect(personalByName('URI_NG_LUPA')).toBe('');
   });
 
   it('keeps what the land is, even where a comma makes it look like "SURNAME, FIRSTNAME"', () => {
