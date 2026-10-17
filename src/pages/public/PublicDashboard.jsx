@@ -385,7 +385,34 @@ function PairChart({ pair, rows, scopeLabel }) {
   );
 }
 
+/**
+ * The public BioDashboard, as everyone sees it.
+ */
 export default function PublicDashboard() {
+  return <BioDashboardView />;
+}
+
+// The barangay lines, fetched only when an office's dashboard needs them.
+let barangaysOnce = null;
+const loadBarangayShapes = () => {
+  barangaysOnce ??= import('../../data/Laguna-Barangays.geojson').then((module) => module.default);
+  return barangaysOnce;
+};
+const BARANGAY_STYLE = { color: '#64748b', weight: 1, opacity: 0.8, dashArray: '3 3', fillColor: '#16a34a', fillOpacity: 0.03 };
+const BARANGAY_SELECTED_STYLE = { color: '#15803d', weight: 2.5, opacity: 1, dashArray: null, fillColor: '#22c55e', fillOpacity: 0.3 };
+
+/**
+ * The BioDashboard, for whoever is reading it (decided 17 October):
+ *
+ *   audience 'public'  the province, an LGU chosen from the seals; Download
+ *   audience 'pgenro'  the same, without Download — and `top`, PGENRO's
+ *                      summary of what needs action, above the figures
+ *   lockedLgu          an office's own LGU, always: no seals to choose from,
+ *                      but its barangays — from a list, or on its map
+ *
+ * `top` is what the reader must act on, put before what they read.
+ */
+export function BioDashboardView({ audience = 'public', lockedLgu = null, top = null }) {
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -399,7 +426,10 @@ export default function PublicDashboard() {
    */
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedLgu = searchParams.get('lgu') || '';
-  const selectedLgu = municipalityNamed(requestedLgu) ? requestedLgu : '';
+  const selectedLgu = lockedLgu ?? (municipalityNamed(requestedLgu) ? requestedLgu : '');
+  // An office's dashboard narrows to one of its barangays, or none.
+  const [barangay, setBarangay] = useState('');
+  const barangayNames = useMemo(() => (lockedLgu ? barangaysOf(lockedLgu) : []), [lockedLgu]);
 
   const setSelectedLgu = (name) =>
     setSearchParams(
@@ -468,9 +498,32 @@ export default function PublicDashboard() {
     return areas;
   }, [trees]);
 
-  const scopedTrees = useMemo(
+  // The barangay of a tree is worked out from where it stands, not from the
+  // name someone typed — so the index has to arrive before the bars are right.
+  const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
+  useEffect(() => {
+    // Only when some tree still needs working out. Every row the database has
+    // settled already carries its barangay, so there is nothing to fetch.
+    if (!needsBarangayIndex(trees)) return undefined;
+    let cancelled = false;
+    loadBarangayIndex()
+      .then(() => !cancelled && setBarangaysReady(true))
+      .catch(() => {
+        // The written names carry the chart until a reload; nothing to say.
+      });
+    return () => { cancelled = true; };
+  }, [trees]);
+
+  // The LGU in view — and, within it, the barangay chosen, if any.
+  const lguTrees = useMemo(
     () => (selectedLgu ? trees.filter((tree) => treeAreas.get(tree.id) === selectedLgu) : trees),
     [trees, treeAreas, selectedLgu]
+  );
+  const scopedTrees = useMemo(
+    () => (barangay ? lguTrees.filter((tree) => barangayForTree(tree) === barangay) : lguTrees),
+    // barangaysReady re-runs this once the boundaries are in hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lguTrees, barangay, barangaysReady]
   );
 
   const totals = useMemo(() => summarise(scopedTrees), [scopedTrees]);
@@ -515,37 +568,46 @@ export default function PublicDashboard() {
     return `From ${formatFigure(carbonMeasured)} of ${formatFigure(treeCount)} trees measured`;
   }, [totals]);
 
-  // The barangay of a tree is worked out from where it stands, not from the
-  // name someone typed — so the index has to arrive before the bars are right.
-  const [barangaysReady, setBarangaysReady] = useState(barangayIndexReady);
-  useEffect(() => {
-    // Only when some tree still needs working out. Every row the database has
-    // settled already carries its barangay, so there is nothing to fetch.
-    if (!needsBarangayIndex(trees)) return undefined;
-    let cancelled = false;
-    loadBarangayIndex()
-      .then(() => !cancelled && setBarangaysReady(true))
-      .catch(() => {
-        // The written names carry the chart until a reload; nothing to say.
-      });
-    return () => { cancelled = true; };
-  }, [trees]);
-
   // Across the province the bars are LGUs; inside one, they are its barangays.
   const chartRows = useMemo(
     () =>
       selectedLgu
-        ? groupBy(scopedTrees, barangayForTree)
-        : groupBy(scopedTrees, (tree) => {
+        ? groupBy(lguTrees, barangayForTree)
+        : groupBy(lguTrees, (tree) => {
             const name = treeAreas.get(tree.id);
             return name ? labelOf(name) : null;
           }),
     // barangaysReady is not read here; it is what re-runs this once the
     // boundaries are in hand.
-    [scopedTrees, selectedLgu, treeAreas, barangaysReady]
+    [lguTrees, selectedLgu, treeAreas, barangaysReady]
   );
 
-  const scopeLabel = selectedLgu ? labelOf(selectedLgu) : 'Laguna';
+  const scopeLabel = barangay
+    ? `Brgy. ${barangay}, ${labelOf(selectedLgu)}`
+    : selectedLgu
+      ? labelOf(selectedLgu)
+      : 'Laguna';
+
+  // An office's map shows its barangays, each a click away from being chosen.
+  const [barangayShapes, setBarangayShapes] = useState(null);
+  useEffect(() => {
+    if (!lockedLgu) return undefined;
+    let cancelled = false;
+    loadBarangayShapes()
+      .then((data) => {
+        if (cancelled) return;
+        setBarangayShapes({
+          type: 'FeatureCollection',
+          features: data.features.filter((f) => f.properties.municipality === lockedLgu),
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [lockedLgu]);
+  const barangayRef = useRef('');
+  barangayRef.current = barangay;
 
   // Tree cover the LGU offices have mapped, in the place in view.
   const savedAreas = useMapAreas();
@@ -594,7 +656,7 @@ export default function PublicDashboard() {
           crushed twenty-six barangay names into half of what was left. */}
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* Who you are looking at */}
-        <LguStrip selected={selectedLgu} onSelect={setSelectedLgu} />
+        {!lockedLgu && <LguStrip selected={selectedLgu} onSelect={setSelectedLgu} />}
 
         {/* What you are looking at.
             The title and the freshness line stack in one column so the title
@@ -624,6 +686,23 @@ export default function PublicDashboard() {
             </p>
           </div>
 
+          {lockedLgu && (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              Barangay
+              <select
+                value={barangay}
+                onChange={(event) => setBarangay(event.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 focus:border-green-600 focus:outline-none"
+              >
+                <option value="">All of {labelOf(lockedLgu)}</option>
+                {barangayNames.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {audience === 'public' && (
           <span className="inline-flex items-center gap-2">
             <button
               type="button"
@@ -640,7 +719,11 @@ export default function PublicDashboard() {
               text="Tables, maps and images of this inventory. The exports are still being prepared."
             />
           </span>
+          )}
         </div>
+
+        {/* What needs doing, before what there is to read */}
+        {top && <div className="mt-5">{top}</div>}
 
         {loadError && (
           <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -716,6 +799,18 @@ export default function PublicDashboard() {
               onEachFeature={bindMunicipality}
             />
             <GeoJSON data={LAGUNA_PROVINCE} style={PROVINCE_STYLE} interactive={false} />
+            {barangayShapes && (
+              <GeoJSON
+                key={`brgy-${barangay}`}
+                data={barangayShapes}
+                style={(feature) => (feature.properties.barangay === barangay ? BARANGAY_SELECTED_STYLE : BARANGAY_STYLE)}
+                onEachFeature={(feature, layer) => {
+                  const name = feature.properties.barangay;
+                  layer.bindTooltip?.(name, { sticky: true, direction: 'top', className: 'text-xs' });
+                  layer.on({ click: () => setBarangay(name === barangayRef.current ? '' : name) });
+                }}
+              />
+            )}
             <FocusController selected={selectedLgu} />
 
             {mapPins.map((position, i) => (

@@ -13,6 +13,7 @@ vi.mock('file-saver', () => ({ saveAs: saveAsSpy, default: { saveAs: saveAsSpy }
 import { supabaseMock } from '../../test/supabaseMock.js';
 import { PGENRO_ADMIN } from '../../test/accounts.js';
 import ActionBoard from '../ActionBoard.jsx';
+import ActionSummary, { ProvinceOverview } from '../../components/board/ActionSummary.jsx';
 
 const SCZ = 403426000;
 const PILA = 403422000;
@@ -38,6 +39,15 @@ function renderBoard() {
   return render(
     <MemoryRouter>
       <ActionBoard />
+    </MemoryRouter>
+  );
+}
+
+/** The province's summary — on PGENRO's BioDashboard now, not the Action Board. */
+function renderOverview() {
+  return render(
+    <MemoryRouter>
+      <ProvinceOverview />
     </MemoryRouter>
   );
 }
@@ -69,7 +79,7 @@ afterEach(cleanup);
 
 describe('the province overview', () => {
   it('counts each LGU’s hazards, tags and stem quality, worst first', async () => {
-    renderBoard();
+    renderOverview();
     const table = await screen.findByRole('table');
     const rows = within(table).getAllByRole('row').slice(1);
     // Santa Cruz has two hazards nobody is on; Pila has none.
@@ -82,7 +92,7 @@ describe('the province overview', () => {
   });
 
   it('opens the trees behind a number, each a link to the map', async () => {
-    renderBoard();
+    renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — Santa Cruz' });
@@ -91,13 +101,13 @@ describe('the province overview', () => {
   });
 
   it('opens the province’s from the totals at the top', async () => {
-    renderBoard();
+    renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
     expect(screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' })).toBeInTheDocument();
   });
 
   it('lists the province’s by city or municipality, each opened when wanted, with no tree ids', async () => {
-    renderBoard();
+    renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: '2 — Hazards, nobody sent, all of Laguna' }));
     const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — All of Laguna' });
     expect(dialog).toHaveTextContent('2 trees in 1 city or municipality');
@@ -111,7 +121,7 @@ describe('the province overview', () => {
   });
 
   it('shows progress across the province: areas mapped, sites open, and which LGUs have an office', async () => {
-    renderBoard();
+    renderOverview();
     const progress = await screen.findByRole('region', { name: 'Progress' });
     expect(within(progress).getByRole('button', { name: '1 — Land cover areas mapped, all of Laguna' })).toHaveTextContent('2.5 ha of tree cover');
     expect(within(progress).getByText('LGUs with an active MENRO / CENRO account').parentElement).toHaveTextContent(/1\s*of 2/);
@@ -129,17 +139,60 @@ describe('the province overview', () => {
   });
 
   it('is read-only: nothing on it dispatches or issues a permit', async () => {
-    renderBoard();
+    renderOverview();
     await screen.findByRole('table');
     expect(screen.queryByRole('button', { name: /Dispatch|Re-assign|Issue permit/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/Read-only/)).toBeInTheDocument();
+  });
+
+  it('has moved off the Action Board, which says where it went', async () => {
+    renderBoard();
+    expect(await screen.findByText(/Read-only/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'BioDashboard' })).toHaveAttribute('href', '/biodiversity-dashboard');
+    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument();
+  });
+});
+
+describe('one LGU’s summary, on its office’s BioDashboard', () => {
+  const DATA = {
+    trees: TREES,
+    tags: [{ id: 9, species: 'Duhat', lgu_psgc: SCZ, status: 'pending' }],
+    areas: [],
+    profiles: [],
+    lgus: LGUS,
+    permits: [],
+  };
+  const labelOf = (lgu) => LGUS.find((row) => row.psgc === lgu)?.label ?? String(lgu);
+
+  it('counts that LGU alone, with no table of the others', () => {
+    render(
+      <MemoryRouter>
+        <ActionSummary data={DATA} labelOf={labelOf} lgu={SCZ} />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('LGUs with an active MENRO / CENRO account')).not.toBeInTheDocument();
+  });
+
+  it('lists what is behind a number by barangay', () => {
+    render(
+      <MemoryRouter>
+        <ActionSummary data={DATA} labelOf={labelOf} lgu={SCZ} />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('button', { name: '2 — Hazards, nobody sent, Santa Cruz' }));
+    const dialog = screen.getByRole('dialog', { name: 'Hazards, nobody sent — Santa Cruz' });
+    expect(dialog).toHaveTextContent('2 trees in 1 barangay');
+    expect(within(dialog).getByRole('button', { name: /Labuin/ })).toHaveAttribute('aria-expanded', 'true');
   });
 });
 
 describe('the permit logs', () => {
   async function openPermits() {
     renderBoard();
+    // The permit logs are the Action Board's first tab now.
     fireEvent.click(await screen.findByRole('tab', { name: 'Permit logs' }));
+    await screen.findAllByRole('table');
   }
 
   it('groups every LGU’s permits under it', async () => {

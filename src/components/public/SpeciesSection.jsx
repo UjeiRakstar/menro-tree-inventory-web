@@ -207,6 +207,16 @@ export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
   const warnings = overPlanted(trees);
   const origin = originMix(trees);
   const uses = categoryMix(trees);
+  // Which invasive species, and how many of each: what to replace first.
+  const invasive = (() => {
+    const bySpecies = new Map();
+    for (const tree of trees ?? []) {
+      if (tree?.species_type !== 'Invasive') continue;
+      const name = tree.species || 'Unidentified';
+      bySpecies.set(name, (bySpecies.get(name) ?? 0) + 1);
+    }
+    return [...bySpecies].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  })();
   const total = richness.total;
 
   const top = counts.slice(0, SHOWN);
@@ -336,6 +346,28 @@ export default function SpeciesSection({ trees, scopeLabel, className = '' }) {
                 { label: 'Not recorded', count: uses.unrecorded, tone: '#cbd5e1' },
               ]}
             />
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Invasive species here</h3>
+            {invasive.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-600">No tree in {scopeLabel} is recorded as invasive.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {invasive.slice(0, 6).map(([name, count]) => (
+                  <li key={name} className="flex items-center gap-2 text-sm">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" aria-hidden="true" />
+                    <span className="flex-1 text-slate-700">{name}</span>
+                    <span className="font-semibold text-slate-900">{count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {invasive.length > 6 && (
+              <p className="mt-1 text-[11px] text-slate-500">and {invasive.length - 6} more species.</p>
+            )}
+            <p className="mt-2 text-[11px] leading-snug text-slate-500">
+              Where these come down, a native species is the one to plant in their place.
+            </p>
           </div>
         </div>
       </div>

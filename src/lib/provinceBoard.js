@@ -137,6 +137,7 @@ export const treeCoverHa = (area) =>
   area?.kind === 'land-cover' && namriaClassById(area.cover_class)?.treeCover ? (Number(area.area_m2) || 0) / 10000 : 0;
 
 const emptyCounts = () => Object.fromEntries(BOARD_METRICS.map((metric) => [metric.key, 0]));
+export const emptyBoardCounts = emptyCounts;
 
 /**
  * Every count, per LGU and for the province.
@@ -238,6 +239,19 @@ export function rowsByLgu(rows, { of = 'trees' } = {}) {
     const lgu = lguOf(row);
     if (!groups.has(lgu)) groups.set(lgu, []);
     groups.get(lgu).push(row);
+  }
+  return [...groups]
+    .map(([lgu, list]) => ({ lgu, rows: list }))
+    .sort((a, b) => (a.lgu === null) - (b.lgu === null) || b.rows.length - a.rows.length);
+}
+
+/** The rows behind one LGU's number, by barangay: [{ lgu: barangay name, rows }]. */
+export function rowsByBarangay(rows) {
+  const groups = new Map();
+  for (const row of rows ?? []) {
+    const name = row?.barangay || null;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(row);
   }
   return [...groups]
     .map(([lgu, list]) => ({ lgu, rows: list }))

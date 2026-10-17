@@ -35,7 +35,7 @@ const MapSheet = lazy(() => import('./pages/MapSheet.jsx'));
 const Settings = lazy(() => import('./pages/settings/Settings.jsx'));
 const ManageArborists = lazy(() => import('./pages/ManageArborists.jsx'));
 const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
-const BiodiversityDashboard = lazy(() => import('./pages/BiodiversityDashboard.jsx'));
+const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
 /** Shown for the moment a page's code is in flight. */
@@ -211,7 +211,7 @@ function AppRoutes() {
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />
         <Route path="permits" element={<PermitsLog />} />
-        <Route path="biodiversity-dashboard" element={<BiodiversityDashboard />} />
+        <Route path="biodiversity-dashboard" element={<OfficeBioDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Route>
       </Routes>
