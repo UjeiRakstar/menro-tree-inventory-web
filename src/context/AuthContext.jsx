@@ -92,6 +92,14 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/**
+ * The same, or null outside an AuthProvider — for a page that also renders on
+ * its own (in a test) and only narrows what it shows when it knows the account.
+ */
+export function useAuthIfAny() {
+  return useContext(AuthContext);
+}
+
 export function useAuth() {
   const value = useContext(AuthContext);
   if (!value) throw new Error('useAuth must be used inside <AuthProvider>.');

@@ -2,8 +2,17 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { Users, UserPlus, Trash2, UserCheck, Check, X, MapPin } from 'lucide-react';
 import { LGU_OPTIONS, barangaysOf, labelOf } from '../lib/lguOptions.js';
+import { useAuthIfAny } from '../context/AuthContext.jsx';
+import { ROLES, roleOf } from '../lib/roles.js';
 
 export default function ManageArborists() {
+  // A MENRO / CENRO makes field officers for its own LGU only: an officer
+  // placed elsewhere would land out of its sight (found 15 October).
+  const auth = useAuthIfAny();
+  const ownLgu =
+    roleOf(auth?.profile) === ROLES.LGU_ADMIN
+      ? LGU_OPTIONS.find((lgu) => lgu.psgc === Number(auth.profile.lgu_psgc)) ?? null
+      : null;
   const [arborists, setArborists] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loadingArborists, setLoadingArborists] = useState(true);
@@ -14,7 +23,7 @@ export default function ManageArborists() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [contactNumber, setContactNumber] = useState('');
-  const [municipality, setMunicipality] = useState('');
+  const [municipality, setMunicipality] = useState(ownLgu?.name ?? '');
   const [barangay, setBarangay] = useState('');
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [formErrors, setFormErrors] = useState({});
@@ -366,7 +375,7 @@ export default function ManageArborists() {
     setName('');
     setEmail('');
     setContactNumber('');
-    setMunicipality('');
+    setMunicipality(ownLgu?.name ?? '');
     setBarangay('');
     setTemporaryPassword('');
     setFormErrors({});
@@ -613,6 +622,13 @@ export default function ManageArborists() {
             <span className="text-sm font-medium text-slate-700">
               Municipality / City <span className="text-slate-400 font-normal">(geofenced area)</span>
             </span>
+            {ownLgu ? (
+              <input
+                readOnly
+                value={ownLgu.label}
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700"
+              />
+            ) : (
             <select
               value={municipality}
               onChange={(e) => {
@@ -629,9 +645,12 @@ export default function ManageArborists() {
                 <option key={lgu.psgc} value={lgu.name}>{lgu.label}</option>
               ))}
             </select>
+            )}
             {formErrors.municipality
               ? <p className="mt-1 text-xs text-red-600">{formErrors.municipality}</p>
-              : <span className="mt-1 block text-[10px] text-slate-400">The arborist cannot record trees outside this LGU.</span>}
+              : <span className="mt-1 block text-[10px] text-slate-400">
+                  {ownLgu ? 'Your own LGU: an office makes field officers for itself only.' : 'The arborist cannot record trees outside this LGU.'}
+                </span>}
           </label>
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Barangay</span>

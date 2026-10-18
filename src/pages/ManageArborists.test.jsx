@@ -107,6 +107,12 @@ describe('ManageArborists', () => {
     // Sidebar is rendered as <nav> (role="navigation").
     expect(screen.getAllByRole('navigation').length).toBeGreaterThan(0);
 
+    // A MENRO makes field officers for its own LGU only: no list of thirty.
+    const municipality = screen.getByLabelText(/Municipality \/ City/);
+    expect(municipality.tagName).toBe('INPUT');
+    expect(municipality).toHaveValue('Santa Cruz');
+    expect(municipality).toHaveAttribute('readonly');
+
     // Header is rendered as <header>. The page itself also wraps its <h1> in a
     // <header> element, so both carry the implicit banner role under
     // @testing-library/dom — query by the app title text, which is unique to
