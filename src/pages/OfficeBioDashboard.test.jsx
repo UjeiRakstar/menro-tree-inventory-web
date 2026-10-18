@@ -126,7 +126,7 @@ describe('the BioDashboard of a MENRO / CENRO', () => {
     fireEvent.change(screen.getByLabelText('Barangay'), { target: { value: 'Barangay III' } });
     expect(await screen.findByRole('heading', { level: 1, name: 'Brgy. Barangay III, Santa Cruz Biodiversity Analytics' })).toBeInTheDocument();
     expect((await treeCount()).getByText('1')).toBeInTheDocument();
-    await waitFor(() => expect(JSON.parse(screen.getByTestId('chart').dataset.rows)).toHaveLength(3));
+    await waitFor(() => expect(JSON.parse(screen.getAllByTestId('chart')[0].dataset.rows)).toHaveLength(3));
   });
 
   it('narrows what needs action to the barangay chosen too, and flies the map to it', async () => {

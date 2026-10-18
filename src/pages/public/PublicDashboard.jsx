@@ -101,12 +101,12 @@ const styleFor = (name, selected) => (name === selected ? SELECTED_STYLE : MUNIC
  * on screen with them. Behind tabs each is a step a reader takes on purpose.
  */
 const DETAIL_TABS = [
+  // First (decided 18 October): the figures the offices report.
+  { key: 'forestry', label: 'Forestry', icon: TreePine },
   { key: 'species', label: 'Species', icon: Leaf },
   { key: 'places', label: 'Places', icon: MapPin },
   { key: 'sizes', label: 'Sizes', icon: Ruler },
   { key: 'survey', label: 'Survey', icon: CalendarRange },
-  // Last, and on purpose: inventory terms for the people who report them.
-  { key: 'forestry', label: 'Forestry', icon: TreePine },
 ];
 
 /** Series colours, matched to how each figure reads: growth green, pressure red. */
@@ -236,7 +236,7 @@ function WorkingsCard({ trees }) {
     },
     { label: 'Wood density', value: `${WOOD_DENSITY} t/m³` },
     { label: 'Biomass expansion factor', value: `${BIOMASS_EXPANSION_FACTOR}×` },
-    { label: 'Carbon fraction', value: `${CARBON_FRACTION}`, note: 'IPCC default' },
+    { label: 'Carbon fraction', value: `${CARBON_FRACTION}`, note: 'Philippine wood (Lasco & Pulhin 2000)' },
     {
       label: 'Shortest bole counted',
       value: `${MIN_MERCHANTABLE_HEIGHT_M} m`,
@@ -262,17 +262,16 @@ function WorkingsCard({ trees }) {
         ))}
       </dl>
 
-      {/* The one number on this page with no source behind it, said plainly
-          and set apart so nobody has to go looking for the weak link. */}
+      {/* Borrowed: a Philippine measurement, not a Laguna one. */}
       <ProvisionalNote
-        kind="assumed"
+        kind="borrowed"
         title={`${ANNUAL_DBH_GROWTH_CM} cm of diameter growth a year`}
         className="mt-3"
       >
-        The mean annual increment rests entirely on this, and it is the only figure here with no
-        measurement or publication behind it. It is set low on purpose, so the increment understates
-        rather than flatters. Replace it with a measured or published rate for Laguna and the figure
-        above becomes exact — everything scales straight off it.
+        The mean annual increment of sixty species on Leyte (Schneider et al. 2013), applied to city
+        trees in Cebu (Pansit 2019). Measured in the Philippines rather than in Laguna, and applicable
+        here; the increment scales straight off it, so a figure measured on Laguna&apos;s own trees would
+        make it exact.
       </ProvisionalNote>
 
       <ProvisionalNote kind="awaiting" title="per hectare" className="mt-2">

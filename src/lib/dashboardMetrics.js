@@ -217,7 +217,7 @@ export const METRIC_PAIRS = [
           'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
           'using each tree’s diameter at breast height and merchantable height. Trees with no ' +
           'recorded merchantable height are left out rather than guessed at.' +
-          ' Then wood density, biomass expansion and the IPCC carbon fraction.',
+          ' Then wood density, biomass expansion and the carbon content of Philippine wood (Lasco & Pulhin 2000).',
       },
       {
         key: 'carbonPerYearKg',

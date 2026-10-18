@@ -91,8 +91,10 @@ const renderDashboard = (path = '/biodiversity') =>
       <PublicDashboard />
     </MemoryRouter>
   );
-const chartRows = () => JSON.parse(screen.getByTestId('chart').dataset.rows);
-const seriesKeys = () => screen.getAllByTestId('series').map((s) => s.dataset.key);
+// The headline chart: the first on the page. The Forestry tab, open first, has its own below it.
+const headlineChart = () => screen.getAllByTestId('chart')[0];
+const chartRows = () => JSON.parse(headlineChart().dataset.rows);
+const seriesKeys = () => within(headlineChart()).getAllByTestId('series').map((s) => s.dataset.key);
 
 beforeEach(() => {
   supabaseMock.reset();
@@ -162,12 +164,14 @@ describe('PublicDashboard', () => {
     await waitFor(() => expect(seriesKeys()).toEqual(['carbonKg', 'carbonPerYearKg']));
   });
 
-  it('keeps the forestry figures behind their own tab', async () => {
+  it('keeps the forestry figures behind their own tab, the first one', async () => {
     renderDashboard();
     await screen.findByText('Total Number of Trees');
 
-    // Standing volume and mean annual increment are inventory terms. They are
-    // not a headline a public page owes its public.
+    // Standing volume and mean annual increment are inventory terms: not a
+    // headline, but the tab the offices report from opens first (18 October).
+    expect(screen.getByRole('tab', { name: 'Forestry' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Species' }));
     expect(screen.queryByText('Standing Timber Volume')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Forestry' }));
@@ -196,16 +200,16 @@ describe('PublicDashboard', () => {
     expect(within(forestry).getByText('V = c × D² × H')).toBeInTheDocument();
     expect(within(forestry).getByText('0.57 t/m³')).toBeInTheDocument();
     expect(within(forestry).getByText('1.5×')).toBeInTheDocument();
-    expect(within(forestry).getByText('0.47')).toBeInTheDocument();
+    expect(within(forestry).getByText('0.45')).toBeInTheDocument();
+    expect(within(forestry).getByText('Philippine wood (Lasco & Pulhin 2000)')).toBeInTheDocument();
 
-    // The growth rate is the only figure on this page with nothing behind it,
-    // so it is called out rather than listed among the sourced constants —
-    // and marked ASSUMED, which is the kind that moves only when somebody
-    // changes it, as against a figure that is waiting on another system.
-    const assumed = forestry.querySelector('[data-provisional="assumed"]');
-    expect(assumed).toBeTruthy();
-    expect(assumed).toHaveTextContent('0.5 cm of diameter growth a year');
-    expect(assumed).toHaveTextContent(/no measurement or publication behind it/);
+    // The growth rate is published but measured elsewhere in the Philippines,
+    // so it is BORROWED — an (i), not amber: it applies to Laguna as it is.
+    const borrowed = forestry.querySelector('[data-provisional="borrowed"]');
+    expect(borrowed).toBeTruthy();
+    expect(borrowed).toHaveTextContent('1.19 cm of diameter growth a year');
+    expect(borrowed).toHaveTextContent(/Schneider et al\. 2013/);
+    expect(borrowed.className).not.toMatch(/amber/);
 
     // Hectares are a different kind of gap: nothing here can derive them.
     expect(forestry.querySelector('[data-provisional="awaiting"]')).toHaveTextContent(
@@ -225,7 +229,7 @@ describe('PublicDashboard', () => {
 
     // And a key, so the colour means something rather than being a mood.
     expect(within(pending).getByText('Reading the figures')).toBeInTheDocument();
-    expect(within(pending).getByText(/except where it is marked in amber/)).toBeInTheDocument();
+    expect(within(pending).getByText(/except where it is marked/)).toBeInTheDocument();
 
     // The coverage note is NOT amber: it moves every time a height is
     // recorded. Amber that covers live figures too stops meaning anything.
@@ -368,13 +372,9 @@ describe('PublicDashboard', () => {
     expect(tooltips.length).toBeGreaterThan(0);
     expect(tooltips.some((t) => /FMB Technical Bulletin No\. 3/.test(t))).toBe(true);
     expect(tooltips.some((t) => /diameter at breast height/.test(t))).toBe(true);
-    // The growth assumption is named in the ⓘ, not buried in the arithmetic.
-    expect(tooltips.some((t) => /conservative/.test(t))).toBe(true);
-    // And NOT attributed to Lasco et al. The earlier mock-up cited them for
-    // this figure, but the number here does not come from them: it comes from
-    // the DENR equation and our own stated growth rate. Citing a source the
-    // figure was not taken from would be worse than citing none.
-    expect(tooltips.some((t) => /Lasco/.test(t))).toBe(false);
+    // Lasco & Pulhin are cited for what is taken from them — the carbon
+    // content of Philippine wood — and for nothing else.
+    expect(tooltips.some((t) => /Lasco & Pulhin 2000/.test(t))).toBe(true);
   });
 
   it('spells out the biomass figure instead of abbreviating it', async () => {
@@ -432,11 +432,12 @@ describe('PublicDashboard', () => {
 });
 
 describe('reading the detail one question at a time', () => {
-  it('opens on the species view, and shows only that one', async () => {
+  it('opens on the forestry view, and shows only that one', async () => {
     renderDashboard();
-    await screen.findByRole('tab', { name: 'Species' });
+    await screen.findByRole('tab', { name: 'Forestry' });
 
-    expect(screen.getByRole('region', { name: 'What is growing here' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Forestry figures' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'What is growing here' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Where the trees are' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'How old the trees are' })).not.toBeInTheDocument();
   });
@@ -456,10 +457,10 @@ describe('reading the detail one question at a time', () => {
 
   it('marks which question is open for a screen reader, not only by tint', async () => {
     renderDashboard();
-    const species = await screen.findByRole('tab', { name: 'Species' });
+    const forestry = await screen.findByRole('tab', { name: 'Forestry' });
     const places = screen.getByRole('tab', { name: 'Places' });
 
-    expect(species).toHaveAttribute('aria-selected', 'true');
+    expect(forestry).toHaveAttribute('aria-selected', 'true');
     expect(places).toHaveAttribute('aria-selected', 'false');
 
     fireEvent.click(places);
@@ -479,8 +480,8 @@ describe('a figure card', () => {
 });
 
 describe('charting a pair whose figures are not on the same scale', () => {
-  const axes = () => screen.getAllByTestId('axis');
-  const seriesAxes = () => screen.getAllByTestId('series').map((s) => s.dataset.axis);
+  const axes = () => within(headlineChart()).getAllByTestId('axis');
+  const seriesAxes = () => within(headlineChart()).getAllByTestId('series').map((s) => s.dataset.axis);
 
   it('gives each figure its own axis', async () => {
     renderDashboard();

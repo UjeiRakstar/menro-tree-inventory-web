@@ -133,8 +133,9 @@ describe('carbon', () => {
     );
   });
 
-  it('keeps the settled constants settled', () => {
-    expect(CARBON_FRACTION).toBe(0.47);
+  it('uses the carbon content of Philippine wood, and the molecular weights', () => {
+    // Lasco & Pulhin (2000), not the IPCC tropical default of 0.47.
+    expect(CARBON_FRACTION).toBe(0.45);
     expect(CO2_PER_CARBON).toBeCloseTo(3.6667, 4);
   });
 });
@@ -300,9 +301,8 @@ describe('a year of growth', () => {
     expect(annualCo2Kg({})).toBeNull();
   });
 
-  it('keeps the growth assumption conservative and visible', () => {
-    // Named rather than buried: it is the one number in the chain that does
-    // not come from the bulletin or from arithmetic.
-    expect(ANNUAL_DBH_GROWTH_CM).toBe(0.5);
+  it('grows a tree by the Philippine mean annual increment', () => {
+    // Schneider et al. (2013), as applied to city trees by Pansit (2019).
+    expect(ANNUAL_DBH_GROWTH_CM).toBe(1.19);
   });
 });

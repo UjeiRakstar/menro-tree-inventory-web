@@ -136,9 +136,11 @@ export function volumeOf(tree) {
  *   carbon               = above-ground biomass × carbon fraction
  *   carbon dioxide       = carbon × 44/12
  *
- * CARBON_FRACTION and CO2_PER_CARBON are settled science — 0.47 is the IPCC
- * default for tropical species, and 44/12 is the ratio of the molecular
- * weights, which is arithmetic.
+ * CARBON_FRACTION is Philippine: 0.45, the average carbon content of wood
+ * sampled across the Philippines (Lasco & Pulhin 2000, "Forestland use change
+ * in the Philippines and climate change mitigation", Mitigation and Adaptation
+ * Strategies for Global Change 5: 81–97), rather than the IPCC tropical default
+ * of 0.47. CO2_PER_CARBON, 44/12, is the ratio of the molecular weights.
  *
  * WOOD_DENSITY and BIOMASS_EXPANSION_FACTOR are not. Both vary by species and
  * by stand, the values here are broad tropical-hardwood defaults, and they are
@@ -152,8 +154,8 @@ export const WOOD_DENSITY = 0.57;
 /** Branches, twigs and foliage, as a multiple of the merchantable bole. */
 export const BIOMASS_EXPANSION_FACTOR = 1.5;
 
-/** Carbon as a share of oven-dry biomass. IPCC default for tropical species. */
-export const CARBON_FRACTION = 0.47;
+/** Carbon as a share of oven-dry biomass, as measured in Philippine wood (Lasco & Pulhin 2000). */
+export const CARBON_FRACTION = 0.45;
 
 /** Molecular weight of CO₂ over that of carbon. */
 export const CO2_PER_CARBON = 44 / 12;
@@ -345,24 +347,22 @@ export function readDiameterShape(distribution) {
 /**
  * How much a trunk thickens in a year, in centimetres of diameter.
  *
- * THIS IS THE ASSUMPTION IN THE WHOLE CHAIN. Everything else above comes from
- * the DENR bulletin or from arithmetic; this does not. Real growth varies by
- * species, by soil, by how much light and water a tree gets, and an urban tree
- * in a pavement cutout grows nothing like one in a park.
+ * 1.19 cm: the mean annual increment in diameter at breast height of sixty
+ * species in smallholder reforestation on Leyte (Schneider, Ashton, Montagnini
+ * & Milan 2013, "Growth performance of sixty tree species in smallholder
+ * reforestation trials on Leyte, Philippines", New Forests 45: 83–96), the
+ * figure Pansit (2019, "Carbon storage and sequestration potential of urban
+ * trees in Cebu City, Philippines", Mindanao Journal of Science and Technology
+ * 17: 98–111) applies to city trees. It replaces 0.5 cm, which was chosen
+ * rather than measured.
  *
- * It is deliberately conservative, so the sequestration figure understates
- * rather than flatters. Replace it with, in order of preference:
- *
- *   1. A MEASURED increment. Two diameter readings of the same tree at
- *      different dates is the real number and no assumption at all. The field
- *      app does not re-measure trees yet, but dateCaptured means it could.
- *   2. A PUBLISHED figure per species, from PGENRO or ERDB — this is where
- *      Lasco et al. belongs.
- *   3. This.
- *
- * Every figure derived from it is labelled an estimate and says so on the page.
+ * It is borrowed: measured in the Philippines, not in Laguna, and on
+ * reforestation sites rather than streets — an urban tree may grow slower.
+ * Better still would be, in order: two diameter readings of the same tree at
+ * different dates (the field app's dateCaptured makes that possible), then a
+ * per-species figure from PGENRO or ERDB.
  */
-export const ANNUAL_DBH_GROWTH_CM = 0.5;
+export const ANNUAL_DBH_GROWTH_CM = 1.19;
 
 /** The volume equation itself, so a year's growth can be put through it. */
 function volumeFrom(diameterCm, heightM, dipterocarp) {

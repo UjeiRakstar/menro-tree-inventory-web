@@ -37,7 +37,7 @@ export const PROVISIONAL_KINDS = {
   borrowed: {
     label: 'Borrowed',
     means:
-      'A real published measurement, but taken somewhere else and applied here. It holds until ' +
+      'A published Philippine measurement, made outside Laguna but applicable here. It holds until ' +
       'an equivalent is measured in Laguna.',
   },
   placeholder: {
@@ -53,11 +53,40 @@ export const PROVISIONAL_KINDS = {
 const kindOf = (kind) => PROVISIONAL_KINDS[kind] ?? PROVISIONAL_KINDS.awaiting;
 
 /**
+ * A borrowed figure is not a gap: it is published and it applies to Laguna,
+ * so it is marked with an (i) in blue rather than amber, and amber stays for
+ * the three kinds that need somebody to do something (decided 18 October).
+ */
+const isInfo = (kind) => kind === 'borrowed';
+
+function InfoMark({ className = '' }) {
+  return (
+    <span aria-hidden="true" className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-sky-600 text-[9px] font-bold italic leading-none text-white ${className}`}>
+      i
+    </span>
+  );
+}
+
+/**
  * The amber block: a heading and the reason, set apart from the figures around
  * it so that nobody has to go looking for the weak link.
  */
 export function ProvisionalNote({ kind = 'awaiting', title, children, className = '' }) {
   const { label } = kindOf(kind);
+  if (isInfo(kind)) {
+    return (
+      <div className={`flex gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 ${className}`} data-provisional={kind}>
+        <InfoMark className="mt-0.5" />
+        <div>
+          <p className="text-[11px] font-bold text-sky-900">
+            <span className="sr-only">{label}: </span>
+            {title}
+          </p>
+          {children ? <div className="mt-0.5 text-[10.5px] leading-snug text-sky-800">{children}</div> : null}
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className={`rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 ${className}`}
@@ -87,6 +116,15 @@ export function ProvisionalNote({ kind = 'awaiting', title, children, className 
 export function ProvisionalTag({ kind = 'awaiting', note = '', compact = false, className = '' }) {
   const { label, means } = kindOf(kind);
   const title = note ? `${label} — ${note}` : `${label} — ${means}`;
+
+  if (isInfo(kind)) {
+    return (
+      <span title={title} data-provisional={kind} className={`inline-flex items-center ${className}`}>
+        <InfoMark />
+        <span className="sr-only">{title}</span>
+      </span>
+    );
+  }
 
   if (compact) {
     return (
@@ -129,8 +167,8 @@ export function ProvisionalKey({ className = '' }) {
       <p className="mt-1 text-[11px] leading-snug text-slate-500">
         Everything on this page is counted from the tagged trees each time it loads, and moves the
         moment a tree is tagged or a measurement is recorded —{' '}
-        <span className="font-semibold text-slate-700">except where it is marked in amber.</span>{' '}
-        Those four do not move with the data:
+        <span className="font-semibold text-slate-700">except where it is marked.</span>{' '}
+        Those do not move with the data:
       </p>
       <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
         {Object.entries(PROVISIONAL_KINDS).map(([kind, { label, means }]) => (
