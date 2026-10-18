@@ -181,7 +181,7 @@ const photoOf = (tree) => {
  * The hazard queue by barangay (decided 17 October): one line per barangay —
  * how many, how many nobody has been sent to — opening into a list of its
  * trees, each with its actions. Barangays with someone still to send come
- * first.
+ * first, red with a "!" (18 October), as the menu marks what is waiting.
  */
 function HazardsByBarangay({ trees, onDispatch, onIssuePermit, onViewOnMap }) {
   const groups = useMemo(() => {
@@ -222,18 +222,25 @@ function HazardsByBarangay({ trees, onDispatch, onIssuePermit, onViewOnMap }) {
       <ul className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {groups.map((group) => {
           const isOpen = opened.has(group.name);
+          const urgent = group.waiting > 0;
           return (
-            <li key={group.name} className="border-b border-slate-100 last:border-b-0">
+            <li key={group.name} data-urgent={urgent || undefined}
+              className={`border-b last:border-b-0 ${urgent ? 'border-red-200 bg-red-50' : 'border-slate-100'}`}>
               <button
                 type="button"
                 onClick={() => toggle(group.name)}
                 aria-expanded={isOpen}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left ${urgent ? 'border-l-4 border-red-600 hover:bg-red-100' : 'border-l-4 border-transparent hover:bg-slate-50'}`}
               >
-                <ChevronRight size={16} aria-hidden="true" className={`shrink-0 text-slate-500 transition ${isOpen ? 'rotate-90' : ''}`} />
-                <span className="flex-1 text-sm font-bold text-slate-900">{group.name}</span>
-                {group.waiting > 0 && (
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                <ChevronRight size={16} aria-hidden="true" className={`shrink-0 transition ${urgent ? 'text-red-700' : 'text-slate-500'} ${isOpen ? 'rotate-90' : ''}`} />
+                {urgent && (
+                  <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">
+                    !
+                  </span>
+                )}
+                <span className={`flex-1 text-sm font-bold ${urgent ? 'text-red-900' : 'text-slate-900'}`}>{group.name}</span>
+                {urgent && (
+                  <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
                     {group.waiting} nobody sent
                   </span>
                 )}

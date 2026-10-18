@@ -125,6 +125,10 @@ describe('ActionBoard', () => {
     const alipit = screen.getByRole('button', { name: /Alipit/ });
     expect(gatid).toHaveTextContent('2 nobody sent');
     expect(gatid.compareDocumentPosition(alipit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Red, with a "!", while somebody is still to be sent; plain once all are.
+    expect(gatid.closest('li')).toHaveAttribute('data-urgent', 'true');
+    expect(gatid).toHaveTextContent(/^!Gatid/);
+    expect(alipit.closest('li')).not.toHaveAttribute('data-urgent');
     expect(document.querySelectorAll('tr[data-tree-id]')).toHaveLength(0);
     fireEvent.click(gatid);
     expect(document.querySelectorAll('tr[data-tree-id]')).toHaveLength(2);
