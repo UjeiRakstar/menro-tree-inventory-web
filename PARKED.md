@@ -165,6 +165,10 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     Once `identify-tree` is live and the field app is rebuilt, delete
     GEMINI_API_KEY from the field app's `.env`: the app then carries no key.
     Also deploy `improve-report` (17 October): the Report tab's Improve with AI.
+16. `supabase/permits_fence.sql` — **run this one soon** (18 October): a permit
+    belongs to an LGU and only that office sees it; PGENRO sees all, the public
+    none. Until it runs, every signed-in office can read every permit — the
+    clients' names, numbers and addresses (after steps 1, 2 and 8).
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must

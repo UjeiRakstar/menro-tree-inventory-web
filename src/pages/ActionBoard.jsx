@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { isPgenro } from '../lib/roles.js';
+import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
+import { lguOfTree } from '../hooks/useAttention.js';
 import { classifyHazard, HAZARD_STATUS } from '../lib/hazardStatus.js';
 import { ChevronRight, MapPin } from 'lucide-react';
 import DispatchModal from '../components/DispatchModal.jsx';
@@ -12,8 +13,8 @@ import PermitsLog from './PermitsLog.jsx';
 import PlantingRequests from '../components/PlantingRequests.jsx';
 
 // Inline wrapper so PermitsLog renders as a tab without its own page heading
-function PermitsLogTab() {
-  return <PermitsLog />;
+function PermitsLogTab({ lgu }) {
+  return <PermitsLog lgu={lgu} />;
 }
 
 // PGENRO's own board: only PGENRO downloads it.
@@ -33,10 +34,11 @@ export default function ActionBoard() {
       </Suspense>
     );
   }
-  return <OfficeBoard />;
+  return <OfficeBoard lgu={officeLguOf(profile)} />;
 }
 
-function OfficeBoard() {
+/** One office's board: its own LGU's hazards and permits only. */
+function OfficeBoard({ lgu }) {
   const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [trees, setTrees] = useState([]);
@@ -62,7 +64,7 @@ function OfficeBoard() {
           setStatus('error');
           return;
         }
-        setTrees(Array.isArray(data) ? data : []);
+        setTrees((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(lgu, lguOfTree(tree))));
         setStatus('loaded');
       } catch (e) {
         if (cancelled) return;
@@ -72,7 +74,7 @@ function OfficeBoard() {
     }
     fetchTrees();
     return () => { cancelled = true; };
-  }, []);
+  }, [lgu]);
 
   function handleIssuePermit(tree) {
     setSelectedPermitTree(tree);
@@ -132,11 +134,11 @@ function OfficeBoard() {
           )}
         </div>
       ) : activeTab === 'walkins' ? (
-        <WalkInPermitForm />
+        <WalkInPermitForm lgu={lgu} />
       ) : activeTab === 'requests' ? (
         <PlantingRequests />
       ) : (
-        <PermitsLogTab />
+        <PermitsLogTab lgu={lgu} />
       )}
 
       {/* Dispatch Modal */}

@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { isPgenro } from '../lib/roles.js';
+import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
+import { lguOfTree } from '../hooks/useAttention.js';
 import { classifyPinColor } from '../lib/pinColor.js';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { X, Image, ArrowUpDown, MapPin, Download, Search, Printer } from 'lucide-react';
@@ -25,6 +26,7 @@ const SpeciesLibrary = lazy(() => import('../components/pgenro/SpeciesLibrary.js
 export default function BiodiversityHub() {
   const { profile } = useAuth();
   const forester = isPgenro(profile);
+  const officeLgu = officeLguOf(profile);
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('inventory');
@@ -43,12 +45,13 @@ export default function BiodiversityHub() {
     async function fetch() {
       const { data } = await supabase.from('trees').select('*');
       if (cancelled) return;
-      setTrees(Array.isArray(data) ? data : []);
+      // An office's own LGU only; PGENRO, the province.
+      setTrees((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(officeLgu, lguOfTree(tree))));
       setLoading(false);
     }
     fetch();
     return () => { cancelled = true; };
-  }, []);
+  }, [officeLgu]);
 
   // Filtered & sorted trees for inventory tab
   const filteredTrees = useMemo(() => {

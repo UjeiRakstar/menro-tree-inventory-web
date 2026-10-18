@@ -14,6 +14,7 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [printData, setPrintData] = useState(null);
+  const [submitError, setSubmitError] = useState('');
 
   if (!isOpen || !tree) return null;
 
@@ -62,14 +63,16 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
         uploadedUrls = results.filter(Boolean);
       }
 
-      // 2. Insert into permits table
-      await supabase.from('permits').insert({
+      // 2. Insert into permits table — refused, nothing is printed
+      setSubmitError('');
+      const { error: insertError } = await supabase.from('permits').insert({
         tree_id: tree.id,
         client_name: clientName,
         contact_info: contactInfo,
         reason: reason,
         requirements_urls: uploadedUrls,
       });
+      if (insertError) throw new Error(insertError.message);
 
       // 3. Update tree status
       await supabase.from('trees').update({ has_cutting_permit: true }).eq('id', tree.id);
@@ -94,6 +97,7 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
       }, 300);
     } catch (err) {
       console.error('Permit submission error:', err);
+      setSubmitError(`The permit was not issued: ${err.message}`);
       setSubmitting(false);
     }
   }
@@ -201,6 +205,8 @@ export default function IssuePermitModal({ isOpen, onClose, tree, onIssue }) {
               hint="1. Additional photos, 2. Barangay clearance"
             />
           </div>
+
+          {submitError && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{submitError}</p>}
 
           {/* Action Buttons */}
           <div className="mt-6 flex items-center justify-end gap-3">

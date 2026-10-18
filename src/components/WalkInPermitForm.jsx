@@ -5,6 +5,8 @@ import { supabase } from '../supabaseClient.js';
 import CertificatePrint from './CertificatePrint.jsx';
 import { basemapById } from '../lib/basemaps.js';
 import { parentTileOnError } from '../lib/tileFallback.js';
+import { inOfficeLgu } from '../lib/roles.js';
+import { lguOfTree } from '../hooks/useAttention.js';
 
 const SATELLITE = basemapById('satellite');
 
@@ -26,7 +28,10 @@ function LocationPicker({ onLocationSelect, canSelect }) {
   return null;
 }
 
-export default function WalkInPermitForm() {
+/**
+ *   lgu  the office's LGU code: its trees are the ones offered; undefined for all
+ */
+export default function WalkInPermitForm({ lgu = undefined }) {
   // Part 1 State
   const [clientName, setClientName] = useState('');
   const [contactInfo, setContactInfo] = useState('');
@@ -58,11 +63,11 @@ export default function WalkInPermitForm() {
     async function fetchTrees() {
       const { data, error } = await supabase.from('trees').select('*');
       if (cancelled || error) return;
-      setTrees(Array.isArray(data) ? data : []);
+      setTrees((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(lgu, lguOfTree(tree))));
     }
     fetchTrees();
     return () => { cancelled = true; };
-  }, []);
+  }, [lgu]);
 
   const isPart1Complete = clientName.trim() !== '' && 
                           contactInfo.length === PH_MOBILE_DIGITS && 
@@ -170,7 +175,8 @@ export default function WalkInPermitForm() {
         longitude: t.lng,
       }));
 
-      await supabase.from('permits').insert(permitInserts);
+      const { error: insertError } = await supabase.from('permits').insert(permitInserts);
+      if (insertError) throw new Error(insertError.message);
 
       setPrintData({
         trees: selectedTrees,
@@ -191,7 +197,7 @@ export default function WalkInPermitForm() {
         setSubmitting(false);
       }, 300);
     } catch (err) {
-      setSubmitError('Submission failed. Please try again.');
+      setSubmitError(`Submission failed: ${err.message}`);
       setSubmitting(false);
     }
   }

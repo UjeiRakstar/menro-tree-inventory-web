@@ -35,6 +35,7 @@ const HAZARD_TREE = {
   tree_id: 'T-001',
   species: 'Narra',
   barangay: 'Poblacion',
+  barangay_psgc: 403426001,
   dbh: '42 cm',
   latitude: 14.281,
   longitude: 121.411,
@@ -52,6 +53,7 @@ const SAFE_TREE = {
   tree_id: 'T-002',
   species: 'Acacia',
   barangay: 'Bubukal',
+  barangay_psgc: 403426004,
   dbh: '30 cm',
   latitude: 14.282,
   longitude: 121.412,
@@ -132,6 +134,15 @@ describe('ActionBoard', () => {
     expect(document.querySelectorAll('tr[data-tree-id]')).toHaveLength(0);
     fireEvent.click(gatid);
     expect(document.querySelectorAll('tr[data-tree-id]')).toHaveLength(2);
+  });
+
+  it("lists its own LGU's hazards only — never another office's", async () => {
+    // Kalayaan's San Antonio: a hazard, but not Santa Cruz's to act on.
+    loadTrees([HAZARD_TREE, { ...HAZARD_TREE, id: 'kalayaan', barangay: 'San Antonio', barangay_psgc: 403409002 }]);
+    renderBoard();
+    expect(await screen.findByRole('button', { name: /Poblacion/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /San Antonio/ })).not.toBeInTheDocument();
+    expect(screen.getByText('1 hazard in 1 barangay')).toBeInTheDocument();
   });
 
   it('says so when nothing is hazardous, rather than showing an empty board', async () => {
@@ -237,7 +248,8 @@ describe('ActionBoard', () => {
   it('cards exactly the hazard-classified rows, whatever the fetch returns', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.array(treeRecordArb, { maxLength: 8 }).map((rows) => rows.map((t, i) => ({ ...t, id: `row-${i}` }))),
+        // All in the office's own LGU: the property is about which rows are hazards.
+        fc.array(treeRecordArb, { maxLength: 8 }).map((rows) => rows.map((t, i) => ({ ...t, id: `row-${i}`, barangay_psgc: 403426001 }))),
         async (trees) => {
           supabaseMock.reset();
           loadTrees(trees);

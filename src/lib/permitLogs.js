@@ -23,6 +23,20 @@ export function lguOfPermit(permit, { treesById, lguByName }) {
   return null;
 }
 
+/**
+ * The same, from a permit alone — for a list that has not loaded the trees:
+ * the LGU the database stamped on it (permits_fence.sql), or failing that,
+ * the town its point falls in.
+ */
+export function lguOfPermitRow(permit, lguByName) {
+  if (permit?.lgu_psgc != null) return Number(permit.lgu_psgc);
+  const lat = Number(permit?.latitude);
+  const lng = Number(permit?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+  const name = municipalityAt([lat, lng]);
+  return name ? lguByName.get(name.toLowerCase()) ?? null : null;
+}
+
 /** How many trees a permit covers: a walk-in permit can cover several. */
 export const treesCovered = (permit) => {
   const n = Number(permit?.number_of_trees);

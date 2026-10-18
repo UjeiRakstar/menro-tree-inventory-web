@@ -25,6 +25,7 @@ const SUITES = [
   ['training', 'training.mjs'],
   ['training, in the live order', 'training.mjs', { LIVE_ORDER: '1' }],
   ['permit archiving', 'permits.mjs'],
+  ['permits, by LGU', 'permits-fence.mjs'],
   ['RISE species fields', 'rise.mjs'],
   ['map areas', 'areas.mjs'],
   ['office settings and AI keys', 'settings.mjs'],

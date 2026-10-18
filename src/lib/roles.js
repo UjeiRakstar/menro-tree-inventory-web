@@ -42,6 +42,20 @@ export function roleOf(profile) {
 }
 
 /**
+ * The LGU an office's lists are narrowed to: a MENRO / CENRO's own PSGC code
+ * (0 when it has none, which matches nothing); undefined for PGENRO and
+ * everyone else, who see the province. Found 18 October: Kalayaan's Action
+ * Board listed Santa Cruz's hazards and permits.
+ */
+export function officeLguOf(profile) {
+  if (roleOf(profile) !== ROLES.LGU_ADMIN) return undefined;
+  return Number(profile?.lgu_psgc) || 0;
+}
+
+/** Whether a row with this LGU code is one the office sees. */
+export const inOfficeLgu = (officeLgu, code) => officeLgu === undefined || Number(code) === officeLgu;
+
+/**
  * What to call the role on screen.
  *
  * An LGU admin of a city is a City ENRO — "CENRO" — which is not DENR's

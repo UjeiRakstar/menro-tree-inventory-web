@@ -4,10 +4,18 @@ import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download } from '
 import CertificatePrint from '../components/CertificatePrint.jsx';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { inOfficeLgu } from '../lib/roles.js';
+import { lguOfPermitRow } from '../lib/permitLogs.js';
+import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 
 const PAGE_SIZE = 50;
 
-export default function PermitsLog() {
+/**
+ *   lgu  the office's LGU code — only its permits are listed; undefined for
+ *        PGENRO. The database fences them too (permits_fence.sql); this keeps
+ *        the list right before that file is run.
+ */
+export default function PermitsLog({ lgu = undefined }) {
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lightboxUrl, setLightboxUrl] = useState(null);
@@ -26,12 +34,13 @@ export default function PermitsLog() {
       const { data, error } = await supabase.from('permits').select('*').order('created_at', { ascending: false });
       if (cancelled) return;
       if (error) { console.error(error.message); setLoading(false); return; }
-      setPermits(Array.isArray(data) ? data : []);
+      const lguByName = new Map(MUNICIPALITY_LIST.map((item) => [item.name.toLowerCase(), item.psgc]));
+      setPermits((Array.isArray(data) ? data : []).filter((permit) => inOfficeLgu(lgu, lguOfPermitRow(permit, lguByName))));
       setLoading(false);
     }
     fetchPermits();
     return () => { cancelled = true; };
-  }, []);
+  }, [lgu]);
 
   // Derive unique barangays/addresses for filter
   const barangays = useMemo(() => {

@@ -9,7 +9,7 @@ import TrainingBanner from './components/TrainingBanner.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import { accessFor, isPgenro } from './lib/roles.js';
+import { accessFor, isPgenro, officeLguOf } from './lib/roles.js';
 
 /**
  * Every page but the landing one is fetched when it is first opened.
@@ -56,6 +56,12 @@ function PageLoading() {
  * is how the BioDashboard opened on its own footer with the charts above the
  * fold.
  */
+/** The permit log, narrowed to the signed-in office's own LGU. */
+function OwnPermitsLog() {
+  const { profile } = useAuth();
+  return <PermitsLog lgu={officeLguOf(profile)} />;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -213,7 +219,7 @@ function AppRoutes() {
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<ManageArborists />} />
-        <Route path="permits" element={<PermitsLog />} />
+        <Route path="permits" element={<OwnPermitsLog />} />
         <Route path="biodiversity-dashboard" element={<OfficeBioDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Route>
