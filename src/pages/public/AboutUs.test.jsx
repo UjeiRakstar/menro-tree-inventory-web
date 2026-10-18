@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../supabaseClient.js', async () => {
@@ -142,6 +142,31 @@ describe("PGENRO's News & Events on the home page", () => {
     renderAbout();
     await waitFor(() => expect(supabaseMock.writesTo('news_posts', 'select').length).toBeGreaterThan(1));
     expect(screen.queryByRole('region', { name: 'News and Events' })).not.toBeInTheDocument();
+  });
+});
+
+describe('a post with several photos', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('turns from one photo to the next, and lets the visitor pick one', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    supabaseMock.setResponse('news_posts:select', {
+      data: [{ id: 'n1', title: 'NGCP Tree Planting Activity', photos: ['https://p/1.jpg', 'https://p/2.jpg', 'https://p/3.jpg'] }],
+      error: null,
+    });
+    const { container } = renderAbout();
+    await screen.findByRole('heading', { name: 'NGCP Tree Planting Activity' });
+    const showing = () => container.querySelector('img[data-showing]')?.getAttribute('src');
+    expect(showing()).toBe('https://p/1.jpg');
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(showing()).toBe('https://p/2.jpg');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Photo 3 of 3' }));
+    expect(showing()).toBe('https://p/3.jpg');
+    expect(screen.getByRole('button', { name: 'Photo 3 of 3' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
