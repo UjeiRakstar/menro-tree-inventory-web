@@ -3,7 +3,82 @@
 Work that is deliberately not being done yet, so it does not get lost.
 
 Last read through: 15 October 2026, against the repo, the live database
-(read-only, with the site's public key) and CAPSTONE_SPECS.md.
+(read-only, with the site's public key) and CAPSTONE_SPECS.md. Roadmap below
+added 18 October 2026.
+
+## The roadmap from 18 October
+
+Your reply of 18 October, in the order it is being built. Each round is
+finished, tested and committed before the next starts.
+
+**Round A — done 18 October.**
+- Forestry tab first; carbon stays in the BioDashboard headline.
+- Growth 1.19 cm of diameter a year (Schneider et al. 2013, *New Forests* 45:
+  83–96, as applied to city trees by Pansit 2019, *Mindanao J. Sci. Technol.*
+  17: 98–111) and carbon 45% of biomass (Lasco & Pulhin 2000), both marked
+  with an (i) as borrowed — published Philippine figures, applicable to Laguna.
+- PSGC 3Q 2026 (PSA, 30 Sept 2026) checked: 30 LGUs and 681 barangays, every
+  code and name matching. Taken in: official names (no more "City of Biñan
+  City"), each barangay's 2024 population as the default, urban or rural.
+- A barangay on the Action Board with a hazard nobody is sent to: red, "!".
+- A MENRO / CENRO makes field officers for its own LGU only.
+
+**Round B — the inbox.** One inbox per office for: system notices (PGENRO
+saves or approves a planting site → every MENRO / CENRO, with View on map;
+outside its LGU the map shows without functions); a tree the AI identified
+that matches nothing in the RISE library → PGENRO; PGENRO's News & Events as a
+newsletter (deletable). Messages: the public contact form goes to the LGU the
+visitor picks; reply by email, delete, archive. Contact Us: each office's
+contact details from its profile. News & Events also on the home page, as a
+banner or hero.
+
+**Round C — the reports.** The MENRO / CENRO chooses which report: soil;
+hazards and climate (flood and landslide, CLIRAM); elevation (with slope, from
+the same DEM); biodiversity. Each one: the map, then its tables and figures,
+then the narrative written from them, and what it means for the FLUP, CLUP /
+CDP, eLCCAP and CBI. Exposure only — risk needs the LGU's own judgment of
+likelihood and consequence (LCCAP Book 3, Task 3A.4). Read for this:
+- FLUP draft guidelines (DENR): Table 1, the 16 thematic maps — elevation
+  classes <500, 500–1,000, >1,000 masl; slope <18%, 18–30%, 30–50%, >50%; the
+  soil map as a factor of erodibility and flooding; the hazard map; the
+  biodiversity resources map. Module 3 asks for the population and settlement
+  inside highly vulnerable areas, and existing and potential carbon stock.
+- LCCAP Book 3 (DILG-LGA 2017): Section 2.1 wants tables, graphs and maps of
+  where each hazard is; Tool 3A.1d a summary hazard matrix per barangay;
+  Tool 3A.3 an exposure database per barangay per hazard, natural resources
+  among the sectors.
+- BMB Technical Bulletin 2018-02 (urban biodiversity, CBI): area profile
+  (topography, soils, hazards), vegetation structure (trees by endemic,
+  native, exotic), GIS mapping, citizen science, urban barangays by the NSCB
+  definition. Its Singapore Index attachment is scanned images only.
+
+**Round D — accounts.** Public sign-in with a Google account only, to count
+real people (for the CBI) and later to reward them: a disclaimer that only
+what the leaderboard needs is kept; a shown name or a nickname, with
+inappropriate nicknames refused. A leaderboard of the most trees tagged on
+the About page, in the phone when the crowdsourcing icon is pressed. The
+MENRO / CENRO sign-up: the LGU shown on the map as the code is entered; the
+user's name, address, photo and designation (required); then, each
+skippable and editable later in Settings, the barangay population (PSA's
+2024 count already filled in) and a standard tree inventory spreadsheet to
+download and upload — its trees grey until verified with photos.
+
+**Round E — the field app.** The hagameter steps replaced by typing in what
+was measured with a real hagameter and tape (DBH, total and merchantable
+height); the trainee banner.
+
+**Round F — PGENRO and the super admin.** Each LGU pins its own hall, PGENRO
+the capitol, and PGENRO sees every hall pinned. PGENRO sees permits and whom
+they were issued to, and does nothing to them; a super admin account (yours)
+can do everything. The RISE details on the public tree panel, more of them.
+
+**Parked, to keep this manageable:**
+- The super admin role reaches every policy in the database; it is the last
+  thing in Round F, after the rest of F is in.
+- The standard Excel format: waiting on yours.
+- CDRA hatching for hazard levels; the GHG inventory (needs the emissions
+  data from outside this system).
+- Incentives for residents: after the leaderboard.
 
 ## Before the account ticket touches anything
 
@@ -24,12 +99,8 @@ Last read through: 15 October 2026, against the repo, the live database
   (id `663077f0-9961-48a8-95fe-9e3304f61e01`). Not yet run.
 - **`supabase/drop_trees_backup.sql`.** Look at section 1, then uncomment the
   drop. Nothing in either repo reads that table.
-- **Two decisions left hanging.** Neither was answered, so both stand as built
-  until you say otherwise:
-  - Carbon stored and carbon sequestered stayed in the BioDashboard headline
-    when timber volume and MAI moved to the Forestry tab. You had listed carbon
-    with the technical figures.
-  - The Forestry tab sits last. MENRO may want it first among the tabs.
+- ~~Two decisions left hanging.~~ Answered 18 October: carbon stays in the
+  headline, and the Forestry tab comes first (done).
 
 ## Mine to fix — found in this sweep
 
@@ -159,10 +230,9 @@ stayed online** after the area was deleted or its PDF replaced.
   MENRO / CENRO reads it in Messages (PGENRO reads all) — reply opens the
   office's email with the message quoted; delete and archive. News and
   Events: not yet designed beyond the menu item.
-- **The field app's tree identification change is not committed** (16
-  October): lib/ai_service.dart and lib/tree_details_screen.dart in
-  tree_inventory, sending the photos to `identify-tree`. Also: `flutter test`
-  there needs CMake installed (dartcv4 builds OpenCV), on this PC it does not run.
+- **The field app's tree identification change** is committed (`1eb809e` on
+  the field app's branch). `flutter test` there needs CMake installed (dartcv4
+  builds OpenCV); on this PC it does not run.
 
 - **One standard format for every Excel download** (15 October). The MENRO
   report, the PGENRO permit report and the inventory export each lay their
@@ -248,11 +318,9 @@ that can upload a layer.
 
 ### Waiting on a measurement
 
-- **The growth rate.** `ANNUAL_DBH_GROWTH_CM` is 0.5 cm a year, chosen rather
-  than measured, and the whole mean annual increment scales off it. It is
-  amber on the Forestry tab. Replace it with, in order of preference: a
-  re-measurement of the same tree at two dates, a published per-species figure
-  from PGENRO or ERDB, or a figure somebody there will put their name to.
+- **The growth rate.** Now 1.19 cm a year, borrowed (see the roadmap, Round A).
+  Better still: a re-measurement of the same tree at two dates, or a
+  per-species figure from PGENRO or ERDB.
 - **Merchantable height in the field app.** Four of the forestry and carbon
   figures need it; the app does not ask for it. You have said this gets done
   no matter what. Until it does, every one of those figures speaks for only the
