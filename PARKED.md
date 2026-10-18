@@ -32,7 +32,7 @@ visitor picks; reply by email, delete, archive. Contact Us: each office's
 contact details from its profile. News & Events also on the home page, as a
 banner or hero.
 
-**Round C — the reports.** The MENRO / CENRO chooses which report: soil;
+**Round C — the reports. Done 18 October.** The MENRO / CENRO chooses which report: soil;
 hazards and climate (flood and landslide, CLIRAM); elevation (with slope, from
 the same DEM); biodiversity. Each one: the map, then its tables and figures,
 then the narrative written from them, and what it means for the FLUP, CLUP /

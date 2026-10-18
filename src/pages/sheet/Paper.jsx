@@ -91,34 +91,53 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
   );
 }
 
-// A table's height on the page, in millimetres: its title and header, then a row each.
-const ROW_MM = 5.3;
-const tableMm = (table) => 14 + Math.max(1, table.rows.length + (table.totals ? 1 : 0)) * ROW_MM;
+// A table's height on the page, in millimetres: its title, note and header, then a row each.
+const tableMm = (table, rowMm) => 16 + (table.note ? 4 : 0) + Math.max(1, table.rows.length + (table.totals ? 1 : 0)) * rowMm;
 
 /**
- * The tables as pages, [{ tables, charts }]: each table on a page of its own,
- * except land cover and planting sites, which share one. A table's chart goes
- * under it when the page has room for it, and onto a page of its own — where
- * it fills the page — when the table is too long.
+ * The tables as pages, each { items: [{ kind: 'table' | 'chart', table }],
+ * tables, charts }: a table with its chart under it, as many to a page as
+ * fit — short tables share a page rather than leave most of it blank — and
+ * a table too long to leave room for its chart has the chart on the next page.
+ * A chart grows into whatever room its page has left, up to the cap its view
+ * sets, so the page is filled without a short table's chart turning huge.
  *
  *   hasChart   whether a table has a chart (none, for the report's tables)
  *   pageMm     the height a page holds; headingMm, what the first page's heading takes
+ *   chartMm    the least a chart needs; rowMm, a table row's height
  */
-export function tablePages(tables, { hasChart = () => false, pageMm = 172, headingMm = 28, chartMm = 65 } = {}) {
-  const groups = [];
-  for (const table of tables) {
-    if (table.key === 'planting-sites' && groups.at(-1)?.[0]?.key === 'land-cover') groups.at(-1).push(table);
-    else groups.push([table]);
-  }
+export function tablePages(tables, { hasChart = () => false, pageMm = 172, headingMm = 28, chartMm = 65, rowMm = 5.3 } = {}) {
   const pages = [];
-  for (const group of groups) {
-    const charted = group.filter(hasChart);
-    const room = pageMm - (pages.length === 0 ? headingMm : 0) - group.reduce((total, table) => total + tableMm(table), 0);
-    if (charted.length === 0) pages.push({ tables: group, charts: [] });
-    else if (room >= chartMm * charted.length) pages.push({ tables: group, charts: charted });
-    else pages.push({ tables: group, charts: [] }, { tables: [], charts: charted });
+  let current = null;
+  let room = 0;
+  const open = () => {
+    current = { items: [] };
+    pages.push(current);
+    room = pageMm - (pages.length === 1 ? headingMm : 0);
+  };
+  for (const table of tables) {
+    const tableHeight = tableMm(table, rowMm);
+    const chartHeight = hasChart(table) ? chartMm : 0;
+    if (!current || (current.items.length > 0 && tableHeight + chartHeight > room)) open();
+    current.items.push({ kind: 'table', table });
+    room -= tableHeight;
+    if (!chartHeight) continue;
+    if (chartHeight > room) {
+      open();
+      current.items.push({ kind: 'chart', table });
+      room -= chartHeight;
+      // A chart alone on a page takes the page.
+      current = null;
+    } else {
+      current.items.push({ kind: 'chart', table });
+      room -= chartHeight;
+    }
   }
-  return pages;
+  return pages.map((page) => ({
+    ...page,
+    tables: page.items.filter((item) => item.kind === 'table').map((item) => item.table),
+    charts: page.items.filter((item) => item.kind === 'chart').map((item) => item.table),
+  }));
 }
 
 export const SOURCES_NOTE =

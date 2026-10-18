@@ -21,7 +21,7 @@ import { NO_ELEVATION } from './elevation.js';
  */
 export const HAZARD_LEVELS = Object.freeze(['low', 'medium', 'high']);
 
-function cellsOfArea(grid, geometry) {
+export function cellsOfArea(grid, geometry) {
   const cells = [];
   for (const polygon of polygonsOf(geometry)) {
     forEachCellIn(grid, polygon, (index, row) => cells.push([index, row]));

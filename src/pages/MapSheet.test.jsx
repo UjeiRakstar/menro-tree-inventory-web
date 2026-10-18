@@ -234,4 +234,47 @@ describe('MapSheet', () => {
     expect(sheet()).toHaveAttribute('width', '420mm');
     expect(document.querySelector('style').textContent).toContain('size: 420mm 297mm');
   });
+
+  it('writes a thematic report — maps, then tables, then the narrative — and says when a layer is missing', async () => {
+    show();
+    fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Hazards and climate' }));
+
+    expect(await screen.findByRole('region', { name: 'HAZARD AND CLIMATE REPORT' })).toBeInTheDocument();
+    // No landslide layer: no map of it, said so; the flood map is drawn from the sheet.
+    expect(await screen.findByText('This layer has not been uploaded yet, so there is no map of it.')).toBeInTheDocument();
+    await waitFor(() => expect(sheet()).toHaveAccessibleName('FLOOD SUSCEPTIBILITY MAP — Santa Cruz'));
+    expect(screen.getByText('Figure 1. Flood susceptibility map (UP NOAH)')).toBeInTheDocument();
+
+    expect(screen.getByRole('region', { name: 'Exposure to hazards by barangay' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'People in hazard areas (estimate)' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Rain-induced landslides — text' }).value).toMatch(/landslide layer has not been uploaded/);
+    expect(screen.getByRole('textbox', { name: 'What this means for the plans — text' }).value).toMatch(/exposure, not risk/);
+  });
+
+  it('writes the biodiversity report from the trees, toward the CBI', async () => {
+    supabaseMock.setResponse('trees:select', {
+      data: [
+        { id: 't1', latitude: 14.2805, longitude: 121.4105, species: 'Narra', species_type: 'Endemic', source: 'crowdsource' },
+        { id: 't2', latitude: 14.2795, longitude: 121.4121, species: 'Mahogany', species_type: 'Invasive' },
+      ],
+      error: null,
+    });
+    show();
+    fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Biodiversity' }));
+    expect(await screen.findByRole('region', { name: 'BIODIVERSITY REPORT' })).toBeInTheDocument();
+    const structure = await screen.findByRole('region', { name: 'Vegetation structure and diversity' });
+    await waitFor(() => expect(within(structure).getByRole('rowheader', { name: 'Endemic trees' }).closest('tr')).toHaveTextContent('1'));
+    expect(screen.getByRole('region', { name: 'Toward the City Biodiversity Index' })).toHaveTextContent('1 community tags verified');
+    // The maps are the trees, coloured by origin and by use.
+    expect(screen.getByText('Figure 2. Tagged trees by use — fruit, timber and ornamental')).toBeInTheDocument();
+  });
+
+  it('offers slope as a survey layer, once there is an elevation layer', () => {
+    show();
+    const slope = screen.getByRole('option', { name: /Slope \(FLUP classes\)/ });
+    expect(slope).toBeDisabled();
+    expect(slope).toHaveTextContent('needs the elevation layer');
+  });
 });

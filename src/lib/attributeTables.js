@@ -2,6 +2,7 @@ import { treeClassOf } from './mapSheet.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from './mapSites.js';
 import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON, volumeOf } from './treeVolume.js';
 import { barangayFacts, PSGC_EDITION } from './psgc.js';
+import { namriaClassById } from './namriaCover.js';
 
 /**
  * The attribute tables behind a map sheet (decided 17 October) — what the
@@ -22,7 +23,7 @@ import { barangayFacts, PSGC_EDITION } from './psgc.js';
  *                  how many seedlings fit
  *
  * Each table is { key, title, columns: [{ key, label, align, kind }], rows,
- * totals } — `kind` 'number' | 'ha' | 'percent' | 'tonnes' | 'text' says how a
+ * totals } — `kind` 'number' | 'ha' | 'percent' | 'tonnes' | 'decimal' | 'text' says how a
  * value is written.
  */
 
@@ -255,7 +256,13 @@ function groundRow(feature) {
 export function landCoverTable(areas = []) {
   const rows = areas
     .filter((area) => area.properties.kind === 'land-cover')
-    .map((area) => ({ ...groundRow(area), cover: area.properties.coverLabel ?? null }))
+    .map((area) => ({
+      ...groundRow(area),
+      cover: area.properties.coverLabel ?? null,
+      // Not a column: whether the class is tree cover, for the CBI's natural areas.
+      treeCover: Boolean(namriaClassById(area.properties.namriaClass)?.treeCover),
+      designated: Boolean(area.properties.designation),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return {
     key: 'land-cover',
@@ -310,6 +317,7 @@ export function formatCell(value, kind) {
   if (value === null || value === undefined || value === '') return '—';
   if (kind === 'ha') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (kind === 'tonnes') return Number(value).toLocaleString('en-US', { maximumFractionDigits: Number(value) < 10 ? 2 : 1 });
+  if (kind === 'decimal') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   if (kind === 'percent') return `${Math.round(Number(value) * 100)}%`;
   if (kind === 'number') return Number(value).toLocaleString('en-US');
   return String(value);
@@ -338,7 +346,7 @@ export async function tablesWorkbook(tables, { place, preparedBy, date = new Dat
         table.columns.map((column) => {
           const value = row[column.key];
           if (value === null || value === undefined) return null;
-          if (column.kind === 'ha' || column.kind === 'tonnes') return Math.round(Number(value) * 100) / 100;
+          if (column.kind === 'ha' || column.kind === 'tonnes' || column.kind === 'decimal') return Math.round(Number(value) * 100) / 100;
           if (column.kind === 'percent') return Math.round(Number(value) * 1000) / 10;
           return value;
         })

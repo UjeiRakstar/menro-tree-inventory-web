@@ -183,6 +183,8 @@ export const SURVEY_TITLES = Object.freeze({
   flood: { title: 'FLOOD SUSCEPTIBILITY MAP', legend: 'Flood susceptibility', source: 'UP NOAH' },
   soil: { title: 'SOIL MAP', legend: 'Soil series', source: 'DA–BSWM' },
   elevation: { title: 'ELEVATION MAP', legend: 'Elevation (m above sea level)', source: 'Copernicus DEM' },
+  // Worked out from the elevation layer (layers/terrain.js), not uploaded.
+  slope: { title: 'SLOPE MAP', legend: 'Slope (FLUP classes)', source: 'Copernicus DEM' },
 });
 
 /**

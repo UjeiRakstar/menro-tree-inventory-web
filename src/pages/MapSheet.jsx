@@ -11,7 +11,9 @@ import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoin
 import { centroidOf, formatArea, geometryAreaM2 } from '../lib/areaGeometry.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
-import { loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
+import { loadGrid, loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
+import { slopeKey, slopePicture, terrainFacts } from '../lib/layers/terrain.js';
+import { REPORT_KINDS, REPORT_MAPS, buildThemeReport, reportKindById } from '../lib/reports/thematic.js';
 import { LAGUNA_GRID } from '../lib/layers/grid.js';
 import { areaFacts } from '../lib/layers/measure.js';
 import { layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
@@ -24,10 +26,11 @@ import philippines from '../data/Philippines.geojson';
 import { barangayForTree, loadBarangayIndex } from '../lib/barangayLookup.js';
 import { barangayTable, carbonTable, hazardTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
 import { writeReport } from '../lib/reportWriter.js';
-import { officialName } from '../lib/psgc.js';
+import { lguFacts, officialName } from '../lib/psgc.js';
 import { reportDocx } from '../lib/reportDocx.js';
 import TablesView from './sheet/TablesView.jsx';
 import ReportView from './sheet/ReportView.jsx';
+import ThemeReportView from './sheet/ThemeReportView.jsx';
 import {
   PAPERS,
   SHEET_BASEMAPS,
@@ -97,6 +100,24 @@ const loadBarangays = () => {
   barangaysOnce ??= import('../data/Laguna-Barangays.geojson').then((module) => module.default);
   return barangaysOnce;
 };
+
+/** A geometry's [[south, west], [north, east]]. */
+function boundsOf(geometry) {
+  let south = Infinity;
+  let west = Infinity;
+  let north = -Infinity;
+  let east = -Infinity;
+  const walk = (c) => {
+    if (typeof c[0] === 'number') {
+      if (c[1] < south) south = c[1];
+      if (c[1] > north) north = c[1];
+      if (c[0] < west) west = c[0];
+      if (c[0] > east) east = c[0];
+    } else c.forEach(walk);
+  };
+  walk(geometry?.coordinates ?? []);
+  return [[south, west], [north, east]];
+}
 
 /** Words in lines of at most `width` characters. */
 function wrap(text, width) {
@@ -236,7 +257,8 @@ export default function MapSheet() {
   const [title, setTitle] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   // A layer named in the link but not uploaded is not on the sheet, nor in its title.
-  const shownSurvey = survey && mapLayers.layers[survey] ? survey : null;
+  const layerFor = (kind) => (kind === 'slope' ? mapLayers.layers.elevation : mapLayers.layers[kind]);
+  const shownSurvey = survey && layerFor(survey) ? survey : null;
   const areaTitle = focusArea
     ? `${focusArea.properties.name.toUpperCase()}${focusArea.properties.kind === 'planting-site' ? ' TREE PLANTING SITE' : ''}${
         shownSurvey ? ` — ${SURVEY_TITLES[shownSurvey].legend.toUpperCase()}` : ''
@@ -251,8 +273,9 @@ export default function MapSheet() {
   const preparedText = preparedBy || (saved?.office_head ? `${officeName} — ${saved.office_head}` : officeName);
 
   // ---- What goes on it -------------------------------------------------------------
-  const surveyLayer = survey ? mapLayers.layers[survey] : null;
+  const surveyLayer = survey ? layerFor(survey) : null;
   const [picture, setPicture] = useState(null);
+  const [slopeBounds, setSlopeBounds] = useState(null);
   const [soil, setSoil] = useState(null);
   const [trees, setTrees] = useState([]);
   const [barangays, setBarangays] = useState(null);
@@ -261,13 +284,29 @@ export default function MapSheet() {
 
   useEffect(() => {
     setPicture(null);
+    if (survey === 'slope' && surveyLayer) {
+      // The slope map, worked out from the elevation grid over the place.
+      let cancelled = false;
+      const [[south, west], [north, east]] = boundsOf(place.geometry);
+      loadGrid(supabase, surveyLayer)
+        .then((heights) => {
+          if (cancelled || !heights) return;
+          const drawn = slopePicture(LAGUNA_GRID, heights, [[south, west], [north, east]]);
+          setSlopeBounds(drawn.bounds);
+          setPicture(drawn.url);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }
     if (!surveyLayer?.pictureUrl || survey === 'soil') return undefined;
     let cancelled = false;
     repaintPicture(surveyLayer.pictureUrl, survey, surveyLayer.meta?.legend).then((url) => !cancelled && setPicture(url));
     return () => {
       cancelled = true;
     };
-  }, [surveyLayer, survey]);
+  }, [surveyLayer, survey, place]);
 
   useEffect(() => {
     setSoil(null);
@@ -287,7 +326,7 @@ export default function MapSheet() {
     (async () => {
       const { data } = await supabase
         .from('trees')
-        .select('id, species, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height');
+        .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, source');
       if (cancelled || !Array.isArray(data)) return;
       setTrees(
         data
@@ -335,14 +374,17 @@ export default function MapSheet() {
     : [];
   const soilColour = useMemo(() => soilColours(surveyLayer?.meta?.classes ?? []), [surveyLayer]);
 
+  // The sheet is ready to be taken as a picture once its layer is drawn.
+  const loading = !mapLayers.loaded || Boolean(surveyLayer && !picture && !soil);
+
   // Picture placed by its bounds: [[south, west], [north, east]].
   const pictureBox = useMemo(() => {
-    const bounds = surveyLayer?.meta?.bounds;
+    const bounds = survey === 'slope' ? slopeBounds : surveyLayer?.meta?.bounds;
     if (!bounds) return null;
     const [x1, y1] = view.toPaper([bounds[0][1], bounds[1][0]]);
     const [x2, y2] = view.toPaper([bounds[1][1], bounds[0][0]]);
     return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
-  }, [surveyLayer, view]);
+  }, [surveyLayer, view, survey, slopeBounds]);
 
   // ---- The tables and the report ------------------------------------------------------
   const [tab, setTab] = useState('map');
@@ -416,7 +458,10 @@ export default function MapSheet() {
       const facts = new Map(
         places.map((placeRow) => [
           placeRow.name,
-          areaFacts(LAGUNA_GRID, placeRow.geometry, grids, { areaM2: placeRow.areaHa * 10000 }),
+          {
+            ...areaFacts(LAGUNA_GRID, placeRow.geometry, grids, { areaM2: placeRow.areaHa * 10000 }),
+            terrain: grids.elevation ? terrainFacts(LAGUNA_GRID, placeRow.geometry, grids.elevation, { areaM2: placeRow.areaHa * 10000 }) : null,
+          },
         ])
       );
       setMeasured({ status: 'done', facts });
@@ -454,12 +499,48 @@ export default function MapSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [lgu, tables, tableTrees, climate]
   );
-  // The office's edits, by section; a section not edited follows the figures.
+  // Which report: the general one, or a thematic one (Round C, 18 October).
+  const [reportKind, setReportKind] = useState('general');
+  const placeLabel = lgu ? 'Barangay' : 'City / municipality';
+  const populationOf = useMemo(() => {
+    if (lgu) {
+      const byName = new Map((tablesByKey.barangays?.rows ?? []).map((row) => [row.name, row.population]));
+      return (name) => byName.get(name) ?? null;
+    }
+    const byLabel = new Map(places.map((p) => [p.name, MUNICIPALITY_LIST.find((item) => item.name === p.key)?.psgc]));
+    return (name) => lguFacts(byLabel.get(name))?.population2024 ?? null;
+    // tablesByKey is rebuilt from tables each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lgu, tables, places]);
+  const themeReport = useMemo(
+    () =>
+      reportKind === 'general'
+        ? null
+        : buildThemeReport(reportKind, {
+            place: lgu,
+            places,
+            measured: measured.facts,
+            placeLabel,
+            tables: tablesByKey,
+            trees: tableTrees,
+            climate,
+            populationOf,
+            protectedHa: scopeAreas.filter((f) => f.properties.designation).reduce((t, f) => t + siteAreaM2(f) / 10000, 0),
+            placeAreaHa: places.reduce((t, p) => t + (p.areaHa || 0), 0),
+            communityTags: tableTrees.filter((tree) => tree.source === 'crowdsource').length,
+          }),
+    // tablesByKey is rebuilt from tables each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas]
+  );
+
+  // The office's edits, by report and section; a section not edited follows the figures.
   const [edits, setEdits] = useState({});
   const [reportNote, setReportNote] = useState(null);
   const [reportBusy, setReportBusy] = useState('');
-  const sections = written.map((section) => ({ ...section, text: edits[section.key] ?? section.text }));
-  const reportTitle = `${titleText} — REPORT`;
+  const editKey = (key) => (reportKind === 'general' ? key : `${reportKind}/${key}`);
+  const sections = (themeReport ? themeReport.sections : written).map((section) => ({ ...section, text: edits[editKey(section.key)] ?? section.text }));
+  const reportTitle = themeReport ? themeReport.title : `${titleText} — REPORT`;
 
   async function improveReport() {
     setReportBusy('improve');
@@ -476,7 +557,7 @@ export default function MapSheet() {
       });
       return;
     }
-    setEdits((current) => ({ ...current, ...Object.fromEntries(data.sections.map((section) => [section.key, section.text])) }));
+    setEdits((current) => ({ ...current, ...Object.fromEntries(data.sections.map((section) => [editKey(section.key), section.text])) }));
     setReportNote({ ok: true, text: 'Improved by Gemini. Read it through before you use it: every figure should still match the tables.' });
   }
 
@@ -484,7 +565,7 @@ export default function MapSheet() {
   // is opened, from the sheet as it is then.
   const [mapImage, setMapImage] = useState(null);
   useEffect(() => {
-    if (tab !== 'report' || !sheetRef.current) return undefined;
+    if (tab !== 'report' || reportKind !== 'general' || !sheetRef.current) return undefined;
     let cancelled = false;
     let url = null;
     sheetPng(sheetRef.current, paper)
@@ -499,11 +580,116 @@ export default function MapSheet() {
       if (url) URL.revokeObjectURL(url);
       setMapImage(null);
     };
-  }, [tab, paper]);
+  }, [tab, paper, reportKind]);
+
+  // A thematic report's maps: the sheet drawn with each one's layer in turn —
+  // flood, then landslide; elevation, then slope — each taken as a picture,
+  // and the sheet put back as the office left it.
+  const [mapImages, setMapImages] = useState({});
+  const [capture, setCapture] = useState(null);
+  useEffect(() => {
+    // A different sheet — paper, place or base map — needs its maps drawn again.
+    setMapImages((current) => {
+      Object.values(current).forEach((image) => image?.url && URL.revokeObjectURL(image.url));
+      return {};
+    });
+  }, [paper, lguName, areaId, basemap.id]);
+  useEffect(() => {
+    if (tab !== 'report' || !themeReport || capture || !mapLayers.loaded) return;
+    const missing = themeReport.maps.filter((map) => !mapImages[map.key]);
+    if (missing.length === 0) return;
+    // A layer not uploaded has no map to draw; the report says so.
+    const unavailable = missing.filter((map) => map.survey && !layerFor(map.survey));
+    if (unavailable.length) {
+      setMapImages((current) => ({ ...current, ...Object.fromEntries(unavailable.map((map) => [map.key, { unavailable: true }])) }));
+      return;
+    }
+    setCapture({
+      queue: missing,
+      restore: { survey: params.get('survey'), treeColour: params.get('treeColour'), trees: params.get('trees') },
+    });
+    // layerFor and params are read as they are now.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, themeReport, mapImages, capture, mapLayers.loaded]);
+  useEffect(() => {
+    if (!capture) return undefined;
+    const [map] = capture.queue;
+    const putBack = (next, key, value) => (value === null || value === undefined ? next.delete(key) : next.set(key, value));
+    if (!map) {
+      setParams((current) => {
+        const next = new URLSearchParams(current);
+        putBack(next, 'survey', capture.restore.survey);
+        putBack(next, 'treeColour', capture.restore.treeColour);
+        putBack(next, 'trees', capture.restore.trees);
+        return next;
+      }, { replace: true });
+      setCapture(null);
+      return undefined;
+    }
+    const wantSurvey = map.survey ?? null;
+    const wantColour = map.treeColour ?? null;
+    if ((params.get('survey') ?? null) !== wantSurvey || (params.get('treeColour') ?? null) !== wantColour || (wantColour && !show.trees)) {
+      setParams((current) => {
+        const next = new URLSearchParams(current);
+        putBack(next, 'survey', wantSurvey);
+        putBack(next, 'treeColour', wantColour);
+        if (wantColour) next.delete('trees');
+        return next;
+      }, { replace: true });
+      return undefined;
+    }
+    if (loading || !sheetRef.current) return undefined;
+    let cancelled = false;
+    // A moment for the sheet to draw with its new layer before it is taken.
+    const timer = setTimeout(async () => {
+      let image;
+      try {
+        const png = await sheetPng(sheetRef.current, paper);
+        image = { url: URL.createObjectURL(png.blob), width: png.width, height: png.height };
+      } catch {
+        image = { failed: true };
+      }
+      if (cancelled) return;
+      setMapImages((current) => ({ ...current, [map.key]: image }));
+      setCapture((current) => current && { ...current, queue: current.queue.slice(1) });
+    }, 700);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // show.trees is read from params, which is here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capture, params, loading, paper]);
 
   async function downloadDocx() {
     setReportBusy('docx');
     setReportNote(null);
+    if (themeReport) {
+      try {
+        const maps = [];
+        for (const spec of themeReport.maps) {
+          const image = mapImages[spec.key];
+          if (!image?.url) continue;
+          const data = await (await fetch(image.url)).arrayBuffer();
+          maps.push({ data, width: image.width, height: image.height, caption: spec.caption });
+        }
+        const blob = await reportDocx({
+          heading: headingOf(lgu),
+          title: reportTitle,
+          preparedBy: preparedText,
+          sections,
+          tables: themeReport.tables.filter(Boolean),
+          maps,
+          figuresFirst: true,
+        });
+        saveFile(blob, `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${reportTitle.replace(/[^A-Za-z]+/g, '-').replace(/^-|-$/g, '')}.docx`);
+      } catch (failure) {
+        setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
+      } finally {
+        setReportBusy('');
+      }
+      return;
+    }
     try {
       let map = null;
       try {
@@ -558,7 +744,7 @@ export default function MapSheet() {
       legend.push({ kind: 'dot', label: treeColour === 'one' ? cls.label : `${cls.label} (${counts.get(cls.id)})`, fill: cls.fill });
     }
   }
-  const surveyKey = surveyLayer ? layerKey(survey, surveyLayer.meta) : [];
+  const surveyKey = surveyLayer ? (survey === 'slope' ? slopeKey() : layerKey(survey, surveyLayer.meta)) : [];
 
   // Running down the column.
   let y = column.y + pad;
@@ -746,7 +932,6 @@ export default function MapSheet() {
   const label = 'block text-xs font-semibold text-slate-600';
   const fileStem = `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${titleText.replace(/[^A-Za-z]+/g, '-').replace(/^-|-$/g, '')}`;
   const fileName = `${fileStem}.png`;
-  const loading = !mapLayers.loaded || Boolean(surveyLayer && !picture && !soil);
   const titleCase = (text) => text.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
   useTabIdentity(`${titleCase(titleText)} — ${lgu?.label ?? 'Laguna'} · Green Tag`);
 
@@ -827,6 +1012,51 @@ export default function MapSheet() {
       )}
       {tab === 'report' && (
         <div className="p-6">
+          <div role="radiogroup" aria-label="Which report" className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+            <span className="text-sm font-semibold text-slate-700">Report on:</span>
+            {REPORT_KINDS.map((kind) => (
+              <button
+                key={kind.id}
+                type="button"
+                role="radio"
+                aria-checked={reportKind === kind.id}
+                disabled={Boolean(capture)}
+                onClick={() => {
+                  setReportKind(kind.id);
+                  setReportNote(null);
+                }}
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition disabled:opacity-50 ${
+                  reportKind === kind.id ? 'bg-green-700 text-white ring-green-700' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {kind.label}
+              </button>
+            ))}
+          </div>
+          {themeReport ? (
+            <ThemeReportView
+              heading={headingOf(lgu)}
+              title={reportTitle}
+              preparedBy={preparedText}
+              report={themeReport}
+              sections={sections}
+              mapImages={Object.fromEntries(Object.entries(mapImages).map(([key, image]) => [key, image?.url ?? null]))}
+              unavailable={Object.keys(mapImages).filter((key) => mapImages[key]?.unavailable)}
+              failed={Object.keys(mapImages).filter((key) => mapImages[key]?.failed)}
+              capturing={capture?.queue?.[0]?.key ?? null}
+              measuring={measured.status}
+              lgu={Boolean(lgu)}
+              onChange={(key, text) => setEdits((current) => ({ ...current, [editKey(key)]: text }))}
+              onRewrite={() => {
+                setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${reportKind}/`))));
+                setReportNote(null);
+              }}
+              onImprove={improveReport}
+              onDocx={downloadDocx}
+              busy={reportBusy}
+              note={reportNote}
+            />
+          ) : (
           <ReportView
             heading={headingOf(lgu)}
             title={reportTitle}
@@ -838,7 +1068,7 @@ export default function MapSheet() {
             lgu={Boolean(lgu)}
             onChange={(key, text) => setEdits((current) => ({ ...current, [key]: text }))}
             onRewrite={() => {
-              setEdits({});
+              setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key.includes('/'))));
               setReportNote(null);
             }}
             onImprove={improveReport}
@@ -846,6 +1076,7 @@ export default function MapSheet() {
             busy={reportBusy}
             note={reportNote}
           />
+          )}
         </div>
       )}
     {/* The map stays mounted behind the other tabs: the report takes its picture. */}
@@ -885,6 +1116,9 @@ export default function MapSheet() {
                 {overlay.label}{mapLayers.layers[overlay.id] ? '' : ' — not uploaded yet'}
               </option>
             ))}
+            <option value="slope" disabled={!mapLayers.layers.elevation}>
+              Slope (FLUP classes){mapLayers.layers.elevation ? '' : ' — needs the elevation layer'}
+            </option>
           </select>
         </label>
         <fieldset className="space-y-1">

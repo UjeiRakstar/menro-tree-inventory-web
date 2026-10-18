@@ -64,15 +64,18 @@ export default function TablesView({
                   <p className="text-xs text-slate-500">Attribute tables · prepared by {preparedBy} · {date}</p>
                 </header>
               )}
-              {sheet.tables.map((table) => (
-                <div key={table.key} className="contents">
-                  {table.key === 'hazards' && note && (
-                    <p role="status" className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">{note}</p>
-                  )}
-                  <AttributeTable table={table} />
-                </div>
-              ))}
-              {sheet.charts.map((table) => chartFor(table))}
+              {sheet.items.map((item) =>
+                item.kind === 'chart' ? (
+                  chartFor(item.table, { maxHeight: '150mm' })
+                ) : (
+                  <div key={item.table.key} className="contents">
+                    {item.table.key === 'hazards' && note && (
+                      <p role="status" className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">{note}</p>
+                    )}
+                    <AttributeTable table={item.table} />
+                  </div>
+                )
+              )}
             </Paper>
           ))}
         </PaperStack>
