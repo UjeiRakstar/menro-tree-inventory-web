@@ -1,3 +1,5 @@
+import { officialName } from './psgc.js';
+
 /**
  * A printed map sheet, laid out the way the LGU Comprehensive Development
  * and Risk Assessment (CDRA) maps are — Santa Cruz's as the template: the map
@@ -234,11 +236,11 @@ export function defaultTitle({ survey, trees, sites, treeColour = 'one' }) {
   return 'BASE MAP';
 }
 
-/** The LGU's heading lines, as the seal block writes them. */
+/** The LGU's heading lines, as the seal block writes them: its official PSGC name. */
 export function headingOf(lgu) {
   if (!lgu) return ['PROVINCE OF LAGUNA', 'REGION IV-A CALABARZON'];
   return [
-    `${lgu.isCity ? 'CITY OF' : 'MUNICIPALITY OF'} ${lgu.label.toUpperCase()}`,
+    officialName(lgu).toUpperCase(),
     'PROVINCE OF LAGUNA',
     'REGION IV-A CALABARZON',
   ];

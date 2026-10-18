@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Info, Loader2 } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { isMissingTable, statsRow } from '../../lib/officeSettings.js';
+import { barangayFacts, PSGC_EDITION } from '../../lib/psgc.js';
 import Section, { Outcome, buttonClass } from './Section.jsx';
 
 let barangaysOnce = null;
@@ -13,9 +14,10 @@ const loadBarangays = () => {
 const number = (value) => (value === null || value === undefined ? '' : Number(value).toLocaleString('en-US'));
 
 /**
- * Each barangay of the LGU: its area, measured from the PSA boundary, and
- * the population and households the office keeps — for the indicators that
- * count per person or per household.
+ * Each barangay of the LGU: its area, measured from the PSA boundary, whether
+ * PSA counts it urban, and the population and households the office keeps —
+ * for the indicators that count per person or per household. A population
+ * left empty is PSA's 2024 count (PSGC 3Q 2026), shown in the box.
  */
 export default function BarangaySection({ lgu }) {
   const [barangays, setBarangays] = useState(null);
@@ -36,7 +38,12 @@ export default function BarangaySection({ lgu }) {
       setBarangays(
         all.features
           .filter((f) => f.properties.municipality === lgu.name)
-          .map((f) => ({ psgc: Number(f.properties.barangay_psgc), name: f.properties.barangay, areaKm2: f.properties.area_km2 }))
+          .map((f) => ({
+            psgc: Number(f.properties.barangay_psgc),
+            name: f.properties.barangay,
+            areaKm2: f.properties.area_km2,
+            psa: barangayFacts(f.properties.barangay_psgc),
+          }))
           .sort((a, b) => a.name.localeCompare(b.name))
       );
       setMissing(isMissingTable(stats.error));
@@ -53,7 +60,11 @@ export default function BarangaySection({ lgu }) {
   const changed = useMemo(() => Object.keys(edits).map(Number), [edits]);
   const totals = useMemo(() => {
     const sum = (key) =>
-      (barangays ?? []).reduce((total, b) => total + (Number(String(valueOf(b.psgc, key)).replace(/,/g, '')) || 0), 0);
+      (barangays ?? []).reduce(
+        (total, b) =>
+          total + (Number(String(valueOf(b.psgc, key)).replace(/,/g, '')) || (key === 'population' ? b.psa?.population2024 ?? 0 : 0)),
+        0
+      );
     return { population: sum('population'), households: sum('households') };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barangays, figures, edits]);
@@ -98,6 +109,10 @@ export default function BarangaySection({ lgu }) {
               Barangay figures need supabase/office_settings.sql, which has not been run yet.
             </p>
           )}
+          <p className="text-xs text-slate-500">
+            Population left empty is PSA&apos;s count ({PSGC_EDITION.populationSource}, PSGC {PSGC_EDITION.edition}), shown in grey.
+            Type your own where the office has a newer one.
+          </p>
           <div className="max-h-[28rem] overflow-auto rounded-xl border border-slate-200">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
@@ -108,6 +123,7 @@ export default function BarangaySection({ lgu }) {
                       Area <Info size={12} aria-hidden="true" />
                     </span>
                   </th>
+                  <th scope="col" className="px-3 py-2">Urban / rural</th>
                   <th scope="col" className="px-3 py-2">Population</th>
                   <th scope="col" className="px-3 py-2">Households</th>
                 </tr>
@@ -119,11 +135,13 @@ export default function BarangaySection({ lgu }) {
                     <td className="whitespace-nowrap px-3 py-1.5 text-right text-slate-600">
                       {b.areaKm2 != null ? `${(b.areaKm2 * 100).toLocaleString('en-US', { maximumFractionDigits: 1 })} ha` : '—'}
                     </td>
+                    <td className="px-3 py-1.5 text-slate-600">{b.psa?.urban == null ? '—' : b.psa.urban ? 'Urban' : 'Rural'}</td>
                     {['population', 'households'].map((key) => (
                       <td key={key} className="px-3 py-1.5">
                         <input
                           inputMode="numeric"
                           aria-label={`${key === 'population' ? 'Population' : 'Households'} of ${b.name}`}
+                          placeholder={key === 'population' && b.psa?.population2024 ? number(b.psa.population2024) : ''}
                           value={valueOf(b.psgc, key)}
                           onChange={edit(b.psgc, key)}
                           disabled={missing}
@@ -138,6 +156,7 @@ export default function BarangaySection({ lgu }) {
                 <tr>
                   <th scope="row" className="px-3 py-2">{barangays.length} barangays</th>
                   <td className="px-3 py-2" />
+                  <td className="px-3 py-2">{barangays.filter((b) => b.psa?.urban).length} urban</td>
                   <td className="px-3 py-2">{number(totals.population)}</td>
                   <td className="px-3 py-2">{number(totals.households)}</td>
                 </tr>

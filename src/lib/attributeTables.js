@@ -1,6 +1,7 @@
 import { treeClassOf } from './mapSheet.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from './mapSites.js';
 import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON, volumeOf } from './treeVolume.js';
+import { barangayFacts, PSGC_EDITION } from './psgc.js';
 
 /**
  * The attribute tables behind a map sheet (decided 17 October) — what the
@@ -46,7 +47,8 @@ const elevationOf = (props) =>
  * Each barangay, with what the inventory and the map say of it.
  *
  *   barangays  PSA features: { barangay, barangay_psgc, area_km2 }
- *   stats      Map(barangay psgc → { population, households })
+ *   stats      Map(barangay psgc → { population, households }) the office keeps;
+ *              a barangay without the office's population takes PSA's 2024 count
  *   trees      inventory rows, each with its \`barangay\` (where it stands)
  *   areas      saved area features
  */
@@ -59,10 +61,12 @@ export function barangayTable({ barangays = [], stats = new Map(), trees = [], a
       const classes = [...new Set(covers.map((area) => area.properties.coverLabel).filter(Boolean))];
       const count = (colouring, id) => here.filter((tree) => treeClassOf(tree, colouring) === id).length;
       const figures = stats.get(Number(feature.properties.barangay_psgc)) ?? {};
+      const psa = barangayFacts(feature.properties.barangay_psgc);
       return {
         name,
         areaHa: (Number(feature.properties.area_km2) || 0) * 100,
-        population: figures.population ?? null,
+        urban: psa?.urban == null ? null : psa.urban ? 'Urban' : 'Rural',
+        population: figures.population ?? psa?.population2024 ?? null,
         households: figures.households ?? null,
         landCoverHa: covers.reduce((total, area) => total + ha(siteAreaM2(area)), 0),
         landCover: classes.join(', ') || null,
@@ -80,9 +84,13 @@ export function barangayTable({ barangays = [], stats = new Map(), trees = [], a
   return {
     key: 'barangays',
     title: 'Barangays',
+    note:
+      `Urban / rural and, where the office has not recorded its own, population: ${PSGC_EDITION.populationSource}, ` +
+      `PSGC ${PSGC_EDITION.edition}.`,
     columns: [
       { key: 'name', label: 'Barangay', kind: 'text' },
       { key: 'areaHa', label: 'Area (ha)', kind: 'ha' },
+      { key: 'urban', label: 'Urban / rural', kind: 'text' },
       { key: 'population', label: 'Population', kind: 'number' },
       { key: 'households', label: 'Households', kind: 'number' },
       { key: 'landCoverHa', label: 'Land cover mapped (ha)', kind: 'ha' },
@@ -98,6 +106,7 @@ export function barangayTable({ barangays = [], stats = new Map(), trees = [], a
     rows,
     totals: {
       name: `${rows.length} barangays`,
+      urban: `${rows.filter((row) => row.urban === 'Urban').length} urban`,
       areaHa: sum('areaHa'),
       population: sum('population') || null,
       households: sum('households') || null,

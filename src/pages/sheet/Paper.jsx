@@ -42,6 +42,7 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
   return (
     <section aria-label={table.title} className="break-inside-avoid">
       <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">{table.title}</h3>
+      {table.note && <p className="text-[9px] italic text-slate-500">{table.note}</p>}
       {table.rows.length === 0 ? (
         <p className="mt-1 text-sm text-slate-500">{empty}</p>
       ) : (

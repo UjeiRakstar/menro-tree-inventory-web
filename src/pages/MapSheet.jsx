@@ -24,6 +24,7 @@ import philippines from '../data/Philippines.geojson';
 import { barangayForTree, loadBarangayIndex } from '../lib/barangayLookup.js';
 import { barangayTable, carbonTable, hazardTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
 import { writeReport } from '../lib/reportWriter.js';
+import { officialName } from '../lib/psgc.js';
 import { reportDocx } from '../lib/reportDocx.js';
 import TablesView from './sheet/TablesView.jsx';
 import ReportView from './sheet/ReportView.jsx';
@@ -463,7 +464,7 @@ export default function MapSheet() {
   async function improveReport() {
     setReportBusy('improve');
     setReportNote(null);
-    const placeName = lgu ? `${lgu.isCity ? 'City' : 'Municipality'} of ${lgu.label}` : 'Province of Laguna';
+    const placeName = officialName(lgu);
     const { data, error } = await supabase.functions.invoke('improve-report', { body: { place: placeName, sections } });
     setReportBusy('');
     if (error || !Array.isArray(data?.sections)) {
@@ -524,7 +525,7 @@ export default function MapSheet() {
   async function downloadExcel() {
     setExcelBusy(true);
     try {
-      const blob = await tablesWorkbook(tables, { place: lgu ? `${lgu.isCity ? 'City' : 'Municipality'} of ${lgu.label}, Laguna` : 'Province of Laguna', preparedBy: preparedText });
+      const blob = await tablesWorkbook(tables, { place: lgu ? `${officialName(lgu)}, Laguna` : 'Province of Laguna', preparedBy: preparedText });
       saveFile(blob, `${fileStem}_Tables.xlsx`);
     } finally {
       setExcelBusy(false);

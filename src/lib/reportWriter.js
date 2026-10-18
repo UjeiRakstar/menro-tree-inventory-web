@@ -1,3 +1,5 @@
+import { officialName } from './psgc.js';
+
 /**
  * The written report behind a map sheet (decided 17 October, option C): the
  * system writes it from the figures, in fixed sentences, so it always says
@@ -77,12 +79,12 @@ function hazardSentences(table, short) {
 /**
  *   place        { label, isCity } — or null for the province
  *   tables       { barangays, hazards, carbon, landCover, plantingSites } (attributeTables.js)
- *   trees        the inventory rows in scope, each with \`barangay\`
+ *   trees        the inventory rows in scope, each with `barangay`
  *   climate      the LGU's CLIRAM row, or null
  *   date         when it is written
  */
 export function writeReport({ place = null, tables, trees = [], climate = null, date = new Date() }) {
-  const where = place ? `${place.isCity ? 'City' : 'Municipality'} of ${place.label}` : 'Province of Laguna';
+  const where = officialName(place);
   const short = place ? place.label : 'Laguna';
   const when = date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
   const sections = [];
@@ -260,7 +262,8 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
       'Trees: the Green Tag field inventory, tagged by the field officers and verified by the office. Boundaries: PSA and NAMRIA. ' +
       'Hazards: UP NOAH, measured over each barangay on a grid of about 60 m. Elevation: Copernicus DEM. Soils: DA–BSWM. ' +
       'Climate: DOST-PAGASA CLIRAM. Carbon: the DENR volume equations for Southern Luzon (FMB Technical Bulletin No. 3) with ' +
-      'IPCC defaults for wood density, biomass expansion and carbon fraction — estimates, from the trees with a diameter and ' +
+      'default wood density and biomass expansion, the carbon content of Philippine wood (Lasco & Pulhin 2000) and a year\'s ' +
+      'growth of 1.19 cm in diameter (Schneider et al. 2013) — estimates, from the trees with a diameter and ' +
       'merchantable height recorded. Land cover and tree planting sites are as the offices drew them on the map. The inventory ' +
       'counts only the trees tagged so far, not every tree standing.',
   });

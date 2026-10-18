@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { isPgenro } from '../../lib/roles.js';
 import { officeOf } from '../../lib/officeSettings.js';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
+import { officialName } from '../../lib/psgc.js';
 import { PROVINCE_LOGO, logoFor } from '../../lib/lguLogos.js';
 import ProfileSection from './ProfileSection.jsx';
 import BarangaySection from './BarangaySection.jsx';
@@ -26,7 +27,7 @@ export default function Settings() {
   const officeLabel = pgenro
     ? 'PGENRO, Province of Laguna'
     : lguInfo
-      ? `${lguInfo.isCity ? 'City' : 'Municipality'} of ${lguInfo.label}`
+      ? officialName(lguInfo)
       : lgu?.label ?? '';
 
   if (!office) {

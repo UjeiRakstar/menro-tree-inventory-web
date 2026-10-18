@@ -9,7 +9,7 @@ const area = (properties) => ({ type: 'Feature', geometry: SQUARE, properties: {
 
 const BARANGAYS = [
   { properties: { barangay: 'Alipit', barangay_psgc: 403426001, area_km2: 1.9 } },
-  { properties: { barangay: 'Gatid', barangay_psgc: 403426007, area_km2: 0.16 } },
+  { properties: { barangay: 'Gatid', barangay_psgc: 403426006, area_km2: 0.16 } },
 ];
 const TREES = [
   { species: 'Narra', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Timber', origin: 'native', dbh: 30, merchantable_height: 8 },
@@ -38,7 +38,10 @@ describe('barangayTable', () => {
       trees: 3, species: 3, native: 2, invasive: 1, fruit: 1, timber: 2, ornamental: 0,
     });
     expect(alipit.landCoverHa).toBeCloseTo(1.2, 1);
-    expect(table.rows.find((row) => row.name === 'Gatid')).toMatchObject({ trees: 0, population: null });
+    // The office's own count where it has one; PSA's 2024 count where it has not.
+    expect(alipit.urban).toBe('Rural');
+    expect(table.rows.find((row) => row.name === 'Gatid')).toMatchObject({ trees: 0, population: 10656, urban: 'Urban' });
+    expect(table.note).toMatch(/PSA 2024 Census of Population/);
     expect(table.totals).toMatchObject({ trees: 3, invasive: 1, name: '2 barangays' });
   });
 });
