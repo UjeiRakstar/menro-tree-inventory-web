@@ -48,13 +48,13 @@ export default function PublicFooter() {
                 <Link to="/about" className="hover:text-white hover:underline transition-all">About Us</Link>
               </li>
               <li>
-                <a href="#" className="hover:text-white hover:underline transition-all">News and Events</a>
+                <Link to="/about" className="hover:text-white hover:underline transition-all">News and Events</Link>
               </li>
               <li>
                 <a href="#" className="hover:text-white hover:underline transition-all">Our Partners and Contributors</a>
               </li>
               <li>
-                <a href="#contact" className="hover:text-white hover:underline transition-all">Contact Us</a>
+                <Link to="/contact" className="hover:text-white hover:underline transition-all">Contact Us</Link>
               </li>
               <li>
                 <Link to="/biodiversity" className="hover:text-white hover:underline transition-all">BioDashboard</Link>

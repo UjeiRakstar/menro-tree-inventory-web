@@ -36,6 +36,9 @@ const Settings = lazy(() => import('./pages/settings/Settings.jsx'));
 const ManageArborists = lazy(() => import('./pages/ManageArborists.jsx'));
 const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
 const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
+const Inbox = lazy(() => import('./pages/Inbox.jsx'));
+const NewsPage = lazy(() => import('./pages/pgenro/NewsPage.jsx'));
+const ContactPage = lazy(() => import('./pages/public/ContactPage.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
 /** Shown for the moment a page's code is in flight. */
@@ -203,6 +206,7 @@ function AppRoutes() {
         <Route path="/about" element={<AboutUs />} />
         <Route path="/biodiversity" element={<PublicDashboard />} />
         <Route path="/public-map" element={<PublicMap />} />
+        <Route path="/contact" element={<ContactPage />} />
       </Route>
 
       {/* Protected routes */}
@@ -214,6 +218,8 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
         <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
+        <Route path="news" element={<PgenroOnly><NewsPage /></PgenroOnly>} />
+        <Route path="inbox" element={<Inbox />} />
         <Route path="map" element={<MenroMap />} />
         <Route path="settings" element={<Settings />} />
         <Route path="inventory" element={<BiodiversityHub />} />

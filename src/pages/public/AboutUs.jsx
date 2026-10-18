@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Monitor, ChevronDown, Compass, Send } from 'lucide-react';
+import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Monitor, ChevronDown, Compass } from 'lucide-react';
+import NewsBanner from '../../components/public/NewsBanner.jsx';
+import { ContactForm, OfficeDirectory } from '../../components/public/ContactUs.jsx';
 
 import forestcoverImg from '../../assets/optimised/forestcover.avif';
 import greenTagLogo from '../../assets/GreenTag_Logo.png';
@@ -109,52 +111,6 @@ function useParallax(speed = 0.3, limit = 80) {
 /* ══════════════════════════════════════════════════
    Reusable Sub-Components
    ══════════════════════════════════════════════════ */
-
-/**
- * One field of the contact form.
- *
- * The label sits above the input rather than inside it as placeholder text.
- * A placeholder disappears the moment someone starts typing, so they cannot
- * check what they are filling in, and pale text on the green field came to
- * about 3:1 against it — under the 4.5:1 that body text needs to stay legible.
- * On the grey card a dark green label clears that comfortably.
- */
-function ContactField({ id, label, type = 'text', multiline = false, required = false, autoComplete }) {
-  const field =
-    'w-full bg-[#1A8242] text-white px-6 py-4 rounded-xl focus:outline-none focus:ring-2 ' +
-    'focus:ring-green-400 focus:bg-[#167038] transition-colors uppercase tracking-wider ' +
-    'text-sm font-semibold shadow-md';
-
-  return (
-    <div>
-      <label
-        htmlFor={id}
-        className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-green-900"
-      >
-        {label}
-        {required && <span className="ml-1 text-green-700" aria-hidden="true">*</span>}
-      </label>
-      {multiline ? (
-        <textarea
-          id={id}
-          name={id}
-          rows="4"
-          required={required}
-          className={`${field} resize-none`}
-        />
-      ) : (
-        <input
-          id={id}
-          name={id}
-          type={type}
-          required={required}
-          autoComplete={autoComplete}
-          className={field}
-        />
-      )}
-    </div>
-  );
-}
 
 /**
  * A logo that links to the organisation it belongs to.
@@ -443,6 +399,9 @@ export default function AboutUs() {
           </div>
         </div>
       </section>
+
+      {/* PGENRO's News & Events, when there are any */}
+      <NewsBanner />
 
       {/* ═══════════════════════════════════════════
           IMPACT STATS BAR — Animated Counters
@@ -775,44 +734,16 @@ export default function AboutUs() {
             </div>
             <div className="flex-1">
               <p className="text-gray-700 leading-relaxed text-base sm:text-lg text-left sm:text-justify md:text-left">
-                Have questions or want to get involved with the Green Tag system? We would love to hear from you. Connect with us across our social platforms or send a direct message right here on the site, and our team will reach out to you via email. Let&apos;s grow a greener Laguna together!
+                Have questions or want to get involved with the Green Tag system? We would love to hear from you. Write to PGENRO or to your own city or municipality&apos;s environment office right here on the site, and they will reply to you by email. Let&apos;s grow a greener Laguna together!
               </p>
             </div>
           </FadeIn>
 
-          {/* Form Container */}
+          {/* Each office's contact details, then the form that writes to one of them */}
+          <OfficeDirectory />
           <FadeIn delay={200}>
             <div className="bg-[#DCE1E3] p-6 sm:p-10 rounded-3xl shadow-inner">
-              <form
-                className="space-y-4 sm:space-y-6"
-                onSubmit={(e) => { e.preventDefault(); alert('Message feature is in development!'); }}
-              >
-                {/* Row 1: Full Name & Email */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                  <ContactField id="contact-name" label="Full Name" autoComplete="name" required />
-                  <ContactField id="contact-email" label="Email Address" type="email" autoComplete="email" required />
-                </div>
-
-                {/* Row 2: Address & Affiliation */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                  <ContactField id="contact-address" label="Address" autoComplete="street-address" />
-                  <ContactField id="contact-affiliation" label="Affiliation / Institution" autoComplete="organization" />
-                </div>
-
-                {/* Row 3: Message */}
-                <ContactField id="contact-message" label="Message" multiline required />
-
-                {/* Submit Button */}
-                <div>
-                  <button
-                    type="submit"
-                    className="w-full bg-green-700 text-white px-6 py-4 rounded-xl font-bold text-lg uppercase tracking-widest hover:bg-green-800 focus:ring-4 focus:ring-green-500/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-3"
-                  >
-                    Send Message
-                    <Send size={20} />
-                  </button>
-                </div>
-              </form>
+              <ContactForm />
             </div>
           </FadeIn>
         </div>

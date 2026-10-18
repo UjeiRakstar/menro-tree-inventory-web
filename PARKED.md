@@ -23,7 +23,7 @@ finished, tested and committed before the next starts.
 - A barangay on the Action Board with a hazard nobody is sent to: red, "!".
 - A MENRO / CENRO makes field officers for its own LGU only.
 
-**Round B — the inbox.** One inbox per office for: system notices (PGENRO
+**Round B — the inbox. Done 18 October.** One inbox per office for: system notices (PGENRO
 saves or approves a planting site → every MENRO / CENRO, with View on map;
 outside its LGU the map shows without functions); a tree the AI identified
 that matches nothing in the RISE library → PGENRO; PGENRO's News & Events as a
@@ -169,6 +169,11 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     belongs to an LGU and only that office sees it; PGENRO sees all, the public
     none. Until it runs, every signed-in office can read every permit — the
     clients' names, numbers and addresses (after steps 1, 2 and 8).
+17. `supabase/inbox.sql` (18 October) — each office's inbox: planting-site notices,
+    PGENRO's News & Events (and its 'news-photos' bucket), trees saved under a
+    species the RISE library lacks (to PGENRO), and the public's contact form
+    (after steps 1, 9, 10 and 14). Until it runs, the inbox says so and the
+    contact form asks visitors to use the office's email.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must

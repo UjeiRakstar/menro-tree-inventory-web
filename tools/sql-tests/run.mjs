@@ -29,6 +29,7 @@ const SUITES = [
   ['RISE species fields', 'rise.mjs'],
   ['map areas', 'areas.mjs'],
   ['office settings and AI keys', 'settings.mjs'],
+  ['inboxes, news and messages', 'inbox.mjs'],
 ];
 
 let failed = 0;

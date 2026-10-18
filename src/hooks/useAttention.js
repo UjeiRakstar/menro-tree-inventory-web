@@ -27,15 +27,16 @@ export const lguOfTree = (tree) => {
  *   requests   planting site requests (planting_requests.sql) — for PGENRO,
  *              those waiting for its decision; for an office, its own that
  *              PGENRO declined, to correct or withdraw. Only when `withRequests`.
+ *   inbox      the office's unread messages (inbox.sql). Only when `withInbox`.
  *
  * An LGU account counts its own LGU only: the database already narrows the
  * field officers it can see, and the hazards are narrowed here. Counted again
  * on every page change, so a dispatch or an approval clears its badge by the
  * time the next page opens.
  */
-export function useAttention({ lguPsgc = null, withProposals = false, withRequests = null } = {}) {
+export function useAttention({ lguPsgc = null, withProposals = false, withRequests = null, withInbox = false } = {}) {
   const { pathname } = useLocation();
-  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null, requests: 0 });
+  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null, requests: 0, inbox: 0 });
   // Bumped when a proposal is made or decided, so the "!" changes live
   // (supabase/live_updates.sql) rather than on the next page.
   const [tick, setTick] = useState(0);
@@ -61,9 +62,18 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
   }, [withRequests]);
 
   useEffect(() => {
+    if (!withInbox) return undefined;
+    const channel = supabase
+      .channel('attention-inbox')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inbox_messages' }, () => setTick((n) => n + 1))
+      .subscribe();
+    return () => supabase.removeChannel?.(channel);
+  }, [withInbox]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [trees, pending, proposals, requests] = await Promise.all([
+      const [trees, pending, proposals, requests, inbox] = await Promise.all([
         supabase.from('trees').select('*'),
         supabase
           .from('profiles')
@@ -86,6 +96,10 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
               .eq('kind', 'planting-site')
               .eq('approval', withRequests === 'waiting' ? 'requested' : 'declined')
           : Promise.resolve({ data: [], error: null }),
+        // The database shows an office its own inbox only (inbox.sql).
+        withInbox
+          ? supabase.from('inbox_messages').select('id').is('read_at', null).is('archived_at', null)
+          : Promise.resolve({ data: [], error: null }),
       ]);
       if (cancelled) return;
 
@@ -98,12 +112,13 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
         proposals: open.length,
         firstProposalArea: open[0]?.area_id ?? null,
         requests: requests.error || !Array.isArray(requests.data) ? 0 : requests.data.length,
+        inbox: inbox.error || !Array.isArray(inbox.data) ? 0 : inbox.data.length,
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [pathname, lguPsgc, withProposals, withRequests, tick]);
+  }, [pathname, lguPsgc, withProposals, withRequests, withInbox, tick]);
 
   return counts;
 }

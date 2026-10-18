@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, Layers, LogOut, MapPinned, Settings as SettingsIcon, ShieldCheck, Sprout, Users } from 'lucide-react';
+import { ChevronDown, FileText, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, ShieldCheck, Sprout, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -101,9 +101,10 @@ export default function Header() {
     withProposals: lguAdmin,
     // PGENRO decides planting site requests; an office answers a declined one.
     withRequests: pgenro ? 'waiting' : lguAdmin ? 'declined' : null,
+    withInbox: pgenro || lguAdmin,
   });
   // The seal's "!" is everything waiting on this office's say-so.
-  const waiting = attention.approvals + attention.proposals + attention.requests;
+  const waiting = attention.approvals + attention.proposals + attention.requests + attention.inbox;
   const waitingLabel = [
     attention.approvals > 0 &&
       `${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`,
@@ -113,6 +114,7 @@ export default function Header() {
       (pgenro
         ? `${attention.requests} planting site ${attention.requests === 1 ? 'request is' : 'requests are'} waiting for a decision`
         : `${attention.requests} planting site ${attention.requests === 1 ? 'request was' : 'requests were'} declined`),
+    attention.inbox > 0 && `${attention.inbox} unread ${attention.inbox === 1 ? 'message' : 'messages'} in the inbox`,
   ]
     .filter(Boolean)
     .join('; ');
@@ -236,6 +238,13 @@ export default function Header() {
 
               <div className="border-t border-slate-100 py-1">
                 {(pgenro || lguAdmin) && (
+                  <NavLink to="/inbox" className={menuItem}>
+                    <InboxIcon size={16} aria-hidden="true" className="text-slate-500" />
+                    <span className="flex-1">Inbox</span>
+                    {attention.inbox > 0 && <MenuAlert label={`${attention.inbox} unread`} />}
+                  </NavLink>
+                )}
+                {(pgenro || lguAdmin) && (
                   <NavLink to="/settings" className={menuItem}>
                     <SettingsIcon size={16} aria-hidden="true" className="text-slate-500" />
                     Settings
@@ -272,6 +281,12 @@ export default function Header() {
                   <NavLink to="/accounts" className={menuItem}>
                     <ShieldCheck size={16} aria-hidden="true" className="text-slate-500" />
                     Accounts
+                  </NavLink>
+                )}
+                {pgenro && (
+                  <NavLink to="/news" className={menuItem}>
+                    <Megaphone size={16} aria-hidden="true" className="text-slate-500" />
+                    News &amp; Events
                   </NavLink>
                 )}
                 {pgenro && (

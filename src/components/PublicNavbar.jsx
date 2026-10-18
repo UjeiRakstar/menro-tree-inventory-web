@@ -13,6 +13,7 @@ const navLinks = [
   { to: '/about', label: 'About Us' },
   { to: '/public-map', label: 'Map' },
   { to: '/biodiversity', label: 'BioDashboard' },
+  { to: '/contact', label: 'Contact Us' },
 ];
 
 export default function PublicNavbar() {
