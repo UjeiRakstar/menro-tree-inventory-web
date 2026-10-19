@@ -838,7 +838,9 @@ function TreeActions({ tree, onDispatch, onPermit, canAct = true }) {
 
       {tree.__pending ? (
         <p className="mt-2 text-xs text-slate-500">
-          A resident tagged this. It joins the inventory once the field officer checks it in the app.
+          {tree.source === 'import'
+            ? `From the office's inventory spreadsheet${tree.details?.dbh_cm ? ` (DBH ${tree.details.dbh_cm} cm${tree.details.height_m ? `, ${tree.details.height_m} m tall` : ''})` : ''}. Unverified: it joins the inventory once a field officer checks it and takes its photos.`
+            : 'A resident tagged this. It joins the inventory once the field officer checks it in the app.'}
         </p>
       ) : !canAct ? (
         // PGENRO watches the province; the work on a tree is its LGU's.
@@ -1027,11 +1029,17 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         }
 
         if (admin) {
+          // Tags out for field checking, and the trees an office brought in
+          // from its inventory spreadsheet, waiting for theirs (community.sql).
           const { data: pending } = await supabase
             .from('pending_trees')
             .select('*')
-            .eq('status', 'dispatched');
-          if (!cancelled) setPendingTrees(Array.isArray(pending) ? pending : []);
+            .in('status', ['dispatched', 'pending']);
+          if (!cancelled) {
+            setPendingTrees(
+              (Array.isArray(pending) ? pending : []).filter((tag) => tag.status === 'dispatched' || tag.source === 'import')
+            );
+          }
         }
       } catch (e) {
         if (cancelled) return;

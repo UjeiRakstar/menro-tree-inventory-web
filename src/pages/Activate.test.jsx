@@ -96,6 +96,16 @@ describe('the code', () => {
     expect(screen.getByLabelText('Full name')).toBeInTheDocument();
   });
 
+  it('lights up the LGU the code is for on a map of Laguna', async () => {
+    codeAnswers({ ok: true, reason: 'ok', lgu_label: 'Santa Cruz', lgu_name: 'Santa Cruz', is_city: false, hall_lat: 14.28, hall_lng: 121.41 });
+    renderPage();
+    typeCode(GOOD_CODE);
+    const map = await screen.findByRole('img', { name: 'Map of Laguna, Santa Cruz highlighted' });
+    const lit = map.querySelectorAll('path[data-lit]');
+    expect([...lit].map((path) => path.dataset.lgu)).toEqual(['Santa Cruz']);
+    expect(map.querySelectorAll('path').length).toBe(30);
+  });
+
   it('calls a city’s office the City ENRO', async () => {
     codeAnswers({ ok: true, reason: 'ok', lgu_label: 'Calamba City', is_city: true });
     renderPage();

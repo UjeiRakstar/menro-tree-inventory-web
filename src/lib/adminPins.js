@@ -9,7 +9,8 @@ import { PIN_COLOR, classifyPinColor } from './pinColor.js';
  *
  *   red     a hazard nobody has been sent to       → act
  *   orange  a hazard an arborist is on             → wait
- *   grey    crowdsourced, awaiting field checking  → verify
+ *   grey    unverified — a resident's tag, or a tree from the office's
+ *           inventory spreadsheet — awaiting field checking  → verify
  *   yellow  a cutting permit has been issued
  *   green   nothing to do
  */
@@ -24,7 +25,7 @@ export const PIN_FILL = Object.freeze({
 export const PIN_MEANING = Object.freeze({
   [PIN_COLOR.RED]: 'Hazard — needs dispatching',
   [PIN_COLOR.ORANGE]: 'Hazard — arborist dispatched',
-  [PIN_COLOR.GREY]: 'Crowdsourced — awaiting field check',
+  [PIN_COLOR.GREY]: 'Unverified — awaiting field check',
   [PIN_COLOR.YELLOW]: 'Cutting permit issued',
   [PIN_COLOR.GREEN]: 'Healthy',
 });

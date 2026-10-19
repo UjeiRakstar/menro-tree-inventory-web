@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Monitor, ChevronDown, Compass } from 'lucide-react';
 import NewsBanner from '../../components/public/NewsBanner.jsx';
+import Leaderboard from '../../components/public/Leaderboard.jsx';
 import { ContactForm, OfficeDirectory } from '../../components/public/ContactUs.jsx';
 
 import forestcoverImg from '../../assets/optimised/forestcover.avif';
@@ -231,14 +232,27 @@ function StatPill({ icon: Icon, number, suffix, label, delay }) {
   );
 }
 
-/** Feature row — icon + title + description */
-function FeatureRow({ icon: Icon, title, description, delay = 0 }) {
+/**
+ * Feature row — icon + title + description. With `onIconClick` the icon is a
+ * button: Crowdsourcing's turns the phone beside it to the leaderboard.
+ */
+function FeatureRow({ icon: Icon, title, description, delay = 0, onIconClick, pressed = false, iconLabel }) {
+  const iconBox = `flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
+    pressed ? 'bg-green-600' : 'bg-green-100 group-hover:bg-green-600'
+  }`;
+  const glyph = (
+    <Icon className={`transition-colors duration-300 ${pressed ? 'text-white' : 'text-green-700 group-hover:text-white'}`} size={20} aria-hidden="true" />
+  );
   return (
     <FadeIn delay={delay} direction="left" className="flex gap-4 items-start group">
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center
-                      group-hover:bg-green-600 group-hover:text-white transition-colors duration-300">
-        <Icon className="text-green-700 group-hover:text-white transition-colors duration-300" size={20} />
-      </div>
+      {onIconClick ? (
+        <button type="button" onClick={onIconClick} aria-pressed={pressed} aria-label={iconLabel}
+          className={`${iconBox} cursor-pointer ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${pressed ? '' : 'motion-safe:animate-pulse'}`}>
+          {glyph}
+        </button>
+      ) : (
+        <div className={iconBox}>{glyph}</div>
+      )}
       <div className="flex-1">
         <h3 className="font-bold text-gray-900 text-sm sm:text-base uppercase tracking-wide mb-1">
           {title}
@@ -257,6 +271,9 @@ function FeatureRow({ icon: Icon, title, description, delay = 0 }) {
 
 export default function AboutUs() {
   const [heroLoaded, setHeroLoaded] = useState(false);
+  // The front phone shows the app, or — the Crowdsourcing icon tapped — the
+  // residents' leaderboard (Round D).
+  const [showBoard, setShowBoard] = useState(false);
   const heroParallax = useParallax(0.25);
 
   useEffect(() => {
@@ -497,12 +514,16 @@ export default function AboutUs() {
               {/* Front Phone: App/Seedling View */}
               <FadeIn direction="up" delay={400} className="absolute right-0 sm:right-[20%] lg:right-[15%] top-12 sm:top-16 z-20">
                 <div className="relative w-52 sm:w-64 h-[400px] sm:h-[480px] bg-white rounded-[2rem] sm:rounded-[2.5rem] p-2 sm:p-3 shadow-[0_20px_50px_rgba(0,0,0,0.3)] ring-1 ring-gray-100 transform rotate-3 transition-transform duration-500 hover:-rotate-2 hover:scale-105">
-                  <div className="w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden">
-                    <img
-                      src={mobileImg}
-                      alt="Tree inventory mobile app preview"
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-full h-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden" aria-live="polite">
+                    {showBoard ? (
+                      <Leaderboard compact />
+                    ) : (
+                      <img
+                        src={mobileImg}
+                        alt="Tree inventory mobile app preview"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                   </div>
                   {/* Notch */}
                   <div className="absolute top-3 sm:top-4 left-1/2 -translate-x-1/2 w-16 h-4 sm:w-20 sm:h-5 bg-white rounded-full" />
@@ -539,6 +560,9 @@ export default function AboutUs() {
                   icon={Leaf}
                   title="Crowdsourcing"
                   delay={100}
+                  onIconClick={() => setShowBoard((shown) => !shown)}
+                  pressed={showBoard}
+                  iconLabel={showBoard ? 'Show the app on the phone' : 'Show the leaderboard on the phone'}
                   description="Environmental stewardship belongs to all of us. Spot a remarkable tree in your
                     neighborhood — a towering acacia or a flowering molave — and help document it.
                     Tag its GPS location, snap a photo, and submit through our public portal."

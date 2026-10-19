@@ -52,7 +52,7 @@ likelihood and consequence (LCCAP Book 3, Task 3A.4). Read for this:
   native, exotic), GIS mapping, citizen science, urban barangays by the NSCB
   definition. Its Singapore Index attachment is scanned images only.
 
-**Round D — accounts.** Public sign-in with a Google account only, to count
+**Round D — accounts. Done 19 October** (steps 18 and 19 below). Public sign-in with a Google account only, to count
 real people (for the CBI) and later to reward them: a disclaimer that only
 what the leaderboard needs is kept; a shown name or a nickname, with
 inappropriate nicknames refused. A leaderboard of the most trees tagged on
@@ -62,6 +62,16 @@ user's name, address, photo and designation (required); then, each
 skippable and editable later in Settings, the barangay population (PSA's
 2024 count already filled in) and a standard tree inventory spreadsheet to
 download and upload — its trees grey until verified with photos.
+- Built: the Community page (/community, and a tab in the navbar) with what
+  is kept, Continue with Google, and name or nickname; a resident is never an
+  office account (no profile, kept out of every approval queue). Nicknames are
+  checked in the database, in English and Filipino, with numbers for letters.
+  The leaderboard: on the Community page, and in the About page's phone when
+  the Crowdsourcing icon is tapped. A tag sent while signed in is credited to
+  its sender by the database; the tag form says whether it will count.
+- The office's first sign-in: details (required), barangays, inventory. The
+  LGU lights up on a small map of Laguna once the code is checked. Settings
+  has a Tree inventory section. Imported trees are grey on the office map.
 
 **Round E — the field app.** The hagameter steps replaced by typing in what
 was measured with a real hagameter and tape (DBH, total and merchantable
@@ -79,6 +89,22 @@ can do everything. The RISE details on the public tree panel, more of them.
 - CDRA hatching for hazard levels; the GHG inventory (needs the emissions
   data from outside this system).
 - Incentives for residents: after the leaderboard.
+- The inventory template is provisional (`src/lib/treeInventory.js`): Tree
+  No., Common and Scientific name, Latitude, Longitude, Barangay, DBH, Total
+  and Merchantable height, Condition, Date, Remarks. Columns are read by
+  heading, so yours can replace it; send it and the reader follows it.
+- Found in Round D, to decide after the rounds:
+  - Should tagging need a Google sign-in? Today anyone can still tag, and an
+    anonymous tag counts for nobody.
+  - The field app, verifying an imported tree, does not yet show the DBH and
+    heights the spreadsheet gave (they are in `pending_trees.details`).
+  - A resident asking to be removed (RA 10173): the page says to ask PGENRO;
+    there is no button for PGENRO to do it yet (deleting the auth user
+    removes the resident row; their tags stay, credited to nobody).
+  - The nickname word list is a starting list (`nickname_problem()` in
+    community.sql); PGENRO may want words added.
+  - Residents per LGU for the CBI: today the count is province-wide
+    (`community_counts()`); per LGU would go by where each resident tagged.
 
 ## Before the account ticket touches anything
 
@@ -174,10 +200,22 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     species the RISE library lacks (to PGENRO), and the public's contact form
     (after steps 1, 9, 10 and 14). Until it runs, the inbox says so and the
     contact form asks visitors to use the office's email.
+18. `supabase/community.sql` (19 October) — residents who sign in with Google,
+    the credit for their tags, nicknames checked, the leaderboard and the CBI
+    count (after steps 1, 4 and 5). **Then switch Google on:** in Google Cloud
+    Console make an OAuth client (Web application) whose authorised redirect
+    URI is the one Supabase shows under Authentication → Sign In / Providers →
+    Google; paste its client ID and secret there and enable it. Under
+    Authentication → URL Configuration, add the site's `/community` address to
+    the redirect URLs. Until then, Continue with Google says it is not on yet.
+19. `supabase/onboarding.sql` (19 October) — the office's first sign-in:
+    designation, address and when it finished. Accounts that have already
+    signed in are marked done and never see it. The photo goes in the
+    'office-logos' bucket (after steps 1, 15 and 18).
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 9 suites, 333 checks — the final check query on its
+allow and refuse — 12 suites, 473 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Steps 1–12 are in the live database** (map layers and CLIRAM seen working, 15 October); step 13 is new. Not deployed: the

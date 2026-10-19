@@ -151,6 +151,15 @@ export function accessFor(profile) {
 }
 
 export const canUseWeb = (profile) => accessFor(profile).kind === 'web';
+
+/**
+ * Whether a MENRO / CENRO account is yet to fill in its holder's details
+ * (supabase/onboarding.sql). Only a real null: before that file has run there
+ * is no onboarded_at at all, and nobody is stopped. A training account is the
+ * real office's, borrowed, and is never asked.
+ */
+export const needsOnboarding = (profile) =>
+  roleOf(profile) === ROLES.LGU_ADMIN && profile?.onboarded_at === null && !profile?.is_training;
 export const isPgenro = (profile) =>
   roleOf(profile) === ROLES.PGENRO && profile?.status !== STATUS.LOCKED && profile?.status !== STATUS.ARCHIVED;
 

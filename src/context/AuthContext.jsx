@@ -12,6 +12,8 @@ import { supabase } from '../supabaseClient.js';
  *   session  undefined while checking, null when signed out
  *   profile  undefined while loading, null when the account has none
  *   lgu      the LGU row for an LGU admin, null for PGENRO
+ *   resident a resident who signed in with Google (supabase/community.sql),
+ *            null for everyone else; such an account has no profile
  */
 const AuthContext = createContext(null);
 
@@ -22,6 +24,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined);
   const [profile, setProfile] = useState(undefined);
   const [lgu, setLgu] = useState(null);
+  const [resident, setResident] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data?.session ?? null));
@@ -40,6 +43,7 @@ export function AuthProvider({ children }) {
     if (!userId) {
       setProfile(null);
       setLgu(null);
+      setResident(null);
       return;
     }
 
@@ -64,7 +68,21 @@ export function AuthProvider({ children }) {
       lguRow = firstRow(lguData);
     }
 
+    // No profile: perhaps a resident. Until community.sql has run the table
+    // is not there, and the account is simply one with no profile.
+    let residentRow = null;
+    if (!row) {
+      const { data: residentData, error: residentError } = await supabase
+        .from('residents')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      if (load !== latestLoad.current) return;
+      residentRow = residentError ? null : firstRow(residentData);
+    }
+
     setLgu(lguRow);
+    setResident(residentRow);
     setProfile(row);
   }, [userId]);
 
@@ -83,10 +101,11 @@ export function AuthProvider({ children }) {
       session,
       profile,
       lgu,
+      resident,
       loading: session === undefined || (Boolean(session) && profile === undefined),
       refreshProfile: loadProfile,
     }),
-    [session, profile, lgu, loadProfile]
+    [session, profile, lgu, resident, loadProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

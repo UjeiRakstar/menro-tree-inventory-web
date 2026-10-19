@@ -4,6 +4,7 @@ import { CheckCircle2, KeyRound, Leaf, Lock, Mail, TreePine, User } from 'lucide
 import { supabase } from '../supabaseClient.js';
 import { CODE_REASONS, codeProblem, formatCode, normalizeCode } from '../lib/accountCodes.js';
 import { roleLabel } from '../lib/roles.js';
+import LguReveal from '../components/LguReveal.jsx';
 
 // A map is a heavy thing to load for a page most people see once. It comes
 // only when the hall actually has to be pinned.
@@ -220,6 +221,7 @@ export default function Activate() {
                 <p className="text-base font-bold text-green-900">
                   {unlocks.label} · {role}
                 </p>
+                {unlocks.name && <div className="mt-2"><LguReveal name={unlocks.name} label={unlocks.label} /></div>}
               </div>
               <div>
                 <h2 className="text-sm font-bold text-slate-800">Where is the {unlocks.label} {hallLabel}?</h2>
@@ -250,6 +252,7 @@ export default function Activate() {
                 <p className="text-base font-bold text-green-900">
                   {unlocks.label} · {role}
                 </p>
+                {unlocks.name && !hallConfirmed && <div className="mt-2"><LguReveal name={unlocks.name} label={unlocks.label} /></div>}
                 <button
                   type="button"
                   onClick={() => setUnlocks(null)}

@@ -5,6 +5,8 @@ import { supabase } from '../../supabaseClient.js';
 import { municipalityAt } from '../../lib/lagunaBoundaries.js';
 import { barangayAt, loadBarangayIndex } from '../../lib/barangayLookup.js';
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
+import { useAuthIfAny } from '../../context/AuthContext.jsx';
+import { displayNameOf } from '../../lib/community.js';
 
 /** Postgres's "no such column", or PostgREST's cached form of it. */
 const isMissingColumn = (error) =>
@@ -33,6 +35,31 @@ async function uploadToCloudinary(file) {
   if (!response.ok) return null;
   const data = await response.json();
   return data.secure_url;
+}
+
+/**
+ * Whether this tag is counted for whoever sends it (supabase/community.sql):
+ * a resident who joined with Google, by name; anyone else is told how to be.
+ */
+function CountedFor() {
+  const auth = useAuthIfAny();
+  if (!auth || auth.loading || auth.profile) return null;
+  const { session, resident } = auth;
+  if (resident?.consented_at) {
+    return (
+      <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-900 ring-1 ring-green-200">
+        Counted for <span className="font-semibold">{displayNameOf(resident)}</span> on the leaderboard once it is verified.
+      </p>
+    );
+  }
+  return (
+    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+      {session && resident ? 'Finish joining' : 'Join the community with Google'} and the trees you tag are counted for you.{' '}
+      <a href="/community" target="_blank" rel="noopener" className="font-semibold text-green-800 underline">
+        {session && resident ? 'Finish joining' : 'Join'}
+      </a>
+    </p>
+  );
 }
 
 export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
@@ -380,6 +407,8 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
               {submitError}
             </p>
           )}
+
+          <CountedFor />
 
           {/* Submit */}
           <button

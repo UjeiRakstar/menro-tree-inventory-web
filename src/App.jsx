@@ -9,7 +9,7 @@ import TrainingBanner from './components/TrainingBanner.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import { accessFor, isPgenro, officeLguOf } from './lib/roles.js';
+import { accessFor, isPgenro, needsOnboarding, officeLguOf } from './lib/roles.js';
 
 /**
  * Every page but the landing one is fetched when it is first opened.
@@ -39,6 +39,8 @@ const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
 const Inbox = lazy(() => import('./pages/Inbox.jsx'));
 const NewsPage = lazy(() => import('./pages/pgenro/NewsPage.jsx'));
 const ContactPage = lazy(() => import('./pages/public/ContactPage.jsx'));
+const CommunityPage = lazy(() => import('./pages/public/CommunityPage.jsx'));
+const Onboarding = lazy(() => import('./pages/onboarding/Onboarding.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
 /** Shown for the moment a page's code is in flight. */
@@ -136,15 +138,33 @@ function PublicShell() {
  * the database would then refuse to fill.
  */
 function ProtectedRoute({ bare = false }) {
-  const { session, profile } = useAuth();
+  const { session, profile, resident } = useAuth();
   if (!session) return <Navigate to="/login" replace />;
   if (profile === undefined) return <PageLoading />;
+  // A resident signed in with Google has no office here; their page is the
+  // community's.
+  if (!profile && resident) return <Navigate to="/community" replace />;
 
   const access = accessFor(profile);
   if (access.kind !== 'web') {
     return <AccountBlocked access={access} email={session.user?.email} />;
   }
+  // A new MENRO / CENRO account fills in its details first (onboarding.sql).
+  if (needsOnboarding(profile)) {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <Onboarding />
+      </Suspense>
+    );
+  }
   return bare ? <BareShell /> : <Shell />;
+}
+
+/** Where /login and /activate send someone already signed in. */
+function SignedInLanding() {
+  const { profile, resident, loading } = useAuth();
+  if (loading) return <PageLoading />;
+  return <Navigate to={!profile && resident ? '/community' : '/biodiversity-dashboard'} replace />;
 }
 
 /**
@@ -193,11 +213,11 @@ function AppRoutes() {
       <Suspense fallback={<PageLoading />}>
       <Routes>
       {/* Auth routes */}
-      <Route path="/login" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Login />} />
+      <Route path="/login" element={session ? <SignedInLanding /> : <Login />} />
       {/* No open sign-up any more: an LGU account is set up with a code from
           PGENRO, and field officers register from the mobile app. The old
           address still lands somewhere useful. */}
-      <Route path="/activate" element={session ? <Navigate to="/biodiversity-dashboard" replace /> : <Activate />} />
+      <Route path="/activate" element={session ? <SignedInLanding /> : <Activate />} />
       <Route path="/signup" element={<Navigate to="/activate" replace />} />
 
       {/* Public-facing routes with PublicNavbar */}
@@ -207,6 +227,7 @@ function AppRoutes() {
         <Route path="/biodiversity" element={<PublicDashboard />} />
         <Route path="/public-map" element={<PublicMap />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/community" element={<CommunityPage />} />
       </Route>
 
       {/* Protected routes */}

@@ -30,6 +30,7 @@ const SUITES = [
   ['map areas', 'areas.mjs'],
   ['office settings and AI keys', 'settings.mjs'],
   ['inboxes, news and messages', 'inbox.mjs'],
+  ['residents, the leaderboard and office set-up', 'community.mjs'],
 ];
 
 let failed = 0;

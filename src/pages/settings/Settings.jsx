@@ -10,6 +10,7 @@ import BarangaySection from './BarangaySection.jsx';
 import TeamSection from './TeamSection.jsx';
 import DocumentsSection from './DocumentsSection.jsx';
 import ImportSection from './ImportSection.jsx';
+import TreeInventorySection from './TreeInventorySection.jsx';
 import AiSection from './AiSection.jsx';
 import PasswordSection from './PasswordSection.jsx';
 
@@ -52,6 +53,7 @@ export default function Settings() {
       {lguInfo && <BarangaySection lgu={lguInfo} />}
       <TeamSection pgenro={pgenro} />
       <DocumentsSection office={office} pgenro={pgenro} />
+      {lguInfo && <TreeInventorySection lgu={lguInfo} />}
       <ImportSection lgu={lguInfo} />
       <AiSection office={office} pgenro={pgenro} />
       <PasswordSection />

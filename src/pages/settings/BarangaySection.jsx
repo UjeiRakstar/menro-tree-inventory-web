@@ -19,7 +19,7 @@ const number = (value) => (value === null || value === undefined ? '' : Number(v
  * for the indicators that count per person or per household. A population
  * left empty is PSA's 2024 count (PSGC 3Q 2026), shown in the box.
  */
-export default function BarangaySection({ lgu }) {
+export default function BarangaySection({ lgu, defaultOpen = false }) {
   const [barangays, setBarangays] = useState(null);
   const [figures, setFigures] = useState({});
   const [edits, setEdits] = useState({});
@@ -97,7 +97,7 @@ export default function BarangaySection({ lgu }) {
   }
 
   return (
-    <Section title="Barangays" description={`${lgu.label}'s barangays — area, population and households`}>
+    <Section title="Barangays" description={`${lgu.label}'s barangays — area, population and households`} defaultOpen={defaultOpen}>
       {barangays === null ? (
         <p className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 size={15} className="animate-spin" aria-hidden="true" /> Loading the barangays…

@@ -109,6 +109,7 @@ function createSupabaseMock() {
     signUp: vi.fn(),
     signOut: vi.fn(),
     signInWithPassword: vi.fn(),
+    signInWithOAuth: vi.fn(),
     resetPasswordForEmail: vi.fn(),
     getSession: vi.fn(),
     onAuthStateChange: vi.fn(),
@@ -134,6 +135,8 @@ function createSupabaseMock() {
     auth.signOut.mockResolvedValue({ error: null });
     auth.signInWithPassword.mockReset();
     auth.signInWithPassword.mockResolvedValue({ data: {}, error: null });
+    auth.signInWithOAuth.mockReset();
+    auth.signInWithOAuth.mockResolvedValue({ data: {}, error: null });
     auth.resetPasswordForEmail.mockReset();
     auth.resetPasswordForEmail.mockResolvedValue({ error: null });
     auth.getSession.mockReset();

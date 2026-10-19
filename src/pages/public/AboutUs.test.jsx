@@ -170,6 +170,36 @@ describe('a post with several photos', () => {
   });
 });
 
+describe('the leaderboard on the phone', () => {
+  it('turns the phone to the leaderboard when the Crowdsourcing icon is tapped, and back', async () => {
+    supabaseMock.supabase.rpc.mockImplementation(async (name, args) =>
+      name === 'community_leaderboard'
+        ? { data: [{ rank: 1, display_name: 'Puno ng Laguna', verified: 3, submitted: 4, is_me: false }].slice(0, args.p_limit), error: null }
+        : { data: null, error: null }
+    );
+    renderAbout();
+    expect(screen.getByRole('img', { name: 'Tree inventory mobile app preview' })).toBeInTheDocument();
+    const icon = screen.getByRole('button', { name: 'Show the leaderboard on the phone' });
+    expect(icon).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(icon);
+
+    const board = await screen.findByRole('list', { name: 'Leaderboard' });
+    expect(board).toHaveTextContent('Puno ng Laguna');
+    expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('community_leaderboard', { p_limit: 5 });
+    expect(screen.queryByRole('img', { name: 'Tree inventory mobile app preview' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show the app on the phone' }));
+    expect(screen.getByRole('img', { name: 'Tree inventory mobile app preview' })).toBeInTheDocument();
+  });
+
+  it('says the board opens soon until the database has it', async () => {
+    supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    renderAbout();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the leaderboard on the phone' }));
+    expect(await screen.findByText('The leaderboard opens soon.')).toBeInTheDocument();
+  });
+});
+
 describe('AboutUs organisation logos', () => {
   // Each logo links to whoever it belongs to.
   const LINKS = [

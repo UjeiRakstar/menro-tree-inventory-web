@@ -1033,7 +1033,7 @@ describe('what an office can do to a tree', () => {
 
   it('offers nothing on a resident’s tag until it has been checked', async () => {
     const panel = await open(OUT_FOR_CHECKING);
-    expect(within(panel).getByText('Crowdsourced — awaiting field check')).toBeInTheDocument();
+    expect(within(panel).getByText('Unverified — awaiting field check')).toBeInTheDocument();
     expect(within(panel).queryByRole('button', { name: 'Dispatch' })).not.toBeInTheDocument();
   });
 
