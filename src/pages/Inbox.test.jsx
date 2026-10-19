@@ -49,9 +49,9 @@ describe('the inbox', () => {
   it("opens a member of the public's message: who wrote, a reply by email, and it is marked read", async () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: /Message from Juan Dela Cruz/ }));
-    expect(screen.getByText(/juan@example\.com/)).toBeInTheDocument();
+    expect(screen.getByText('Juan Dela Cruz <juan@example.com>')).toBeInTheDocument();
     expect(screen.getByText('LSPU')).toBeInTheDocument();
-    const reply = screen.getByRole('link', { name: 'Reply by email' });
+    const reply = screen.getByRole('link', { name: 'Or open my email app' });
     expect(reply.getAttribute('href')).toMatch(/^mailto:juan%40example\.com\?subject=/);
     await waitFor(() => expect(supabaseMock.writesTo('inbox_messages', 'update')).toHaveLength(1));
     expect(supabaseMock.writesTo('inbox_messages', 'update')[0].payload).toEqual({ read_at: expect.any(String) });
@@ -61,7 +61,8 @@ describe('the inbox', () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: /New tree planting site/ }));
     expect(screen.getByRole('link', { name: 'View on map' })).toHaveAttribute('href', '/map?area=area-1');
-    expect(screen.queryByRole('link', { name: 'Reply by email' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Or open my email app' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Send/ })).not.toBeInTheDocument();
   });
 
   it('archives a message out of the inbox, and deletes one', async () => {
@@ -88,5 +89,44 @@ describe('the inbox', () => {
       </MemoryRouter>
     );
     expect(await screen.findByRole('note')).toHaveTextContent('supabase/inbox.sql');
+  });
+});
+
+describe('replying without leaving Green Tag (19 October)', () => {
+  const open = async (messages = MESSAGES) => {
+    show(messages);
+    fireEvent.click(await screen.findByRole('button', { name: /Message from Juan Dela Cruz/ }));
+  };
+
+  it('emails a guest through the system, and keeps the reply', async () => {
+    supabaseMock.supabase.functions.invoke.mockResolvedValue({ data: { ok: true }, error: null });
+    await open();
+    fireEvent.change(screen.getByLabelText(/Reply to Juan Dela Cruz by email, juan@example.com/), { target: { value: 'Yes, with a permit.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    await waitFor(() =>
+      expect(supabaseMock.supabase.functions.invoke).toHaveBeenCalledWith('send-reply', { body: { message_id: 'm1', body: 'Yes, with a permit.' } })
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Sent to juan@example.com.');
+    expect(within(await screen.findByRole('list', { name: 'Replies sent' })).getByText('Yes, with a permit.')).toBeInTheDocument();
+  });
+
+  it('says so, and points to the email app, while sending email is not set up', async () => {
+    supabaseMock.supabase.functions.invoke.mockResolvedValue({ data: null, error: { message: 'x', context: { status: 404, json: async () => ({}) } } });
+    await open();
+    fireEvent.change(screen.getByLabelText(/Reply to Juan/), { target: { value: 'Hello' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('not set up yet. Open your email app instead');
+    expect(screen.getByRole('link', { name: 'Or open my email app' })).toBeInTheDocument();
+  });
+
+  it('replies to a resident in Green Tag, where they read it', async () => {
+    await open([{ ...MESSAGES[0], sender_id: 'resident-ana' }, ...MESSAGES.slice(1)]);
+    fireEvent.change(screen.getByLabelText(/Reply to Juan Dela Cruz in Green Tag/), { target: { value: 'Salamat!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send in Green Tag' }));
+    await waitFor(() =>
+      expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('record_reply', { p_message: 'm1', p_body: 'Salamat!', p_channel: 'in-app' })
+    );
+    expect(supabaseMock.supabase.functions.invoke).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: 'Or open my email app' })).not.toBeInTheDocument();
   });
 });

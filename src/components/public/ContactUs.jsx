@@ -3,6 +3,7 @@ import { CheckCircle2, Facebook, Globe, Loader2, Mail, MapPin, Phone, Send } fro
 import { supabase } from '../../supabaseClient.js';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import { officialName } from '../../lib/psgc.js';
+import { useAuthIfAny } from '../../context/AuthContext.jsx';
 
 const PGENRO = { office: 'pgenro', name: 'PGENRO, Province of Laguna' };
 /** Every office a visitor can write to: PGENRO first, then the 30 LGUs by name. */
@@ -90,10 +91,21 @@ const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-wider 
 /**
  * The contact form: the visitor chooses the office, and the message goes to
  * that office's inbox (send_contact_message() in supabase/inbox.sql). Only
- * that office reads it, and replies by email.
+ * that office reads it. A resident signed in with Google is replied to in
+ * Green Tag, on the Community page; anyone else by email (replies.sql).
  */
 export function ContactForm() {
-  const [form, setForm] = useState({ office: '', name: '', email: '', address: '', affiliation: '', message: '' });
+  const auth = useAuthIfAny();
+  // A resident who joined: the reply comes to their account.
+  const resident = auth?.session && !auth.profile && auth.resident?.consented_at ? auth.resident : null;
+  const [form, setForm] = useState(() => ({
+    office: '',
+    name: resident?.full_name ?? '',
+    email: auth?.session?.user?.email ?? '',
+    address: '',
+    affiliation: '',
+    message: '',
+  }));
   const [sending, setSending] = useState(false);
   const [outcome, setOutcome] = useState(null);
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -124,12 +136,22 @@ export function ContactForm() {
       });
       return;
     }
-    setOutcome({ ok: true, text: `Sent to ${nameOf(form.office)}. They will reply to ${form.email}.` });
+    setOutcome({
+      ok: true,
+      text: resident
+        ? `Sent to ${nameOf(form.office)}. Their reply will be waiting for you on the Community page.`
+        : `Sent to ${nameOf(form.office)}. They will reply to ${form.email}.`,
+    });
     setForm((current) => ({ ...current, message: '' }));
   }
 
   return (
     <form onSubmit={send} aria-label="Send a message" className="space-y-4 sm:space-y-6">
+      {resident && (
+        <p role="note" className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-900 ring-1 ring-green-200">
+          You are signed in with Google, so the office&apos;s reply will come to you here in Green Tag, on the Community page.
+        </p>
+      )}
       <div>
         <label htmlFor="contact-office" className={labelClass}>Send to<span className="ml-1 text-green-700" aria-hidden="true">*</span></label>
         <select id="contact-office" value={form.office} onChange={set('office')} required className={field}>

@@ -31,6 +31,7 @@ const SUITES = [
   ['office settings and AI keys', 'settings.mjs'],
   ['inboxes, news and messages', 'inbox.mjs'],
   ['residents, the leaderboard and office set-up', 'community.mjs'],
+  ['replies to the public', 'replies.mjs'],
 ];
 
 let failed = 0;

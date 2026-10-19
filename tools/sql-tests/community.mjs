@@ -268,6 +268,17 @@ check('…and PGENRO sees every LGU’s side by side',
 const officeTag = await tag(MENRO, 'authenticated', 'menro-tag');
 check('an office account still tags without joining', officeTag === null, officeTag ?? '');
 
+// ---- Unverified trees on the public map (19 October) ---------------------------------
+await db.query(`update public.pending_trees set latitude = 14.28, longitude = 121.41 where latitude is null`);
+await db.query(`insert into public.pending_trees (barangay, species, municipality, source, latitude, longitude) values ('Labuin', 'grey-import', 'Santa Cruz', 'import', 14.27, 121.40)`);
+const greyRows = (await as(null, 'anon', () => db.query(`select * from public.public_unverified_trees()`))).rows;
+const greySpecies = greyRows.map((r) => r.species);
+check('the public sees unverified trees — inventory and residents’ — to tag none twice',
+  greySpecies.includes('ana-2') && greyRows.find((r) => r.species === 'grey-import')?.source === 'import', greySpecies.join(', '));
+check('…but not verified ones, nor who sent them',
+  !greySpecies.includes('ben-1') && !Object.keys(greyRows[0] ?? {}).some((k) => /submitted_by|assigned_to|photo|details/.test(k)),
+  Object.keys(greyRows[0] ?? {}).join(', '));
+
 // ---- A resident deletes their own account (RA 10173) ---------------------------------
 const anonDelete = await as(null, 'anon', () => fails(() => db.query(`select public.delete_my_account()`)));
 check('the public deletes no account', anonDelete !== null);

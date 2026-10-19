@@ -45,8 +45,11 @@ describe('the inbox', () => {
 describe('News & Events', () => {
   it('needs a title, and photos the website can show', () => {
     expect(newsProblems({ title: ' ' })).toEqual({ title: 'Give it a title.' });
-    const big = { name: 'big.jpg', type: 'image/jpeg', size: 6 * 1024 * 1024 };
-    expect(newsProblems({ title: 'Planting Day' }, [big]).photos).toMatch(/under 5 MB/);
+    // A 6 MB photo is fine now: it is resized before it is uploaded (19 October).
+    const six = { name: 'six.jpg', type: 'image/jpeg', size: 6 * 1024 * 1024 };
+    expect(newsProblems({ title: 'Planting Day' }, [six])).toEqual({});
+    const huge = { name: 'huge.jpg', type: 'image/jpeg', size: 30 * 1024 * 1024 };
+    expect(newsProblems({ title: 'Planting Day' }, [huge]).photos).toMatch(/under 25 MB/);
     expect(newsProblems({ title: 'Planting Day' }, [{ name: 'a.png', type: 'image/png', size: 1000 }])).toEqual({});
   });
 

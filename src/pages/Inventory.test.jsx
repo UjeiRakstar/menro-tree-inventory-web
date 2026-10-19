@@ -38,17 +38,9 @@ vi.mock('../supabaseClient.js', () => ({
   supabase: { from: fromSpy },
 }));
 
-// -----------------------------------------------------------------------------
-// Mock `qrcode.react` so the QRCodeSVG component renders a testable element
-// with the value prop exposed as a data attribute.
-// -----------------------------------------------------------------------------
 // The page builds a real workbook; this test is about the wiring, not exceljs.
 vi.mock('../lib/excelExport.js', () => ({
   generateMenroExcel: vi.fn(() => Promise.resolve()),
-}));
-
-vi.mock('qrcode.react', () => ({
-  QRCodeSVG: (props) => <div data-testid="qr-code-svg" data-value={props.value} />,
 }));
 
 // Imports MUST come after the `vi.mock` declarations so they pick up the mocks.
@@ -142,8 +134,7 @@ const MOCK_TREES = [
 //   • Stub `URL.createObjectURL` / `URL.revokeObjectURL` — jsdom does not
 //     implement either, and the CSV_Export tests in tasks 6.4/6.5 need both to
 //     be observable `vi.fn()` spies.
-//   • Spy on `console.log` so the Batch_QR_Print_Button log assertions in task
-//     6.5 never leak into sibling tests.
+//   • Spy on `console.log` so log output never leaks into sibling tests.
 // -----------------------------------------------------------------------------
 let consoleLogSpy;
 
@@ -180,7 +171,7 @@ describe('InventoryView / Central_Inventory', () => {
   // Smoke test — proves the scaffold runs end-to-end: the Supabase mock is
   // consumed, the fetch-on-mount useEffect resolves, and the Loaded_State
   // renders one row per Tree_Record. Fully-detailed assertions live in the
-  // subsequent tasks (6.2 table structure, 6.3 pills, 6.4 CSV, 6.5 QR stub).
+  // subsequent tasks (6.2 table structure, 6.3 pills, 6.4 CSV).
   it('renders the MOCK_TREES fixture after the Inventory_Fetch resolves', async () => {
     resolveOk(MOCK_TREES);
 
@@ -368,122 +359,14 @@ describe('InventoryView / Central_Inventory', () => {
     expect(generateMenroExcel).not.toHaveBeenCalled();
   });
 
-  it('renders the Print QR Codes button after the Inventory_Fetch resolves', async () => {
-    resolveOk(MOCK_TREES);
-
-    renderInventory();
-
-    // Wait for the Loaded_State so the useEffect-driven fetch has run.
-    await screen.findByTestId('inventory-table');
-
-    const qrButton = screen.getByRole('button', { name: 'Print QR Codes' });
-    expect(qrButton).toBeInTheDocument();
-  });
-
-  it('calls window.print() on click and does not touch the network, Supabase, or downloads', async () => {
-    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
-
+  it('prints no QR codes: the old QR tags are gone (19 October)', async () => {
     resolveOk(MOCK_TREES);
 
     renderInventory();
 
     await screen.findByTestId('inventory-table');
 
-    // The useEffect-driven Inventory_Fetch already called `fromSpy` exactly
-    // once with 'trees'. Capture that baseline so the post-click assertion
-    // can prove the QR handler issued zero additional Supabase calls.
-    expect(fromSpy).toHaveBeenCalledTimes(1);
-    expect(fromSpy).toHaveBeenCalledWith('trees');
-
-    const qrButton = screen.getByRole('button', { name: 'Print QR Codes' });
-    fireEvent.click(qrButton);
-
-    // Requirement 2.1 — window.print() is invoked exactly once.
-    expect(printSpy).toHaveBeenCalledTimes(1);
-
-    // Requirement 2.2 — no file download. The CSV_Export sequence wires
-    // `URL.createObjectURL` / `URL.revokeObjectURL`; the QR handler must touch
-    // neither.
-    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
-    expect(global.URL.revokeObjectURL).not.toHaveBeenCalled();
-
-    // No additional Supabase call beyond the initial Inventory_Fetch.
-    expect(fromSpy).toHaveBeenCalledTimes(1);
-    expect(fromSpy).toHaveBeenCalledWith('trees');
-
-    printSpy.mockRestore();
-  });
-
-  // ---------------------------------------------------------------------------
-  // Task 6.3 (QR Stickers) — QR_Sticker_Sheet and QR_Sticker rendering.
-  // Pins Requirements 9.4 (QRCodeSVG components present in DOM) and 9.5
-  // (existing test baseline remains passing).
-  //
-  // The QR_Sticker_Sheet is rendered with `hidden print:block` so it is
-  // invisible on screen but present in the DOM for testing purposes.
-  // ---------------------------------------------------------------------------
-
-  it('renders the QR_Sticker_Sheet container with data-testid="qr-sticker-sheet"', async () => {
-    resolveOk(MOCK_TREES);
-
-    renderInventory();
-
-    await screen.findByTestId('inventory-table');
-
-    const stickerSheet = screen.getByTestId('qr-sticker-sheet');
-    expect(stickerSheet).toBeInTheDocument();
-  });
-
-  it('renders one QR_Sticker per Tree_Record in the loaded list', async () => {
-    resolveOk(MOCK_TREES);
-
-    renderInventory();
-
-    await screen.findByTestId('inventory-table');
-
-    const stickers = screen.getAllByTestId('qr-sticker');
-    expect(stickers).toHaveLength(MOCK_TREES.length);
-  });
-
-  it('renders a QRCodeSVG component inside each QR_Sticker (Requirement 9.4)', async () => {
-    resolveOk(MOCK_TREES);
-
-    renderInventory();
-
-    await screen.findByTestId('inventory-table');
-
-    const qrCodes = screen.getAllByTestId('qr-code-svg');
-    expect(qrCodes).toHaveLength(MOCK_TREES.length);
-
-    // A sticker carries the tag number, falling back to the row id when a tree
-    // has not been given one — an empty QR code would be a wasted sticker.
-    const values = qrCodes.map((qr) => qr.getAttribute('data-value')).sort();
-    expect(values).toEqual(['T-001', 'T-002', 't-3']);
-  });
-
-  it('renders an LGU_Logo_Placeholder inside each QR_Sticker', async () => {
-    resolveOk(MOCK_TREES);
-
-    renderInventory();
-
-    await screen.findByTestId('inventory-table');
-
-    const logos = screen.getAllByTestId('lgu-logo-placeholder');
-    expect(logos).toHaveLength(MOCK_TREES.length);
-  });
-
-  it('renders zero QR_Stickers when the tree list is empty', async () => {
-    resolveOk([]);
-
-    renderInventory();
-
-    await screen.findByTestId('inventory-empty');
-
-    // The sticker sheet is still in the DOM but contains no sticker children.
-    const stickerSheet = screen.getByTestId('qr-sticker-sheet');
-    expect(stickerSheet).toBeInTheDocument();
-
-    const stickers = screen.queryAllByTestId('qr-sticker');
-    expect(stickers).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /QR/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('qr-sticker-sheet')).not.toBeInTheDocument();
   });
 });

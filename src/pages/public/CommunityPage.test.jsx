@@ -174,3 +174,19 @@ describe('each city’s own leaderboard', () => {
     );
   });
 });
+
+describe('replies from the offices', () => {
+  it('shows a resident the replies to their messages, and marks them read', async () => {
+    signInResident({ ...ANA, consented_at: '2026-10-19T00:00:00Z' });
+    supabaseMock.setResponse('message_replies:select', {
+      data: [{ id: 'r1', office_label: 'Santa Cruz MENRO / CENRO', body: 'Salamat! We will visit.', original_body: 'Is this tree sick?', created_at: '2026-10-19T03:00:00Z', read_at: null }],
+      error: null,
+    });
+    renderPage();
+    const replies = await screen.findByRole('region', { name: 'Replies from the offices' });
+    expect(await within(replies).findByText('Salamat! We will visit.')).toBeInTheDocument();
+    expect(replies).toHaveTextContent('Santa Cruz MENRO / CENRO');
+    expect(replies).toHaveTextContent('New');
+    await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('mark_my_replies_read'));
+  });
+});

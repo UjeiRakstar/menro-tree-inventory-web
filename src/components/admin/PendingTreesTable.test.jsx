@@ -101,8 +101,8 @@ describe('PendingTreesTable', () => {
 
   it('moves a submission across to verification when it is dispatched', async () => {
     loadQueue([SUBMITTED]);
-    supabaseMock.setResponse('arborists:select', {
-      data: [{ id: 'a-1', email: 'arb@menro.gov.ph', name: 'Juan' }],
+    supabaseMock.setResponse('profiles:select', {
+      data: [{ id: 'a-1', email: 'arb@menro.gov.ph', full_name: 'Juan', is_approved: true, status: 'active' }],
       error: null,
     });
     supabaseMock.setResponse('pending_trees:update', { data: [SUBMITTED], error: null });
@@ -164,7 +164,7 @@ describe('trees from the office’s inventory spreadsheet', () => {
 
   it('sends one field officer to a barangay’s trees at once', async () => {
     loadQueue(INVENTORY);
-    supabaseMock.setResponse('arborists:select', { data: [{ id: 'a1', email: 'ben@field.ph', name: 'Ben' }], error: null });
+    supabaseMock.setResponse('profiles:select', { data: [{ id: 'a1', email: 'ben@field.ph', full_name: 'Ben', is_approved: true, status: 'active' }], error: null });
     render(<PendingTreesTable />);
     fireEvent.click(await screen.findByRole('button', { name: 'Send a field officer to Pacita 1' }));
     expect(await screen.findByText('3 inventory trees in Pacita 1')).toBeInTheDocument();
@@ -181,5 +181,51 @@ describe('trees from the office’s inventory spreadsheet', () => {
     render(<PendingTreesTable readOnly />);
     await screen.findByRole('region', { name: 'Inventory trees to verify' });
     expect(screen.queryByRole('button', { name: /Send a field officer/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('who a tag can be sent to', () => {
+  it('lists the office’s own approved field officers, from their accounts — not every LGU’s', async () => {
+    loadQueue([SUBMITTED]);
+    supabaseMock.setResponse('profiles:select', {
+      data: [
+        { id: 'f1', email: 'ana@field.ph', full_name: 'Ana', is_approved: true, status: 'active' },
+        { id: 'f2', email: 'new@field.ph', full_name: 'New', is_approved: false, status: 'active' },
+        { id: 'f3', email: 'gone@field.ph', full_name: 'Gone', is_approved: true, status: 'archived' },
+      ],
+      error: null,
+    });
+    render(<PendingTreesTable />);
+    const awaiting = await screen.findByRole('region', { name: 'Awaiting review' });
+    fireEvent.click(within(awaiting).getByRole('button', { name: /Verify/i }));
+    expect(await screen.findByRole('button', { name: /Ana/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /New|Gone/ })).not.toBeInTheDocument();
+    expect(supabaseMock.queryFiltering('profiles', 'role').filters).toEqual([['role', 'field_officer']]);
+    expect(supabaseMock.writesTo('arborists', 'select')).toHaveLength(0);
+  });
+});
+
+describe('the tags, by city and municipality', () => {
+  it('folds Laguna’s tags by LGU, alphabetical, each with what waits there', async () => {
+    loadQueue([
+      { ...SUBMITTED, id: 's1', lgu_psgc: 403426000 },
+      { id: 'i1', species: 'Mahogany', barangay: 'Pacita 1', status: 'pending', source: 'import', lgu_psgc: 403425000 },
+      { id: 'i2', species: 'Mahogany', barangay: 'Pacita 1', status: 'dispatched', assigned_to: 'a@b.ph', source: 'import', lgu_psgc: 403425000 },
+      { ...OUT_FOR_VERIFICATION, id: 'd1', lgu_psgc: 403426000 },
+    ]);
+    render(<PendingTreesTable readOnly />);
+    const folds = await screen.findAllByRole('group');
+    expect(folds.map((fold) => fold.querySelector('summary').textContent)).toEqual([
+      expect.stringMatching(/^San Pedro City2 inventory trees to verify \(1 not yet sent\)/),
+      expect.stringMatching(/^Santa Cruz1 tag awaiting review · 1 out for verification/),
+    ]);
+    expect(within(folds[1]).getByRole('region', { name: 'Awaiting review, Santa Cruz' })).toBeInTheDocument();
+  });
+
+  it('shows an office its own LGU’s without the fold', async () => {
+    loadQueue([{ ...SUBMITTED, lgu_psgc: 403426000 }]);
+    render(<PendingTreesTable />);
+    expect(await screen.findByRole('region', { name: 'Awaiting review' })).toBeInTheDocument();
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
   });
 });

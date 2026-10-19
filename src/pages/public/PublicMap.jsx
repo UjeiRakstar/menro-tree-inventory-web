@@ -220,6 +220,11 @@ const centreOf = ([[south, west], [north, east]]) => [(south + north) / 2, (west
 
 /** The public map's single colour, as a pin-colour function. */
 const ONE_COLOUR = () => MARKER_COLOR;
+// The public map: one green for trees in the inventory, grey for a tree tagged
+// and not yet verified (19 October) — so nobody tags it again.
+const UNVERIFIED_COLOUR = PIN_FILL[PIN_COLOR.GREY];
+const publicPinFill = (pin) => (pin.tree.__pending ? UNVERIFIED_COLOUR : MARKER_COLOR);
+const publicBubbleFill = (pins) => (pins.every((pin) => pin.tree.__pending) ? UNVERIFIED_COLOUR : MARKER_COLOR);
 
 /** The LGU map's colours: each tree by its state, each bubble by its most urgent. */
 const adminPinFill = (pin) => PIN_FILL[pinColorOf(pin.tree)];
@@ -820,7 +825,28 @@ function FlyToUserButton({ mapRef }) {
  * permit is issued once. A button that cannot be used says why on hover and to
  * a screen reader, rather than just greying out.
  */
-function TreeActions({ tree, onDispatch, onPermit, canAct = true }) {
+/** What the public is told about a tree tagged and not yet verified. */
+function UnverifiedNote({ tree }) {
+  return (
+    <div role="note" className="border-t border-slate-200 bg-slate-50/80 px-4 py-3">
+      <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+        <span className="h-3 w-3 shrink-0 rounded-full ring-2 ring-white" style={{ background: UNVERIFIED_COLOUR }} />
+        Tagged, not yet verified
+      </p>
+      <p className="mt-1.5 text-xs text-slate-600">
+        {tree.source === 'import'
+          ? 'From the LGU\u2019s inventory. '
+          : 'Tagged by a resident. '}
+        A field officer checks it, with photos, in the Green Tag app; until then its details may change. It is already
+        tagged — no need to tag it again.
+      </p>
+    </div>
+  );
+}
+
+function TreeActions({ tree, onDispatch, onPermit, onDelete, canAct = true }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteProblem, setDeleteProblem] = useState('');
   const color = pinColorOf(tree);
   const hazard = color === PIN_COLOR.RED || color === PIN_COLOR.ORANGE;
   const permitted = Boolean(tree.has_cutting_permit || tree.hasCuttingPermit);
@@ -843,7 +869,42 @@ function TreeActions({ tree, onDispatch, onPermit, canAct = true }) {
             ? `From the office's inventory spreadsheet${tree.details?.dbh_cm ? ` (DBH ${tree.details.dbh_cm} cm${tree.details.height_m ? `, ${tree.details.height_m} m tall` : ''})` : ''}. Unverified: it joins the inventory once a field officer checks it and takes its photos.`
             : 'A resident tagged this. It joins the inventory once the field officer checks it in the app.'}
         </p>
-      ) : !canAct ? (
+      ) : null}
+      {tree.__pending && canAct && onDelete ? (
+        confirmingDelete ? (
+          <div role="alertdialog" aria-label="Delete this tag?" className="mt-2.5 rounded-lg bg-red-50 p-2.5 ring-1 ring-red-200">
+            <p className="text-xs text-red-900">
+              Delete this {tree.source === 'import' ? 'inventory tree' : 'tag'}? It leaves the map for good.
+            </p>
+            {deleteProblem && <p role="alert" className="mt-1 text-xs text-red-700">{deleteProblem}</p>}
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={async () => setDeleteProblem((await onDelete()) ?? '')}
+                className={`${button} bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600`}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                className={`${button} bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50 focus-visible:ring-slate-400`}
+              >
+                Keep it
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 hover:underline"
+          >
+            Delete this {tree.source === 'import' ? 'inventory tree' : 'tag'}
+          </button>
+        )
+      ) : null}
+      {tree.__pending ? null : !canAct ? (
         // PGENRO watches the province; the work on a tree is its LGU's.
         <p className="mt-2 text-xs text-slate-500">
           Dispatching an arborist and issuing a cutting permit are done by the MENRO / CENRO of the
@@ -1030,16 +1091,18 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         }
 
         if (admin) {
-          // Tags out for field checking, and the trees an office brought in
-          // from its inventory spreadsheet, waiting for theirs (community.sql).
+          // Every tree tagged and not yet verified — residents' tags waiting
+          // for review or out for checking, and the trees an office brought in
+          // from its inventory spreadsheet (community.sql).
           const { data: pending } = await everyRow(() =>
             supabase.from('pending_trees').select('*').in('status', ['dispatched', 'pending'])
           );
-          if (!cancelled) {
-            setPendingTrees(
-              (Array.isArray(pending) ? pending : []).filter((tag) => tag.status === 'dispatched' || tag.source === 'import')
-            );
-          }
+          if (!cancelled) setPendingTrees(Array.isArray(pending) ? pending : []);
+        } else {
+          // The public sees them too, grey, so nobody tags one twice — only
+          // where and what, never who sent it (public_unverified_trees()).
+          const { data: unverified, error: unverifiedError } = await everyRow(() => supabase.rpc('public_unverified_trees'));
+          if (!cancelled) setPendingTrees(!unverifiedError && Array.isArray(unverified) ? unverified : []);
         }
       } catch (e) {
         if (cancelled) return;
@@ -1131,10 +1194,11 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   // crowdsourced tags out for field checking, and leaves out trees already
   // cut down — a stump is not something to dispatch anybody to.
   const allTrees = useMemo(() => {
-    if (!admin) return trees;
+    const unverified = pendingTrees.map((tag) => ({ ...tag, id: `pending-${tag.id}`, __pending: true }));
+    if (!admin) return [...trees, ...unverified];
     return [
       ...trees.filter((tree) => tree.task_status !== 'Cut'),
-      ...pendingTrees.map((tag) => ({ ...tag, id: `pending-${tag.id}`, __pending: true })),
+      ...unverified,
     ];
   }, [admin, trees, pendingTrees]);
 
@@ -1771,12 +1835,27 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   );
 
   /** Shown under an open tree on the office's map: what it needs, and the buttons to do it. */
-  const treeActions =
-    admin && selectedTree ? (
+  // An office deletes a tag or an inventory tree still waiting, from its
+  // panel (19 October). The database lets it only for its own LGU's
+  // (tag_routing.sql); a refusal is said, not hidden. Answers the problem, or null.
+  async function deletePendingTree(tree) {
+    const id = String(tree.id).replace(/^pending-/, '');
+    const { data, error } = await supabase.from('pending_trees').delete().eq('id', id).select('id');
+    if (error) return error.message;
+    if (Array.isArray(data) && data.length === 0) return 'It could not be deleted: it is not your LGU\u2019s.';
+    setPendingTrees((current) => current.filter((tag) => String(tag.id) !== id));
+    setSelectedTree(null);
+    return null;
+  }
+
+  const treeActions = !admin && selectedTree?.__pending ? (
+    <UnverifiedNote tree={selectedTree} />
+  ) : admin && selectedTree ? (
       <TreeActions
         tree={selectedTree}
         onDispatch={() => setDispatchTree(selectedTree)}
         onPermit={() => setPermitTree(selectedTree)}
+        onDelete={selectedTree.__pending ? () => deletePendingTree(selectedTree) : undefined}
         canAct={roleOf(profile) === ROLES.LGU_ADMIN}
       />
     ) : null;
@@ -2038,7 +2117,9 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             openTreeId={selectedTree?.id}
             highlighting={Boolean(highlight)}
             onSelect={handleSelectTree}
-            {...(admin && { pinFill: adminPinFill, bubbleFill: adminBubbleFill, stateColours: true })}
+            {...(admin
+              ? { pinFill: adminPinFill, bubbleFill: adminBubbleFill, stateColours: true }
+              : { pinFill: publicPinFill, bubbleFill: publicBubbleFill })}
           />
         )}
       </MapContainer>
@@ -2411,6 +2492,15 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
               {highlight ? `Highlighted (${highlightedCount})` : 'Tagged tree'}
             </span>
           </div>
+          {!highlight && pendingTrees.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span
+                className="w-3 h-3 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+                style={{ backgroundColor: UNVERIFIED_COLOUR }}
+              />
+              <span className="text-[10px] text-slate-600">Tagged, not yet verified</span>
+            </div>
+          )}
           {highlight && (
             <div className="flex items-center gap-2">
               <span

@@ -80,12 +80,24 @@ function rowDetail(row, metric) {
 }
 
 /** One row: what it is, where, and what is wrong — the whole row a link to it on the map. */
-function RowLink({ row, metric }) {
+function RowLink({ row, metric, onDelete = null }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  const what = row.source === 'import' ? 'inventory tree' : 'tag';
+
+  async function remove() {
+    setBusy(true);
+    const failed = await onDelete(row);
+    setBusy(false);
+    if (failed) setProblem(failed);
+  }
+
   return (
-    <li>
+    <li className="flex flex-wrap items-center">
       <Link
         to={mapLinkFor(row, { of: metric.of })}
-        className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-5 py-2 text-sm hover:bg-green-50 focus:bg-green-50 focus:outline-none"
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 px-5 py-2 text-sm hover:bg-green-50 focus:bg-green-50 focus:outline-none"
       >
         <span className="font-semibold text-slate-800">
           {metric.of === 'areas' ? row.name : row.species || 'Unknown species'}
@@ -98,6 +110,23 @@ function RowLink({ row, metric }) {
           <MapPin size={12} aria-hidden="true" /> On the map
         </span>
       </Link>
+      {/* An office deletes a tag still waiting (19 October), after asking. */}
+      {onDelete &&
+        (asking ? (
+          <span className="flex items-center gap-1.5 pr-4 text-xs" role="group" aria-label={`Delete this ${what}?`}>
+            <span className="text-red-800">Delete?</span>
+            <button type="button" onClick={remove} disabled={busy}
+              className="rounded-md bg-red-600 px-2 py-1 font-semibold text-white hover:bg-red-700 disabled:opacity-50">Delete</button>
+            <button type="button" onClick={() => setAsking(false)} disabled={busy}
+              className="rounded-md px-2 py-1 font-semibold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-50">Keep</button>
+          </span>
+        ) : (
+          <button type="button" onClick={() => setAsking(true)} aria-label={`Delete the ${what}: ${row.species || 'unknown species'}`}
+            className="mr-4 rounded-md px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+            Delete
+          </button>
+        ))}
+      {problem && <p role="alert" className="w-full px-5 pb-2 text-xs text-red-700">{problem}</p>}
     </li>
   );
 }
@@ -107,7 +136,8 @@ function RowLink({ row, metric }) {
  * by city or municipality, each opened when wanted — a list of every tree in
  * Laguna is a list nobody reads.
  */
-function RowsDialog({ metric, lguLabel, rows, onClose, labelOf = String, groupBy = null }) {
+function RowsDialog({ metric, lguLabel, rows, onClose, labelOf = String, groupBy = null, onDeleteTag = null }) {
+  const deleteFor = metric.of === 'tags' ? onDeleteTag : null;
   const noun = { tags: ['tag', 'tags'], areas: ['area', 'areas'], trees: ['tree', 'trees'] }[metric.of];
   const groups =
     groupBy === 'lgu'
@@ -163,7 +193,7 @@ function RowsDialog({ metric, lguLabel, rows, onClose, labelOf = String, groupBy
                   </button>
                   {isOpen && (
                     <ul className="divide-y divide-slate-100">
-                      {list.map((row) => <RowLink key={row.id} row={row} metric={metric} />)}
+                      {list.map((row) => <RowLink key={row.id} row={row} metric={metric} onDelete={deleteFor} />)}
                     </ul>
                   )}
                 </li>
@@ -172,7 +202,7 @@ function RowsDialog({ metric, lguLabel, rows, onClose, labelOf = String, groupBy
           </ul>
         ) : (
           <ul className="divide-y divide-slate-100 overflow-y-auto">
-            {rows.map((row) => <RowLink key={row.id} row={row} metric={metric} />)}
+            {rows.map((row) => <RowLink key={row.id} row={row} metric={metric} onDelete={deleteFor} />)}
           </ul>
         )}
       </div>
@@ -253,8 +283,9 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
 
   return (
     <div className="space-y-3">
-      {/* One row of tiles, coloured by group — the three groups used to be
-          three rows of four with half of each row empty. */}
+      {/* Two rows of five, coloured by group (19 October): ten tiles in one
+          row were too narrow to read. The groups used to be three rows of
+          four with half of each row empty. */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
         {GROUPS.map(([group, title]) => (
           <span key={group} className="inline-flex items-center gap-1.5">
@@ -263,7 +294,7 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
           </span>
         ))}
       </div>
-      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${one ? 'xl:grid-cols-8' : 'xl:grid-cols-9'}`}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
       {GROUPS.map(([group, title]) => (
         <section key={group} aria-label={title} className="contents">
             {BOARD_METRICS.filter((metric) => metric.group === group).map((metric) => (
@@ -435,9 +466,11 @@ export function useBoardData() {
 
 /**
  * The summary itself. `lgu` (a PSGC code) narrows it to one LGU; without
- * it, the province.
+ * it, the province. `onDeleteTag(row)` — an office's, never PGENRO's — lets a
+ * waiting tag be deleted from the list behind a tile; it answers a problem,
+ * or null.
  */
-export default function ActionSummary({ data: all, labelOf, lgu = undefined, barangay = '' }) {
+export default function ActionSummary({ data: all, labelOf, lgu = undefined, barangay = '', onDeleteTag = null }) {
   const [open, setOpen] = useState(null); // { metric, lgu }
   // One barangay of the LGU, when the dashboard is narrowed to it. A tree's
   // barangay is where it stands, as the dashboard's figures count it.
@@ -478,6 +511,7 @@ export default function ActionSummary({ data: all, labelOf, lgu = undefined, bar
           onClose={() => setOpen(null)}
           labelOf={labelOf}
           groupBy={open.lgu === undefined ? 'lgu' : 'barangay'}
+          onDeleteTag={onDeleteTag}
         />
       )}
     </>

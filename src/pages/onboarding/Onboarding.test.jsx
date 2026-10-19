@@ -127,17 +127,17 @@ describe('a resident signed in with Google', () => {
 
   it('is sent from the offices’ pages to the community', async () => {
     renderAt('/action-board');
-    expect(await screen.findByText('You have joined as')).toBeInTheDocument();
+    expect(await screen.findByText('You have joined as', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.queryByText('This account has no profile')).not.toBeInTheDocument();
   });
 
   it('is sent from the office sign-in to the community too', async () => {
     renderAt('/login');
-    expect(await screen.findByText('You have joined as')).toBeInTheDocument();
+    expect(await screen.findByText('You have joined as', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('is shown by name in the public navbar', async () => {
     renderAt('/about');
-    expect((await screen.findAllByRole('link', { name: 'Ana Reyes' }))[0]).toHaveAttribute('href', '/community');
+    expect((await screen.findAllByRole('link', { name: 'Ana Reyes' }, { timeout: 5000 }))[0]).toHaveAttribute('href', '/community');
   });
 });

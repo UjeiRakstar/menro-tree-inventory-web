@@ -4,8 +4,8 @@ import { supabase } from '../../supabaseClient.js';
 import { isMissingTable, profileFields, profileForm, profileProblems, profileRow } from '../../lib/officeSettings.js';
 import { forgetOfficeProfile } from '../../hooks/useOfficeProfile.js';
 import Section, { Outcome, buttonClass, inputClass } from './Section.jsx';
+import { LIMITS, shrinkImage } from '../../lib/shrinkImage.js';
 
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
 /**
  * The office as its letterhead has it — names, address, contacts, the LGU's
@@ -55,18 +55,20 @@ export default function ProfileSection({ office, pgenro, officeLabel, builtInSea
     );
   }
 
-  async function upload(key, file) {
-    if (!file) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      setOutcome({ ok: false, text: 'A logo is a PNG, JPEG or WebP picture.' });
-      return;
-    }
-    if (file.size > MAX_LOGO_BYTES) {
-      setOutcome({ ok: false, text: 'That picture is over 2 MB.' });
-      return;
-    }
+  async function upload(key, picked) {
+    if (!picked) return;
     setUploading(key);
     setOutcome(null);
+    // Any size: resized here, so the stored logo — and any download of it —
+    // is the small one (19 October).
+    let file;
+    try {
+      file = await shrinkImage(picked, LIMITS.logo);
+    } catch (problem) {
+      setUploading('');
+      setOutcome({ ok: false, text: problem.message });
+      return;
+    }
     const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
     const path = `${office}/${key === 'lgu_logo_url' ? 'seal' : 'office'}-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('office-logos').upload(path, file, { contentType: file.type, upsert: false });

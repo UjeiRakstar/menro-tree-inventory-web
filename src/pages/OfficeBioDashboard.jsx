@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro } from '../lib/roles.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
@@ -31,10 +32,26 @@ export default function OfficeBioDashboard() {
   const ownLgu = pgenro ? null : MUNICIPALITY_LIST.find((lgu) => lgu.psgc === Number(profile?.lgu_psgc)) ?? null;
   // PGENRO's seals narrow the summary too: one LGU chosen, its numbers.
   const chosen = pgenro ? MUNICIPALITY_LIST.find((lgu) => lgu.name === searchParams.get('lgu')) ?? null : ownLgu;
+  // Residents' tags waiting, and the inventory trees still to verify —
+  // counted apart: 1,428 of San Pedro's are not 1,428 community tags.
   const waitingTags = useMemo(
-    () => board.data.tags.filter((tag) => !tag.status || tag.status === 'pending').length,
+    () => board.data.tags.filter((tag) => tag.source !== 'import' && (!tag.status || tag.status === 'pending')).length,
     [board.data.tags]
   );
+  const toVerify = useMemo(
+    () => board.data.tags.filter((tag) => tag.source === 'import' && ['pending', 'dispatched'].includes(tag.status ?? 'pending')).length,
+    [board.data.tags]
+  );
+
+  // An office deletes a tag or inventory tree still waiting (19 October);
+  // the database allows it for its own LGU's only (tag_routing.sql).
+  async function deleteTag(row) {
+    const { data, error } = await supabase.from('pending_trees').delete().eq('id', row.id).select('id');
+    if (error) return error.message;
+    if (Array.isArray(data) && data.length === 0) return 'It could not be deleted: it is not your LGU\u2019s.';
+    await board.reload();
+    return null;
+  }
 
   // Rendered by the dashboard, which knows the barangay chosen.
   const top = ({ barangay }) => (
@@ -54,7 +71,13 @@ export default function OfficeBioDashboard() {
         ) : board.loadError ? (
           <p role="alert" className="text-sm text-red-700">{board.loadError}</p>
         ) : (
-          <ActionSummary data={board.data} labelOf={board.labelOf} lgu={chosen ? chosen.psgc : undefined} barangay={barangay} />
+          <ActionSummary
+            data={board.data}
+            labelOf={board.labelOf}
+            lgu={chosen ? chosen.psgc : undefined}
+            barangay={barangay}
+            onDeleteTag={pgenro ? null : deleteTag}
+          />
         )}
       </div>
     </section>
@@ -66,7 +89,7 @@ export default function OfficeBioDashboard() {
       <div role="tablist" aria-label="BioDashboard views" className="flex gap-2 border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
         {[
           ['dashboard', 'BioDashboard'],
-          ['tags', `Community tags${waitingTags ? ` (${waitingTags})` : ''}`],
+          ['tags', ['Tags', waitingTags ? `${waitingTags.toLocaleString('en-US')} to review` : '', toVerify ? `${toVerify.toLocaleString('en-US')} inventory to verify` : ''].filter(Boolean).join(' · ')],
         ].map(([id, label]) => (
           <button
             key={id}

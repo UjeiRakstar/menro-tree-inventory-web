@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Loader2, Trash2, CheckCircle2, User, X, MapPin, Calendar, TreePine, Upload } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { everyRow } from '../../lib/everyRow.js';
+import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
+import { loadFieldOfficers } from '../../lib/fieldTeam.js';
 
 /**
  * Community tags waiting on their LGU: verify (dispatch a field officer),
@@ -103,8 +105,9 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
   async function openDispatch(target) {
     setDispatchModal(target);
     setArboristsLoading(true);
-    const { data } = await supabase.from('arborists').select('*');
-    setArborists(Array.isArray(data) ? data : []);
+    // The office's own field officers, from their accounts (fenced by LGU).
+    const { officers } = await loadFieldOfficers();
+    setArborists(officers);
     setArboristsLoading(false);
   }
 
@@ -170,12 +173,95 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
     );
   }
 
+  // By city or municipality (19 October): PGENRO reads Laguna's tags one LGU
+  // at a time; an office has only its own, shown without the extra fold.
+  const groups = groupByLgu(pendingTrees, dispatchedTrees, imports);
+  const single = groups.length === 1;
+  const region = (name, group) => (single ? name : `${name}, ${group.label}`);
+
+  const queue = (group) => (
+    <>
+          {group.pending.length > 0 && (
+            <section aria-label={region('Awaiting review', group)} className="space-y-4">
+              <p className="text-sm text-slate-600">
+                {group.pending.length} submission{group.pending.length > 1 ? 's' : ''} awaiting review
+              </p>
+
+              {/* Cards layout — works well on mobile and desktop */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {group.pending.map((tree) => (
+                  <PendingCard
+                    key={tree.id}
+                    tree={tree}
+                    isLoading={actionLoading === tree.id}
+                    onReject={readOnly ? null : () => handleReject(tree.id)}
+                    onVerify={readOnly ? null : () => handleOpenDispatch(tree)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {group.imports.length > 0 && (
+            <ImportedInventory
+              imports={group.imports}
+              label={region('Inventory trees to verify', group)}
+              readOnly={readOnly}
+              busy={Boolean(actionLoading)}
+              onSend={(barangay, ids) => openDispatch({ label: `${ids.length.toLocaleString('en-US')} inventory trees in ${barangay}`, ids })}
+            />
+          )}
+
+          {/* Out with an arborist. Publishing is what finally puts a community tag
+              on the public map, and nothing did it before this. */}
+          {group.dispatched.length > 0 && (
+            <section aria-label={region('Out for verification', group)} className="space-y-4">
+              <p className="text-sm text-slate-600">
+                {group.dispatched.length} submission{group.dispatched.length > 1 ? 's' : ''} out for verification
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {group.dispatched.map((tree) => (
+                  <article
+                    key={tree.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2"
+                  >
+                    <p className="text-sm font-semibold text-slate-800">
+                      {tree.species || 'Unidentified'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {tree.barangay || 'Unknown location'}
+                      {tree.assigned_to ? ` — with ${tree.assigned_to}` : ''}
+                    </p>
+                    {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handlePublish(tree)}
+                      disabled={actionLoading === tree.id}
+                      className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 transition disabled:opacity-50"
+                    >
+                      {actionLoading === tree.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Upload size={14} />
+                      )}
+                      Publish to map
+                    </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+    </>
+  );
+
   return (
     <div className="space-y-6">
       {readOnly && (
         <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200">
-          The community tags across Laguna. Verifying, rejecting and publishing them is done by the MENRO /
-          CENRO of each tag&apos;s city or municipality.
+          The tags and inventory trees waiting across Laguna, by city and municipality. Verifying, rejecting and
+          publishing them is done by the MENRO / CENRO of each one&apos;s city or municipality.
         </p>
       )}
       {publishError && (
@@ -184,76 +270,20 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
         </div>
       )}
 
-      {pendingTrees.length > 0 && (
-        <section aria-label="Awaiting review" className="space-y-4">
-          <p className="text-sm text-slate-600">
-            {pendingTrees.length} submission{pendingTrees.length > 1 ? 's' : ''} awaiting review
-          </p>
-
-          {/* Cards layout — works well on mobile and desktop */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {pendingTrees.map((tree) => (
-              <PendingCard
-                key={tree.id}
-                tree={tree}
-                isLoading={actionLoading === tree.id}
-                onReject={readOnly ? null : () => handleReject(tree.id)}
-                onVerify={readOnly ? null : () => handleOpenDispatch(tree)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {imports.length > 0 && (
-        <ImportedInventory
-          imports={imports}
-          readOnly={readOnly}
-          busy={Boolean(actionLoading)}
-          onSend={(barangay, ids) => openDispatch({ label: `${ids.length.toLocaleString('en-US')} inventory trees in ${barangay}`, ids })}
-        />
-      )}
-
-      {/* Out with an arborist. Publishing is what finally puts a community tag
-          on the public map, and nothing did it before this. */}
-      {dispatchedTrees.length > 0 && (
-        <section aria-label="Out for verification" className="space-y-4">
-          <p className="text-sm text-slate-600">
-            {dispatchedTrees.length} submission{dispatchedTrees.length > 1 ? 's' : ''} out for verification
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {dispatchedTrees.map((tree) => (
-              <article
-                key={tree.id}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2"
-              >
-                <p className="text-sm font-semibold text-slate-800">
-                  {tree.species || 'Unidentified'}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {tree.barangay || 'Unknown location'}
-                  {tree.assigned_to ? ` — with ${tree.assigned_to}` : ''}
-                </p>
-                {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => handlePublish(tree)}
-                  disabled={actionLoading === tree.id}
-                  className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 transition disabled:opacity-50"
-                >
-                  {actionLoading === tree.id ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Upload size={14} />
-                  )}
-                  Publish to map
-                </button>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
+      {groups.length === 1 ? (
+        queue(groups[0])
+      ) : (
+        groups.map((group) => (
+          <details key={group.key} className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 hover:bg-slate-50">
+              <span className="font-semibold text-slate-800">{group.label}</span>
+              <span className="text-xs text-slate-500">{groupSummary(group)}</span>
+              <span className="ml-auto text-xs font-semibold text-green-700 group-open:hidden">Show</span>
+              <span className="ml-auto hidden text-xs font-semibold text-green-700 group-open:inline">Hide</span>
+            </summary>
+            <div className="space-y-6 border-t border-slate-100 p-5">{queue(group)}</div>
+          </details>
+        ))
       )}
 
       {/* Dispatch Modal */}
@@ -285,7 +315,7 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
                 </div>
               ) : arborists.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-4">
-                  No arborists found. Add arborists in the Manage Arborists page.
+                  No approved field officers in your LGU yet. Add or approve them on the Field team page.
                 </p>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -322,7 +352,7 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
  * The office's inventory trees still to verify, by barangay: how many wait,
  * how many are out with whom, and a field officer sent to the rest at once.
  */
-function ImportedInventory({ imports, readOnly, busy, onSend }) {
+function ImportedInventory({ imports, readOnly, busy, onSend, label = 'Inventory trees to verify' }) {
   const byBarangay = new Map();
   for (const tree of imports) {
     const name = tree.barangay || 'No barangay';
@@ -336,7 +366,7 @@ function ImportedInventory({ imports, readOnly, busy, onSend }) {
   const waiting = imports.filter((t) => t.status !== 'dispatched').length;
 
   return (
-    <section aria-label="Inventory trees to verify" className="space-y-3">
+    <section aria-label={label} className="space-y-3">
       <div>
         <h3 className="text-sm font-bold text-slate-800">Inventory trees to verify — from the spreadsheet</h3>
         <p className="text-xs text-slate-500">
@@ -451,4 +481,32 @@ function PendingCard({ tree, isLoading, onReject, onVerify }) {
       </div>
     </div>
   );
+}
+
+/** The Tags tab's rows by LGU, alphabetical, with tags not placed in an LGU last. */
+export function groupByLgu(pending, dispatched, imports) {
+  const groups = new Map();
+  const groupOf = (row) => {
+    const code = Number(row?.lgu_psgc) || null;
+    if (!groups.has(code)) {
+      const label = code ? MUNICIPALITY_LIST.find((item) => item.psgc === code)?.label ?? String(code) : 'Not placed in an LGU';
+      groups.set(code, { key: String(code), label, pending: [], dispatched: [], imports: [] });
+    }
+    return groups.get(code);
+  };
+  pending.forEach((row) => groupOf(row).pending.push(row));
+  dispatched.forEach((row) => groupOf(row).dispatched.push(row));
+  imports.forEach((row) => groupOf(row).imports.push(row));
+  return [...groups.values()].sort((a, b) => (a.key === 'null') - (b.key === 'null') || a.label.localeCompare(b.label));
+}
+
+/** One LGU's line: what waits there. */
+function groupSummary(group) {
+  const n = (count, one, many) => `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`;
+  const waiting = group.imports.filter((t) => t.status !== 'dispatched').length;
+  return [
+    group.pending.length ? n(group.pending.length, 'tag awaiting review', 'tags awaiting review') : null,
+    group.dispatched.length ? n(group.dispatched.length, 'out for verification', 'out for verification') : null,
+    group.imports.length ? `${n(group.imports.length, 'inventory tree', 'inventory trees')} to verify${waiting ? ` (${waiting.toLocaleString('en-US')} not yet sent)` : ''}` : null,
+  ].filter(Boolean).join(' · ');
 }

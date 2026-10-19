@@ -225,6 +225,26 @@ check(
   emails.join(', ')
 );
 
+// ---- field_team_fence.sql: the old field team list, by LGU ----------------------
+await db.exec(`insert into public.arborists (name, email) values ('Scz', 'scz@field.ph'), ('Clb', 'clb@field.ph'), ('Nobody', 'orphan@x.ph')`);
+try {
+  const fence = await db.exec(readFileSync(new URL('../../supabase/field_team_fence.sql', import.meta.url), 'utf8'));
+  check('field_team_fence.sql runs', fence[fence.length - 1].rows[0].ok === true);
+  await db.exec(readFileSync(new URL('../../supabase/field_team_fence.sql', import.meta.url), 'utf8'));
+} catch (error) {
+  check('field_team_fence.sql runs', false, error.message);
+}
+const team = (await as(MENRO, 'authenticated', () => db.query(`select email from public.arborists order by email`))).rows.map((r) => r.email);
+check('an office sees its own field team on the old list, not every LGU’s', team.join(',') === 'scz@field.ph', team.join(', '));
+const dropOther = await as(MENRO, 'authenticated', () => db.query(`delete from public.arborists where email = 'clb@field.ph'`));
+check('…and cannot remove another LGU’s officer from it', dropOther.affectedRows === 0);
+const addOther = await as(MENRO, 'authenticated', () => fails(() => db.query(`insert into public.arborists (name, email) values ('x', 'clb@field.ph')`)));
+check('…nor add one to it', addOther !== null);
+const pgTeam = (await as(ADMIN, 'authenticated', () => db.query(`select count(*)::int n from public.arborists`))).rows[0].n;
+check('PGENRO sees the whole list', pgTeam === 3, String(pgTeam));
+const anonTeam = await as(null, 'anon', () => db.query(`select count(*)::int n from public.arborists`));
+check('the public sees none of it', anonTeam.rows[0].n === 0);
+
 const approveOwn = await as(MENRO, 'authenticated', () =>
   db.query(`update public.profiles set is_approved = true where email = 'newfield@x.ph'`));
 check('an LGU admin approves their own field officer', approveOwn.affectedRows === 1);

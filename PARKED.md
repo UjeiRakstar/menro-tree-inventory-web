@@ -133,6 +133,17 @@ can do everything. The RISE details on the public tree panel, more of them.
     grey, as "from the LGU's inventory, not yet verified"?
   - Still open: the nickname word list is a starting list
     (`nickname_problem()` in community.sql); PGENRO may want words added.
+- Done 19 October, second batch: the PGENRO dashboard's ten figures in two
+  rows of five; the Tags tab by city and municipality; unverified trees grey
+  on the public map (from an LGU's inventory or a resident's tag), so nobody
+  tags one twice; an office deletes a waiting tag from the map or from the
+  list behind the Tags figure; dispatch lists only the office's own field
+  officers; logos and photos of any size, resized before they are kept; the
+  QR tag printing of the first version removed; replies to the public from
+  the Inbox (step 21).
+- Parked from that batch: a "!" on the resident's navbar name when a reply
+  is waiting; a warning on the tag form when a tree is already tagged within
+  a few metres.
 - News & Events, asked 19 October: archive a post (as well as edit and
   delete), schedule when it is published, and a calendar of what is planned —
   like Meta's Business Suite planner. Parked as its own piece of work.
@@ -242,18 +253,31 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     back there). Until then, Continue with Google says it is not on yet.
     **Run community.sql again after 19 October's changes** (safe to run
     again): tags need a sign-in, each LGU's own count and leaderboard, a
-    resident deleting their own account, and PGENRO bringing in an LGU's
-    inventory. **Then run closing_gaps.sql again** (step 10, safe to run
+    resident deleting their own account, PGENRO bringing in an LGU's
+    inventory, and unverified trees shown grey on the public map. **Then run closing_gaps.sql again** (step 10, safe to run
     again): a verified inventory tree becomes the office's, with its sheet's
     details.
 19. `supabase/onboarding.sql` (19 October) — the office's first sign-in:
     designation, address and when it finished. Accounts that have already
     signed in are marked done and never see it. The photo goes in the
     'office-logos' bucket (after steps 1, 15 and 18).
+20. `supabase/field_team_fence.sql` (19 October) — the old field team list
+    (`arborists`) fenced by LGU: it showed every office every officer in
+    Laguna, and let any of them change it. The website now sends tags and
+    trees to the office's own approved field officers, from their accounts
+    (after step 1).
+21. `supabase/replies.sql` (19 October) — replying to the public from the
+    Inbox: in Green Tag to a resident signed in with Google (the reply waits
+    on their Community page), by email to a guest (after steps 15, 17 and
+    18). **For the emails:** make a free Brevo account (brevo.com), verify a
+    sender address under Senders, make an API key; add the Edge Function
+    secrets `BREVO_API_KEY` and `MAIL_FROM`; deploy
+    `supabase/functions/send-reply/index.ts` as a new function named exactly
+    `send-reply`. Until then the Inbox says so and opens the email app.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 12 suites, 493 checks — the final check query on its
+allow and refuse — 13 suites, 523 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is

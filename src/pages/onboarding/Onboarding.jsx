@@ -10,8 +10,8 @@ import BarangaySection from '../settings/BarangaySection.jsx';
 import TreeInventorySection from '../settings/TreeInventorySection.jsx';
 import { buttonClass, inputClass } from '../settings/Section.jsx';
 import greenTagLogo from '../../assets/GreenTag_Logo.png';
+import { LIMITS, shrinkImage } from '../../lib/shrinkImage.js';
 
-const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const PHOTO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 export const STEPS = ['Your details', 'Barangay population', 'Tree inventory'];
@@ -69,13 +69,19 @@ export default function Onboarding() {
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   async function uploadPhoto(event) {
-    const file = event.target.files?.[0];
+    const picked = event.target.files?.[0];
     event.target.value = '';
-    if (!file) return;
-    if (!PHOTO_TYPES.includes(file.type)) return setProblem('A photo is a PNG, JPEG or WebP picture.');
-    if (file.size > MAX_PHOTO_BYTES) return setProblem('That photo is over 2 MB.');
+    if (!picked) return;
     setBusy('photo');
     setProblem('');
+    // Any size: resized here, so what is kept is the small one.
+    let file;
+    try {
+      file = await shrinkImage(picked, LIMITS.photo);
+    } catch (problem) {
+      setBusy('');
+      return setProblem(problem.message);
+    }
     const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
     const path = `${officeOf(profile)}/holder-${profile.id}-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('office-logos').upload(path, file, { contentType: file.type, upsert: false });

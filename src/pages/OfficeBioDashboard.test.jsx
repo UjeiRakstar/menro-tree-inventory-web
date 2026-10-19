@@ -140,9 +140,21 @@ describe('the BioDashboard of a MENRO / CENRO', () => {
     await waitFor(() => expect(flyToBoundsSpy).toHaveBeenCalled());
   });
 
+  it('deletes a tag still waiting from the list behind the Tags figure, after asking', async () => {
+    supabaseMock.setResponse('pending_trees:delete', { data: [{ id: 'x' }], error: null });
+    show(SANTA_CRUZ);
+    const action = await screen.findByRole('region', { name: 'What needs action' });
+    fireEvent.click(await within(action).findByRole('button', { name: '1 — Public tags awaiting a field check, Santa Cruz' }));
+    const list = await screen.findByRole('dialog');
+    fireEvent.click(within(list).getByRole('button', { name: /Delete the tag: Duhat/ }));
+    expect(supabaseMock.writesTo('pending_trees', 'delete')).toHaveLength(0);
+    fireEvent.click(within(within(list).getByRole('group', { name: 'Delete this tag?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(supabaseMock.writesTo('pending_trees', 'delete')).toHaveLength(1));
+  });
+
   it('keeps the community tags to verify in a tab of their own', async () => {
     show(SANTA_CRUZ);
-    fireEvent.click(await screen.findByRole('tab', { name: /Community tags \(1\)/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Tags · 1 to review' }));
     expect(await screen.findByText('Duhat')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Verify/ })).toBeInTheDocument();
   });
@@ -159,9 +171,17 @@ describe('the BioDashboard of PGENRO', () => {
     expect(screen.getByRole('region', { name: 'What needs action' })).toHaveTextContent('Santa Cruz — what needs action');
   });
 
+  it('deletes no tag from the province’s lists: that is the office’s', async () => {
+    show(PGENRO);
+    const action = await screen.findByRole('region', { name: 'What needs action' });
+    fireEvent.click(await within(action).findByRole('button', { name: /Public tags awaiting a field check, all of Laguna/ }));
+    const list = await screen.findByRole('dialog');
+    expect(within(list).queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument();
+  });
+
   it('reads the community tags, and verifies none', async () => {
     show(PGENRO);
-    fireEvent.click(await screen.findByRole('tab', { name: /Community tags/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: /^Tags/ }));
     expect(await screen.findByText('Duhat')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Verify/ })).not.toBeInTheDocument();
   });

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { User, X } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { everyRow } from '../lib/everyRow.js';
+import { loadFieldOfficers } from '../lib/fieldTeam.js';
 
 /**
- * Dispatch Field Worker modal — lists all arborists with their pending task
- * count and allows assigning/re-assigning a tree to an arborist.
+ * Dispatch Field Worker modal — lists the office's own field officers with
+ * their pending task count and assigns or re-assigns a tree to one. The
+ * officers come from their accounts, fenced by LGU (lib/fieldTeam.js).
  */
 export default function DispatchModal({ tree, onClose, onDispatched }) {
   const [arborists, setArborists] = useState([]);
@@ -14,10 +16,8 @@ export default function DispatchModal({ tree, onClose, onDispatched }) {
 
   useEffect(() => {
     async function loadArborists() {
-      // Fetch arborists
-      const { data: arbData } = await supabase.from('arborists').select('*');
-      const arbList = Array.isArray(arbData) ? arbData : [];
-      setArborists(arbList);
+      const { officers } = await loadFieldOfficers();
+      setArborists(officers);
 
       // Count pending tasks per arborist (trees assigned to them)
       const { data: treesData } = await everyRow(() => supabase.from('trees').select('id, assigned_to'));

@@ -1776,3 +1776,60 @@ describe('saving an area', () => {
     });
   });
 });
+
+describe('trees tagged and not yet verified (19 October)', () => {
+  const WAITING = { id: 'w1', species: 'Mahogany', latitude: 14.281, longitude: 121.412, barangay: 'Bubukal', source: 'import', status: 'pending' };
+
+  it('shows them to the public, grey, so nobody tags one twice', async () => {
+    supabaseMock.supabase.rpc.mockImplementation(async (name) =>
+      name === 'public_unverified_trees' ? { data: [WAITING], error: null } : { data: null, error: null }
+    );
+    renderMap();
+    await waitFor(() => expect(markers()).toHaveLength(6));
+    expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('public_unverified_trees');
+    const pin = markerFor(WAITING);
+    expect(pin.dataset.fill).toBe('#94a3b8');
+    expect(markerFor(TREES[0]).dataset.fill).not.toBe('#94a3b8');
+    expect(screen.getByText('Tagged, not yet verified')).toBeInTheDocument();
+
+    fireEvent.click(pin);
+    const note = await screen.findByRole('note');
+    expect(note).toHaveTextContent('From the LGU’s inventory.');
+    expect(note).toHaveTextContent('It is already tagged — no need to tag it again.');
+  });
+});
+
+describe('an office deleting a tag still waiting', () => {
+  const WAITING_TAG = { id: 'p9', species: 'Duhat', latitude: 14.283, longitude: 121.417, status: 'pending', source: 'community', barangay: 'Labuin' };
+
+  const renderOfficeMap = () => renderOffice({ profile: SANTA_CRUZ_ADMIN });
+  const pinOf = (tag) => officePin(tag);
+
+  beforeEach(() => {
+    supabaseMock.setResponse('pending_trees:select', { data: [WAITING_TAG], error: null });
+  });
+
+  it('deletes it from its panel, after asking', async () => {
+    supabaseMock.setResponse('pending_trees:delete', { data: [{ id: 'p9' }], error: null });
+    renderOfficeMap();
+    await waitFor(() => expect(pinOf(WAITING_TAG)).toBeTruthy());
+    fireEvent.click(pinOf(WAITING_TAG));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete this tag' }));
+    const ask = screen.getByRole('alertdialog', { name: 'Delete this tag?' });
+    expect(supabaseMock.writesTo('pending_trees', 'delete')).toHaveLength(0);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(supabaseMock.writesTo('pending_trees', 'delete')).toHaveLength(1));
+    expect(supabaseMock.writesTo('pending_trees', 'delete')[0].filters).toEqual([['id', 'p9']]);
+    await waitFor(() => expect(pinOf(WAITING_TAG)).toBeUndefined());
+  });
+
+  it('says so when the database refuses it', async () => {
+    supabaseMock.setResponse('pending_trees:delete', { data: [], error: null });
+    renderOfficeMap();
+    await waitFor(() => expect(pinOf(WAITING_TAG)).toBeTruthy());
+    fireEvent.click(pinOf(WAITING_TAG));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete this tag' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('not your LGU’s');
+  });
+});

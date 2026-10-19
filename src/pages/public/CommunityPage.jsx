@@ -4,6 +4,7 @@ import { Loader2, LogOut, MapPin, ShieldCheck, Trash2, Users } from 'lucide-reac
 import { supabase } from '../../supabaseClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Leaderboard from '../../components/public/Leaderboard.jsx';
+import OfficeReplies from '../../components/public/OfficeReplies.jsx';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import {
   WHAT_IS_KEPT,
@@ -298,6 +299,7 @@ export default function CommunityPage() {
           </div>
         </div>
         {editing && <JoinForm resident={resident} joined onDone={() => setEditing(false)} />}
+        <OfficeReplies />
         <div className="flex flex-wrap gap-2">
           <SignOutButton />
           <DeleteAccount onDeleted={() => setDeleted(true)} />

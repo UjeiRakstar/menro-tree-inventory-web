@@ -6,8 +6,7 @@ import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
 import { lguOfTree } from '../hooks/useAttention.js';
 import { classifyPinColor } from '../lib/pinColor.js';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, Image, ArrowUpDown, MapPin, Download, Search, Printer } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { X, Image, ArrowUpDown, MapPin, Download, Search } from 'lucide-react';
 import { everyRow } from '../lib/everyRow.js';
 
 const BARANGAYS = [
@@ -36,9 +35,6 @@ export default function BiodiversityHub() {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState('dateCaptured');
   const [sortDir, setSortDir] = useState('desc');
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [batchCount, setBatchCount] = useState(10);
-  const [qrBatch, setQrBatch] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -122,13 +118,6 @@ export default function BiodiversityHub() {
           <p className="mt-1 text-slate-600 text-sm">Tree inventory, carbon sink analytics, and DENR reporting.</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setIsQrModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
-          >
-            <Printer size={16} />
-            Print QR Tags
-          </button>
           <button
             onClick={async () => {
               // Fetched on the click rather than with the page: ExcelJS is
@@ -306,58 +295,6 @@ export default function BiodiversityHub() {
         </div>
       )}
 
-      {/* QR Tag Generator Modal */}
-      {isQrModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-2">Generate Blank QR Tags</h2>
-            <p className="text-sm text-slate-600 mb-4">Enter the number of blank physical tags you want to print for field dispatch.</p>
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={batchCount}
-              onChange={(e) => setBatchCount(parseInt(e.target.value) || 1)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm mb-4 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-            />
-            <div className="flex gap-3">
-              <button onClick={() => setIsQrModalOpen(false)}
-                className="flex-1 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-                Cancel
-              </button>
-              <button onClick={() => {
-                const ids = Array.from({ length: batchCount }, () => crypto.randomUUID().split('-')[0].toUpperCase());
-                setQrBatch(ids);
-                setIsQrModalOpen(false);
-                setTimeout(() => window.print(), 500);
-              }}
-                className="flex-1 py-2 rounded-lg bg-green-700 text-sm font-medium text-white hover:bg-green-800 transition">
-                Generate & Print
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QR Tag Print Layout — hidden on screen, visible on print */}
-      {qrBatch.length > 0 && (
-        <div className="hidden print:flex print:fixed print:inset-0 print:bg-white print:z-[99999] print:flex-wrap print:gap-4 print:justify-start print:p-4 print:items-start">
-          {qrBatch.map((id) => (
-            <div
-              key={id}
-              className="border-2 border-dashed border-gray-400 flex items-center justify-between p-4 h-full"
-              style={{ width: '85.6mm', height: '53.98mm' }}
-            >
-              <div className="flex flex-col justify-center">
-                <span className="text-xs text-gray-500 font-medium">MENRO LGU</span>
-                <span className="text-xs text-gray-400">Santa Cruz, Laguna</span>
-                <span className="text-sm font-bold text-black mt-2">ID: {id}</span>
-              </div>
-              <QRCodeSVG value={id} size={64} />
-            </div>
-          ))}
-        </div>
-      )}
     </section>
   );
 }

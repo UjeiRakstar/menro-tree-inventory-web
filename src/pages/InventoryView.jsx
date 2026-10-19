@@ -1,8 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../supabaseClient.js';
-import { X, Image, ArrowUpDown, MapPin, Download, Printer } from 'lucide-react';
+import { X, Image, ArrowUpDown, MapPin, Download } from 'lucide-react';
 import { everyRow } from '../lib/everyRow.js';
 
 const NULL_CELL_PLACEHOLDER = '—';
@@ -151,10 +150,6 @@ export default function InventoryView() {
     }
   }
 
-  function handlePrintQr() {
-    window.print();
-  }
-
   /** Bucket numeric height (in meters) into Small / Medium / Tall. */
   function classifyHeight(tree) {
     const raw = tree.total_height ?? tree.heightClass;
@@ -192,11 +187,6 @@ export default function InventoryView() {
 
       {/* Toolbar */}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={handlePrintQr} disabled={filteredTrees.length === 0}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-          <Printer size={14} />
-          Print QR Codes
-        </button>
         <button type="button" onClick={handleExportExcel} disabled={isExporting || filteredTrees.length === 0}
           className="inline-flex items-center gap-2 rounded-md border border-transparent bg-green-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50">
           <Download size={14} />
@@ -508,22 +498,6 @@ export default function InventoryView() {
         </div>
       )}
 
-      {/* QR Sticker Sheet (print only) */}
-      <div className="hidden print:block" data-testid="qr-sticker-sheet">
-        <div className="grid grid-cols-[repeat(auto-fill,85mm)] gap-4">
-          {filteredTrees.map((tree) => {
-            const tagValue = tree.tree_id ?? tree.id;
-            const tagDisplay = tree.tree_id ?? (tree.id ? String(tree.id).slice(0, 8).toUpperCase() : '—');
-            return (
-              <div key={tree.id} data-testid="qr-sticker" className="flex flex-col items-center justify-center border border-slate-300 p-2" style={{ width: '85mm', height: '54mm' }}>
-                <div data-testid="lgu-logo-placeholder" className="mb-2 h-6 w-12" />
-                <p className="mb-1 text-xs font-medium text-slate-800">Tag: {tagDisplay}</p>
-                <QRCodeSVG value={String(tagValue ?? '')} size={80} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </section>
   );
 }

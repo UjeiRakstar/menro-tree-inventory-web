@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, ArchiveRestore, Inbox as InboxIcon, Loader2, Mail, MapPinned, Reply, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Inbox as InboxIcon, Loader2, Mail, MapPinned, Reply, Send, Trash2 } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro } from '../lib/roles.js';
@@ -8,6 +8,7 @@ import { officeOf } from '../lib/officeSettings.js';
 import { officialName } from '../lib/psgc.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 import { INBOX_FOLDERS, INBOX_KINDS, folderById, linkOf, receivedAt, replyMailto } from '../lib/inbox.js';
+import { MAX_REPLY_CHARACTERS, loadReplies, replyChannelOf, sendReply } from '../lib/replies.js';
 
 const isMissingTable = (error) => /relation .*inbox_messages.* does not exist|Could not find the table/i.test(error?.message ?? '');
 
@@ -180,6 +181,92 @@ export default function Inbox() {
   );
 }
 
+/**
+ * Replying to a message from the public, without leaving Green Tag (19
+ * October): in Green Tag to a resident who wrote signed in, by email — sent by
+ * the system — to a guest. Until sending email is set up (the send-reply
+ * function), a guest is answered from the office's own email app.
+ */
+function ReplyBox({ message, officeName }) {
+  const channel = replyChannelOf(message);
+  const [replies, setReplies] = useState([]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadReplies(message.id).then(({ replies: found }) => {
+      // Merged, not replaced: a reply sent while these were loading stays.
+      if (!cancelled) setReplies((current) => [...found, ...current.filter((reply) => String(reply.id).startsWith('new-'))]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [message.id]);
+
+  async function send(event) {
+    event.preventDefault();
+    setBusy(true);
+    setOutcome(null);
+    const result = await sendReply(message, text);
+    setBusy(false);
+    if (result.ok) {
+      setReplies((current) => [...current, { id: `new-${Date.now()}`, body: text.trim(), channel, created_at: new Date().toISOString() }]);
+      setText('');
+      setOutcome({ ok: true, text: channel === 'in-app' ? 'Sent. It waits for them in Green Tag.' : `Sent to ${message.sender_email}.` });
+    } else if (result.notSetUp) {
+      setOutcome({ ok: false, notSetUp: true, text: 'Sending email from Green Tag is not set up yet. Open your email app instead — the reply is written for you there.' });
+    } else {
+      setOutcome({ ok: false, text: result.problem });
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+      {replies.length > 0 && (
+        <ol className="space-y-2" aria-label="Replies sent">
+          {replies.map((sent) => (
+            <li key={sent.id} className="rounded-lg bg-green-50 px-3 py-2 text-sm text-slate-800">
+              <span className="block text-[11px] font-semibold text-green-800">
+                {sent.channel === 'in-app' ? 'Replied in Green Tag' : 'Replied by email'} · {receivedAt(sent.created_at)}
+                {sent.sent_by_name ? ` · ${sent.sent_by_name}` : ''}
+              </span>
+              <span className="whitespace-pre-wrap">{sent.body}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <form onSubmit={send} className="space-y-2">
+        <label className="block text-xs font-semibold text-slate-700">
+          {channel === 'in-app'
+            ? `Reply to ${message.sender_name} in Green Tag — they signed in with Google, and read it there`
+            : `Reply to ${message.sender_name} by email, ${message.sender_email}`}
+          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} maxLength={MAX_REPLY_CHARACTERS}
+            className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" disabled={busy || !text.trim()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 disabled:opacity-50">
+            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
+            {channel === 'in-app' ? 'Send in Green Tag' : 'Send email'}
+          </button>
+          {channel === 'email' && (
+            <a href={replyMailto(message, { officeName })} className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-800 hover:underline">
+              <Reply size={14} aria-hidden="true" /> Or open my email app
+            </a>
+          )}
+        </div>
+      </form>
+      {outcome && (
+        <p role={outcome.ok ? 'status' : 'alert'} className={`text-xs ${outcome.ok ? 'text-green-800' : outcome.notSetUp ? 'text-amber-800' : 'text-red-700'}`}>
+          {outcome.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MessageBody({ message, officeName, onChange, onDelete }) {
   const link = linkOf(message);
   const button = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold';
@@ -206,12 +293,8 @@ function MessageBody({ message, officeName, onChange, onDelete }) {
         </dl>
       )}
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{message.body}</p>
+      {message.kind === 'contact' && <ReplyBox message={message} officeName={officeName} />}
       <div className="flex flex-wrap gap-2">
-        {message.kind === 'contact' && (
-          <a href={replyMailto(message, { officeName })} className={`${button} bg-green-700 text-white hover:bg-green-800`}>
-            <Reply size={14} aria-hidden="true" /> Reply by email
-          </a>
-        )}
         {link && (
           <Link to={link.to} className={`${button} bg-white text-green-800 ring-1 ring-green-300 hover:bg-green-50`}>
             <MapPinned size={14} aria-hidden="true" /> {link.label}

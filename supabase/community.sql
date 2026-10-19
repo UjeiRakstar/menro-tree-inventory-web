@@ -391,7 +391,31 @@ notify pgrst, 'reload schema';
 
 
 -- ===========================================================================
--- 6. Check
+-- 6. Unverified trees, grey on the public map (decided 19 October)
+-- ===========================================================================
+-- A tree already tagged — from an LGU's inventory spreadsheet, or by a
+-- resident — is shown to everyone before it is verified, so nobody tags it
+-- again. Only what places it: where, what species, which barangay and LGU, and
+-- where it came from. Never who sent it, their photos, or who is sent to check.
+create or replace function public.public_unverified_trees()
+returns table (id text, latitude float8, longitude float8, species text, barangay text,
+               lgu_psgc bigint, source text, status text, submitted_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select p.id::text, p.latitude::float8, p.longitude::float8, p.species, p.barangay, p.lgu_psgc,
+         p.source, coalesce(p.status, 'pending'), p.submitted_at
+  from public.pending_trees p
+  where coalesce(p.status, 'pending') in ('pending', 'dispatched')
+    and p.latitude is not null and p.longitude is not null
+    and not coalesce((to_jsonb(p) ->> 'is_training')::boolean, false);
+$$;
+revoke all on function public.public_unverified_trees() from public;
+grant execute on function public.public_unverified_trees() to anon, authenticated;
+
+notify pgrst, 'reload schema';
+
+
+-- ===========================================================================
+-- 7. Check
 -- ===========================================================================
 select 'residents, apart from the offices' as check,
        to_regclass('public.residents') is not null
@@ -417,6 +441,10 @@ select 'no Google account waits in the approval queue',
 union all
 select 'a tag needs a sign-in',
        position('Sign in with Google' in pg_get_functiondef('public.stamp_tag_sender()'::regprocedure)) > 0,
+       ''
+union all
+select 'unverified trees show on the public map, without who sent them',
+       exists (select 1 from pg_proc where proname = 'public_unverified_trees'),
        ''
 union all
 select 'a resident can delete their own account',
