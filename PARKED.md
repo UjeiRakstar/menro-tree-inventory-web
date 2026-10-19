@@ -73,9 +73,10 @@ download and upload — its trees grey until verified with photos.
   LGU lights up on a small map of Laguna once the code is checked. Settings
   has a Tree inventory section. Imported trees are grey on the office map.
 
-**Round E — the field app.** The hagameter steps replaced by typing in what
-was measured with a real hagameter and tape (DBH, total and merchantable
-height); the trainee banner.
+**Round E — the field app. Parked 19 October** ("let's fix things on the web
+app before proceeding to the mobile app"). The hagameter steps replaced by
+typing in what was measured with a real hagameter and tape (DBH, total and
+merchantable height); the trainee banner.
 
 **Round F — PGENRO and the super admin.** Each LGU pins its own hall, PGENRO
 the capitol, and PGENRO sees every hall pinned. PGENRO sees permits and whom
@@ -93,18 +94,32 @@ can do everything. The RISE details on the public tree panel, more of them.
   No., Common and Scientific name, Latitude, Longitude, Barangay, DBH, Total
   and Merchantable height, Condition, Date, Remarks. Columns are read by
   heading, so yours can replace it; send it and the reader follows it.
-- Found in Round D, to decide after the rounds:
-  - Should tagging need a Google sign-in? Today anyone can still tag, and an
-    anonymous tag counts for nobody.
-  - The field app, verifying an imported tree, does not yet show the DBH and
-    heights the spreadsheet gave (they are in `pending_trees.details`).
-  - A resident asking to be removed (RA 10173): the page says to ask PGENRO;
-    there is no button for PGENRO to do it yet (deleting the auth user
-    removes the resident row; their tags stay, credited to nobody).
-  - The nickname word list is a starting list (`nickname_problem()` in
-    community.sql); PGENRO may want words added.
-  - Residents per LGU for the CBI: today the count is province-wide
-    (`community_counts()`); per LGU would go by where each resident tagged.
+- Found in Round D, decided 19 October:
+  - Tagging needs a Google sign-in — **done.** The database refuses a tag
+    from anyone who is not a resident who joined, or an office; the map's
+    Tag a tree asks for the sign-in first and comes back to the map.
+  - A resident deletes their own account (RA 10173) — **done.** Delete my
+    account on the Community page: sign-in, email, name and agreement go;
+    the trees they tagged stay, credited to nobody. Office accounts are
+    still archived by PGENRO, never deleted.
+  - The CBI for each city as well as Laguna — **done.** Residents are counted
+    where they tagged; the biodiversity report's citizen-science line is the
+    LGU's own; the Community page's leaderboard can be one city's.
+  - The inventory template — **done, from San Pedro's.** The City of San
+    Pedro's inventory (2,308 trees) set the columns: date, common name,
+    family, genus and epithet, latitude and longitude, location, barangay,
+    height (measured or a class), circumference of up to three stems (DBH
+    worked out from it), condition, remarks. One heading row, each heading
+    explained, the LGU's barangays and the conditions as drop-downs. San
+    Pedro's own sheet reads as it is: 1,428 trees come in; 864 have no
+    coordinates and are listed, not guessed.
+  - Parked: the field app showing an imported tree's DBH and heights when
+    it is verified (they are in `pending_trees.details`).
+  - Still open: the nickname word list is a starting list
+    (`nickname_problem()` in community.sql); PGENRO may want words added.
+- News & Events, asked 19 October: archive a post (as well as edit and
+  delete), schedule when it is published, and a calendar of what is planned —
+  like Meta's Business Suite planner. Parked as its own piece of work.
 
 ## Before the account ticket touches anything
 
@@ -207,7 +222,11 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     URI is the one Supabase shows under Authentication → Sign In / Providers →
     Google; paste its client ID and secret there and enable it. Under
     Authentication → URL Configuration, add the site's `/community` address to
-    the redirect URLs. Until then, Continue with Google says it is not on yet.
+    the redirect URLs, and the map's `/public-map` address (Tag a tree comes
+    back there). Until then, Continue with Google says it is not on yet.
+    **Run community.sql again after 19 October's changes** (safe to run
+    again): tags need a sign-in, each LGU's own count and leaderboard, and
+    a resident deleting their own account.
 19. `supabase/onboarding.sql` (19 October) — the office's first sign-in:
     designation, address and when it finished. Accounts that have already
     signed in are marked done and never see it. The photo goes in the
@@ -215,8 +234,23 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 12 suites, 473 checks — the final check query on its
+allow and refuse — 12 suites, 487 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
+
+**Is the live database all there?** `supabase/health_check.sql` is
+read-only: paste it in the SQL editor any time. Each row says whether a part
+is in (tables, row level security, triggers, the restrictive rules,
+functions, storage buckets) and names what is missing, then reads out the
+counts worth watching.
+
+**Checked 19 October, as the public sees it** (read-only, from this
+computer): the public reads no permits, profiles, tags, inbox, account codes
+or residents; trees and News & Events read; the columns of steps 16, 18 and
+19 are there; the leaderboard, counts and nickname check answer. Edge
+functions `ai-key-test`, `improve-report` and `rise-extract` answer;
+**`identify-tree` and `manage-account` do not (404)** — in the dashboard,
+check that functions with exactly these names exist (one made by pasting
+gets a random name unless renamed). Google sign-in is off.
 
 **Steps 1–12 are in the live database** (map layers and CLIRAM seen working, 15 October); step 13 is new. Not deployed: the
 `manage-account` server function — until it is, PGENRO's "Update email" and

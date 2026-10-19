@@ -147,4 +147,15 @@ describe('the biodiversity report', () => {
     expect(text.cbi).toMatch(/The 4 community tags show residents taking part/);
     expect(report.maps.map((m) => m.treeColour)).toEqual(['origin', 'use']);
   });
+
+  it('counts the residents taking part in this LGU, for the CBI’s citizen-science indicator', () => {
+    const report = buildThemeReport('biodiversity', {
+      place: { label: 'Santa Cruz', psgc: 403426000 },
+      trees: TREES,
+      participation: { residents: 12, taggers: 12, tags: 40, verified_tags: 31 },
+    });
+    const row = report.tables.find((t) => t.key === 'cbi').rows.find((r) => r.name === 'Participation — citizen science');
+    expect(row.value).toBe('12 residents signed in with Google and tagged trees here; 31 of their 40 tags verified in the field');
+    expect(row.from).toMatch(/counted where they tagged/);
+  });
 });

@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { INVENTORY_COLUMNS, columnOf, inventoryRow, readInventory, remarkMayNameSomeone, rowsOfCsv, templateBuffer } from './treeInventory.js';
+import {
+  INVENTORY_COLUMNS,
+  columnOf,
+  coordinateOf,
+  groupProblems,
+  heightClassOf,
+  inventoryRow,
+  locationMayNameSomeone,
+  readInventory,
+  remarkMayNameSomeone,
+  rowsOfCsv,
+  templateBuffer,
+} from './treeInventory.js';
 
 // Santa Cruz's hall, and a point in Calamba.
 const SCZ = [14.2794, 121.4157];
@@ -9,12 +21,12 @@ const read = (rows, options = {}) => readInventory(rows, { lguName: 'Santa Cruz'
 
 describe('the tree inventory spreadsheet', () => {
   it('reads the template’s columns under the headings offices actually use', () => {
-    expect(columnOf('Species')).toBe('common_name');
     expect(columnOf('LAT')).toBe('latitude');
     expect(columnOf('Lng')).toBe('longitude');
     expect(columnOf('Brgy.')).toBe('barangay');
-    expect(columnOf('DBH (cm)')).toBe('dbh_cm');
-    expect(columnOf('Total Height (m)')).toBe('height_m');
+    expect(columnOf('DBH (cm)')).toBe('dbh_1');
+    expect(columnOf('Total Height (m)')).toBe('height');
+    expect(columnOf('Circumference')).toBe('circumference_1');
     expect(columnOf('Owner')).toBeNull();
   });
 
@@ -34,6 +46,60 @@ describe('the tree inventory spreadsheet', () => {
         details: { tree_no: 'T-1', scientific_name: 'Pterocarpus indicus', dbh_cm: 42, height_m: 12.5 },
       }),
     ]);
+  });
+
+  it('reads San Pedro’s sheet as it is: two heading rows, circumferences, stems and height classes', () => {
+    // The first rows of the City of San Pedro's inventory, headings as written.
+    const { trees, problems, missing, headingRow } = readInventory(
+      [
+        ['', '', '', '', '', '', 'LOCATION', 'LOCATION', 'LOCATION', '', '', 'DBH', 'DBH', 'DBH', 'C', 'C', 'C', ''],
+        ['NO.', 'DATE', 'COMMON NAME', 'FAMILY', 'GENUS', 'SPECIES', 'LAT', 'LONG', 'LOC', 'BARANGAY', 'HEIGHT', '1', '2', '3', '12', '22', '32', 'REMARKS'],
+        [1, '', 'Ilang-ilang', 'Annonaceae', 'Cananga', 'odorata', 14.35918, 121.04426, 'Magsaysay Road', 'San Antonio', '11-15', { formula: 'O3/3.1416', result: 14.32 }, null, null, 45],
+        [65, new Date('2020-02-20'), 'Kaimito', 'Sapotaceae', 'Chrysopyllum', 'cainito', '14.34585°', '121.03526°', 'Sampaguita Avenue', 'Sampaguita', '16-20', null, null, null, 90, 59],
+        [36, '', 'Indian Lanutan', 'Annonaceae', 'Polyathia', 'longifolio', 14.35285, 121.0398, 'Near Cataquiz property', 'GSIS', '26-30', null, null, null, 'clustered'],
+        [99, '', 'Mahogany', 'Meliaceae', 'Swietenia', 'macrophylla', '', '', '18th St.', 'Pacita 1', '<10', null, null, null, 120],
+      ],
+      { lguName: 'San Pedro' }
+    );
+    expect(missing).toEqual([]);
+    expect(headingRow).toBe(2);
+    expect(trees.map((t) => t.species)).toEqual(['Ilang-ilang', 'Kaimito', 'Indian Lanutan']);
+    expect(trees[0].details).toEqual({
+      tree_no: '1', scientific_name: 'Cananga odorata', family: 'Annonaceae', location: 'Magsaysay Road', dbh_cm: 14.3, height_class: '11-15',
+    });
+    // Two stems: one diameter with the same basal area, from the circumferences.
+    expect(trees[1].details).toEqual(
+      expect.objectContaining({ date_inventoried: '2020-02-20', stems: 2, stem_dbh_cm: [28.6, 18.8], dbh_cm: 34.3, height_class: '16-20' })
+    );
+    expect(trees[1].latitude).toBe(14.34585);
+    expect(trees[2].details).toEqual(expect.objectContaining({ clustered: true, height_class: '26-30' }));
+    expect(trees[2].details.location).toBeUndefined();
+    expect(groupProblems(problems)).toEqual([{ text: 'No latitude and longitude: it cannot be placed on the map.', rows: [6] }]);
+  });
+
+  it('reads coordinates written with a degree sign, or in degrees, minutes and seconds', () => {
+    expect(coordinateOf('14.34659°')).toBe(14.34659);
+    expect(coordinateOf('121.03733 E')).toBe(121.03733);
+    expect(coordinateOf(`14°21'33"N`)).toBeCloseTo(14.359167, 5);
+    expect(coordinateOf('121 2 39.3')).toBeCloseTo(121.04425, 5);
+    expect(coordinateOf('north')).toBeNaN();
+    expect(coordinateOf('')).toBeNull();
+  });
+
+  it('knows a height class from a height', () => {
+    expect(heightClassOf('11-15')).toBe('11-15');
+    expect(heightClassOf('11 – 15 m')).toBe('11-15');
+    expect(heightClassOf('<10')).toBe('<10');
+    expect(heightClassOf('12.5')).toBeNull();
+  });
+
+  it('keeps a street, and blanks a place that is someone’s', () => {
+    for (const place of ['Magsaysay Road, Puregold', 'HOJ, San Augustin St.', "King's Farm, Narra Road", 'Phase 6 open space']) {
+      expect(locationMayNameSomeone(place), place).toBe(false);
+    }
+    for (const place of ['Near Cataquiz property', 'House of Mr. Reyes', 'Bahay ni Aling Nena', 'DELA CRUZ, JUAN']) {
+      expect(locationMayNameSomeone(place), place).toBe(true);
+    }
   });
 
   it('leaves owners and other columns behind, and blanks a remark naming a person', () => {
@@ -93,13 +159,20 @@ describe('the tree inventory spreadsheet', () => {
     );
   });
 
-  it('reads its own template back, every heading a column', async () => {
+  it('reads its own template back: every heading a column, explained, with the LGU’s barangays to choose from', async () => {
     const { default: ExcelJS } = await import('exceljs');
     const book = new ExcelJS.Workbook();
-    await book.xlsx.load(await templateBuffer('Santa Cruz'));
-    expect(book.worksheets.map((sheet) => sheet.name)).toEqual(['Trees', 'How to fill']);
-    const headings = book.getWorksheet('Trees').getRow(1).values.slice(1);
+    await book.xlsx.load(await templateBuffer('Santa Cruz', ['Labuin', 'Poblacion I']));
+    expect(book.worksheets.map((sheet) => sheet.name)).toEqual(['Trees', 'Lists', 'How to fill']);
+    const trees = book.getWorksheet('Trees');
+    const headings = trees.getRow(1).values.slice(1);
     expect(headings.map(columnOf)).toEqual(INVENTORY_COLUMNS.map((column) => column.key));
+    expect(trees.getRow(1).getCell(1).note).toBeTruthy();
+    expect(book.getWorksheet('Lists').getColumn(1).values.slice(1, 4)).toEqual(['Barangay', 'Labuin', 'Poblacion I']);
+    const letter = trees.getColumn(INVENTORY_COLUMNS.findIndex((column) => column.key === 'barangay') + 1).letter;
+    for (const row of [2, 5001]) {
+      expect(trees.getCell(`${letter}${row}`).dataValidation).toEqual(expect.objectContaining({ type: 'list', formulae: ['Lists!$A$2:$A$3'] }));
+    }
   });
 
   it('reads a CSV, quotes and all', () => {

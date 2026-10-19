@@ -132,3 +132,45 @@ describe('the community page', () => {
     expect(screen.queryByRole('button', { name: 'Continue with Google' })).not.toBeInTheDocument();
   });
 });
+
+describe('a resident’s own account (RA 10173)', () => {
+  it('deletes it, after asking, and says so', async () => {
+    signInResident({ ...ANA, consented_at: '2026-10-19T00:00:00Z' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete my account' }));
+    const ask = screen.getByRole('alertdialog', { name: 'Delete your account?' });
+    expect(ask).toHaveTextContent('The trees you tagged stay on the map as trees, credited to nobody.');
+    expect(supabaseMock.supabase.rpc).not.toHaveBeenCalledWith('delete_my_account');
+
+    // Once deleted, the session is gone too.
+    supabaseMock.supabase.auth.signOut.mockImplementation(async () => {
+      const listener = supabaseMock.supabase.auth.onAuthStateChange.mock.calls[0][0];
+      listener('SIGNED_OUT', null);
+      return { error: null };
+    });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Yes, delete my account' }));
+    await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('delete_my_account'));
+    expect(await screen.findByText('Your account, and everything kept with it, is deleted.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
+  });
+
+  it('can be kept after all', async () => {
+    signInResident({ ...ANA, consented_at: '2026-10-19T00:00:00Z' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete my account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(supabaseMock.supabase.rpc).not.toHaveBeenCalledWith('delete_my_account');
+  });
+});
+
+describe('each city’s own leaderboard', () => {
+  it('shows one city or municipality’s board when chosen', async () => {
+    renderPage();
+    await screen.findByRole('list', { name: 'Leaderboard' });
+    fireEvent.change(screen.getByLabelText('Leaderboard for'), { target: { value: String(SANTA_CRUZ.psgc) } });
+    await waitFor(() =>
+      expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('community_leaderboard', { p_limit: 10, p_lgu: SANTA_CRUZ.psgc })
+    );
+  });
+});

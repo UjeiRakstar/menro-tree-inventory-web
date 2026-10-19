@@ -27,6 +27,10 @@
 -- and shown to nobody); the trees they tag. Nothing else. The leaderboard
 -- shows the name or nickname and the counts, never the email.
 --
+-- Since 19 October a tag needs a sign-in (section 2), each LGU has its own
+-- count and leaderboard as well as Laguna's (section 4), and a resident can
+-- delete their own account and everything kept of them (section 5).
+--
 -- Nicknames are checked here, not only on the page (section 3): lewd,
 -- abusive or slurring names are refused, in English and in Filipino, spelled
 -- straight or with numbers for letters; so are names that pass for an office.
@@ -152,6 +156,11 @@ begin
   if current_user not in ('authenticated', 'anon') then
     return new;
   end if;
+  -- Decided 19 October: a tag needs a sign-in, so every tag is a real
+  -- resident's, counted for the CBI.
+  if auth.uid() is null then
+    raise exception 'Sign in with Google to tag a tree.' using errcode = '42501';
+  end if;
   new.submitted_by := auth.uid();
   if new.source = 'import' then
     if coalesce(public.my_role(), '') <> 'lgu_admin' then
@@ -163,6 +172,11 @@ begin
     end if;
   else
     new.source := 'community';
+    -- A resident who has joined, or an office's own account.
+    if public.my_role() is null
+       and not exists (select 1 from public.residents r where r.id = auth.uid() and r.consented_at is not null) then
+      raise exception 'Join the community first: sign in with Google and agree to what is kept.' using errcode = '42501';
+    end if;
   end if;
   return new;
 end $$;
@@ -269,11 +283,14 @@ grant execute on function public.set_resident_profile(text, text, boolean) to au
 
 
 -- ===========================================================================
--- 4. The leaderboard, and the count the CBI asks for
+-- 4. The leaderboard, and the count the CBI asks for — for Laguna, or one LGU
 -- ===========================================================================
 -- Residents who agreed, by trees verified in the field, then by tags sent.
--- Names or nicknames and counts only; never an email.
-create or replace function public.community_leaderboard(p_limit int default 10)
+-- Names or nicknames and counts only; never an email. With p_lgu, only the
+-- tags sent in that city or municipality (decided 19 October: the CBI is
+-- each city's own, as well as the province's).
+drop function if exists public.community_leaderboard(int);
+create or replace function public.community_leaderboard(p_limit int default 10, p_lgu bigint default null)
 returns table (rank int, display_name text, verified int, submitted int, is_me boolean)
 language sql stable security definer set search_path = public as $$
   with counts as (
@@ -287,6 +304,7 @@ language sql stable security definer set search_path = public as $$
     join public.pending_trees p on p.submitted_by = r.id and p.source = 'community'
     where r.consented_at is not null
       and not coalesce((to_jsonb(p) ->> 'is_training')::boolean, false)
+      and (p_lgu is null or p.lgu_psgc = p_lgu)
     group by r.id
   )
   select (row_number() over (order by verified desc, submitted desc, first_tag))::int,
@@ -295,26 +313,79 @@ language sql stable security definer set search_path = public as $$
   order by verified desc, submitted desc, first_tag
   limit greatest(1, least(coalesce(p_limit, 10), 100));
 $$;
-grant execute on function public.community_leaderboard(int) to anon, authenticated;
+grant execute on function public.community_leaderboard(int, bigint) to anon, authenticated;
 
-create or replace function public.community_counts()
-returns table (residents int, taggers int, verified_tags int)
+-- Residents taking part: in Laguna, those who joined; in one LGU, those who
+-- tagged a tree there (a resident is counted where they took part, which is
+-- what the CBI's citizen-science indicator is about).
+drop function if exists public.community_counts();
+create or replace function public.community_counts(p_lgu bigint default null)
+returns table (residents int, taggers int, tags int, verified_tags int)
 language sql stable security definer set search_path = public as $$
-  select (select count(*) from public.residents where consented_at is not null)::int,
-         (select count(distinct p.submitted_by) from public.pending_trees p
-            join public.residents r on r.id = p.submitted_by and r.consented_at is not null
-          where p.source = 'community')::int,
-         (select count(*) from public.pending_trees p
-            join public.residents r on r.id = p.submitted_by and r.consented_at is not null
-          where p.source = 'community' and p.status = 'verified')::int;
+  with tags as (
+    select p.submitted_by, p.status
+    from public.pending_trees p
+    join public.residents r on r.id = p.submitted_by and r.consented_at is not null
+    where p.source = 'community'
+      and not coalesce((to_jsonb(p) ->> 'is_training')::boolean, false)
+      and (p_lgu is null or p.lgu_psgc = p_lgu)
+  )
+  select (case when p_lgu is null
+               then (select count(*) from public.residents where consented_at is not null)
+               else (select count(distinct submitted_by) from tags) end)::int,
+         (select count(distinct submitted_by) from tags)::int,
+         (select count(*) from tags)::int,
+         (select count(*) from tags where status = 'verified')::int;
 $$;
-grant execute on function public.community_counts() to anon, authenticated;
+grant execute on function public.community_counts(bigint) to anon, authenticated;
+
+-- Every LGU's, side by side, for PGENRO and the province's CBI.
+create or replace function public.community_counts_by_lgu()
+returns table (lgu_psgc bigint, taggers int, tags int, verified_tags int)
+language sql stable security definer set search_path = public as $$
+  select p.lgu_psgc,
+         count(distinct p.submitted_by)::int,
+         count(*)::int,
+         count(*) filter (where p.status = 'verified')::int
+  from public.pending_trees p
+  join public.residents r on r.id = p.submitted_by and r.consented_at is not null
+  where p.source = 'community' and p.lgu_psgc is not null
+    and not coalesce((to_jsonb(p) ->> 'is_training')::boolean, false)
+  group by p.lgu_psgc
+  order by p.lgu_psgc;
+$$;
+grant execute on function public.community_counts_by_lgu() to anon, authenticated;
+
+
+-- ===========================================================================
+-- 5. A resident deletes their own account (RA 10173, the right to erasure)
+-- ===========================================================================
+-- Everything kept of them goes: the sign-in and its email (auth.users), their
+-- name, nickname and agreement (residents, by cascade). The trees they tagged
+-- stay, as trees — credited to nobody (pending_trees.submitted_by is set
+-- null). Only a resident's own account: an office's is archived by PGENRO,
+-- never deleted, so its records keep their author.
+create or replace function public.delete_my_account()
+returns void language plpgsql security definer set search_path = public, auth as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null or not exists (select 1 from public.residents where id = v_me) then
+    raise exception 'Only a resident''s own account can be deleted here.' using errcode = '42501';
+  end if;
+  if exists (select 1 from public.profiles where id = v_me) then
+    raise exception 'An office account is archived by PGENRO, not deleted.' using errcode = '42501';
+  end if;
+  delete from auth.users where id = v_me;
+end $$;
+revoke all on function public.delete_my_account() from public;
+grant execute on function public.delete_my_account() to authenticated;
 
 notify pgrst, 'reload schema';
 
 
 -- ===========================================================================
--- 5. Check
+-- 6. Check
 -- ===========================================================================
 select 'residents, apart from the offices' as check,
        to_regclass('public.residents') is not null
@@ -336,6 +407,14 @@ union all
 select 'no Google account waits in the approval queue',
        not exists (select 1 from public.profiles p
                    where public.is_google_account(p.id) and p.role = 'field_officer' and not coalesce(p.is_approved, false)),
+       ''
+union all
+select 'a tag needs a sign-in',
+       position('Sign in with Google' in pg_get_functiondef('public.stamp_tag_sender()'::regprocedure)) > 0,
+       ''
+union all
+select 'a resident can delete their own account',
+       exists (select 1 from pg_proc where proname = 'delete_my_account'),
        ''
 union all
 select 'READ: residents who have joined', null,

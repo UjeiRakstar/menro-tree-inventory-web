@@ -21,7 +21,9 @@ const GOOGLE = JSON.stringify({ provider: 'google', providers: ['google'] });
 
 await db.exec(`
   create role anon nologin; create role authenticated nologin; create role service_role nologin;
-  create schema auth; create schema extensions;
+  create schema auth; create schema extensions; create schema storage;
+  create table storage.buckets (id text primary key, name text, public boolean);
+  insert into storage.buckets values ('office-logos', 'office-logos', true);
   create table auth.users (id uuid primary key default gen_random_uuid(), email text,
     raw_user_meta_data jsonb default '{}'::jsonb, raw_app_meta_data jsonb default '{"provider":"email","providers":["email"]}'::jsonb,
     last_sign_in_at timestamptz);
@@ -54,7 +56,7 @@ await db.exec(`
   end $$;
   create trigger zz_sync_arborist_profile after insert on auth.users
     for each row execute function public.sync_arborist_profile_from_metadata();
-  create table public.trees (id text primary key, species text, barangay_psgc bigint, assigned_to text);
+  create table public.trees (id text primary key, species text, barangay_psgc bigint, assigned_to text, latitude float8, longitude float8);
   alter table public.trees enable row level security;
   create policy "authenticated users full access" on public.trees for all to authenticated using (true) with check (true);
   create policy "anon reads trees" on public.trees for select to anon using (true);
@@ -175,11 +177,11 @@ const tag = (who, role, species, extra = '') => as(who, role, () => fails(() => 
    values ('Labuin', '${species}', 'Santa Cruz'${extra ? ', ' + extra.split('=')[1] : ''})`)));
 
 const anonTag = await tag(null, 'anon', 'anon-tag');
-const anonRow = await one(`select submitted_by, source from public.pending_trees where species = 'anon-tag'`);
-check('a tag sent without signing in still goes in, credited to nobody',
-  anonTag === null && anonRow.submitted_by === null && anonRow.source === 'community', anonTag ?? JSON.stringify(anonRow));
+check('a tag needs a sign-in (decided 19 October)', /Sign in with Google/.test(anonTag ?? ''), anonTag ?? 'WENT IN');
+const carlTag = await tag(CARL, 'authenticated', 'carl-1');
+check('…and a resident who has not agreed to what is kept cannot tag yet', /Join the community first/.test(carlTag ?? ''), carlTag ?? 'WENT IN');
 
-for (const [who, species] of [[ANA, 'ana-1'], [ANA, 'ana-2'], [ANA, 'ana-3'], [BEN, 'ben-1'], [BEN, 'ben-2'], [CARL, 'carl-1']]) {
+for (const [who, species] of [[ANA, 'ana-1'], [ANA, 'ana-2'], [ANA, 'ana-3'], [BEN, 'ben-1'], [BEN, 'ben-2']]) {
   const error = await tag(who, 'authenticated', species);
   if (error) check(`resident tag ${species} goes in`, false, error);
 }
@@ -235,7 +237,39 @@ check('…as long as the limit asked for', capped.length === 1);
 
 const counts = await as(null, 'anon', () => one(`select * from public.community_counts()`));
 check('the CBI count: residents who joined, who tagged, and their verified tags',
-  counts.residents === 2 && counts.taggers === 2 && counts.verified_tags === 3, JSON.stringify(counts));
+  counts.residents === 2 && counts.taggers === 2 && counts.tags === 5 && counts.verified_tags === 3, JSON.stringify(counts));
+
+// Each city's own (decided 19 October), as well as Laguna's.
+const calamba = await as(BEN, 'authenticated', () => fails(() => db.query(
+  `insert into public.pending_trees (barangay, species, municipality) values ('Bucal', 'ben-calamba', 'Calamba City')`)));
+check('a resident tags in another town', calamba === null, calamba ?? '');
+const sczCounts = await as(null, 'anon', () => one(`select * from public.community_counts(${SCZ})`));
+const clbCounts = await as(null, 'anon', () => one(`select * from public.community_counts(${CLB})`));
+check('the CBI count for one LGU: the residents who tagged there',
+  sczCounts.residents === 2 && sczCounts.tags === 5 && clbCounts.residents === 1 && clbCounts.tags === 1 && clbCounts.verified_tags === 0,
+  `${JSON.stringify(sczCounts)} / ${JSON.stringify(clbCounts)}`);
+const clbBoard = (await as(null, 'anon', () => db.query(`select display_name from public.community_leaderboard(10, ${CLB})`))).rows;
+check('each LGU has its own leaderboard', clbBoard.map((r) => r.display_name).join(', ') === 'Ben Cruz', clbBoard.map((r) => r.display_name).join(', '));
+const byLgu = (await as(null, 'anon', () => db.query(`select * from public.community_counts_by_lgu()`))).rows;
+check('…and PGENRO sees every LGU’s side by side',
+  byLgu.map((r) => `${r.lgu_psgc}:${r.taggers}/${r.tags}/${r.verified_tags}`).join(' ') === `${CLB}:1/1/0 ${SCZ}:2/5/3`,
+  byLgu.map((r) => `${r.lgu_psgc}:${r.taggers}/${r.tags}/${r.verified_tags}`).join(' '));
+const officeTag = await tag(MENRO, 'authenticated', 'menro-tag');
+check('an office account still tags without joining', officeTag === null, officeTag ?? '');
+
+// ---- A resident deletes their own account (RA 10173) ---------------------------------
+const anonDelete = await as(null, 'anon', () => fails(() => db.query(`select public.delete_my_account()`)));
+check('the public deletes no account', anonDelete !== null);
+const officeDelete = await as(MENRO, 'authenticated', () => fails(() => db.query(`select public.delete_my_account()`)));
+check('an office account is not deleted, only archived by PGENRO', officeDelete !== null && (await one(`select count(*)::int n from auth.users where id = $1`, [MENRO])).n === 1);
+const benDelete = await as(BEN, 'authenticated', () => fails(() => db.query(`select public.delete_my_account()`)));
+const benGone = await one(`select (select count(*) from auth.users where id = $1)::int u, (select count(*) from public.residents where id = $1)::int r`, [BEN]);
+const benTags = (await db.query(`select submitted_by from public.pending_trees where species like 'ben-%'`)).rows;
+check('a resident deletes their account: the sign-in, email, name and agreement go',
+  benDelete === null && benGone.u === 0 && benGone.r === 0, benDelete ?? JSON.stringify(benGone));
+check('…and the trees they tagged stay, credited to nobody', benTags.length === 3 && benTags.every((r) => r.submitted_by === null), JSON.stringify(benTags));
+const afterBoard = (await as(null, 'anon', () => db.query(`select display_name from public.community_leaderboard(10)`))).rows;
+check('…and they are off the leaderboard', !afterBoard.some((r) => r.display_name === 'Ben Cruz'), afterBoard.map((r) => r.display_name).join(', '));
 
 // ---- A new office account's details (onboarding.sql) ------------------------------
 const details = await as(MENRO, 'authenticated', () => fails(() => db.query(
@@ -249,6 +283,21 @@ const others = (await as(MENRO, 'authenticated', () => db.query(`update public.p
 check('…nor anyone else’s details', others === 0);
 const already = await one(`select onboarded_at from public.profiles where id = $1`, [ADMIN]);
 check('accounts already in use are not sent through set-up', already.onboarded_at !== null);
+
+// ---- health_check.sql: read-only, runs on a part-built database -----------------
+try {
+  const before = (await db.query(`select count(*)::int n from public.profiles`)).rows[0].n;
+  const out = await db.exec(readFileSync(new URL('../../supabase/health_check.sql', import.meta.url), 'utf8'));
+  const rows = out[out.length - 1].rows;
+  const by = Object.fromEntries(rows.map((r) => [r.check, r]));
+  check('health_check.sql runs, and names what is missing',
+    by['tables']?.ok === false && /permits/.test(by['tables'].detail) && by['storage buckets, public']?.detail.includes('news-photos'),
+    rows.map((r) => `${r.check}=${r.ok}${r.detail ? ' (' + r.detail + ')' : ''}`).join('; '));
+  check('…and finds no Google account in the approval queue', by['no Google account in the approval queue']?.ok === true);
+  check('…and changes nothing', (await db.query(`select count(*)::int n from public.profiles`)).rows[0].n === before);
+} catch (error) {
+  check('health_check.sql runs', false, error.message);
+}
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length} of ${results.length} passed`);

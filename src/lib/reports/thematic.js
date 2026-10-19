@@ -395,7 +395,7 @@ export function compositionTable(trees = []) {
  * Index, adopted by TB 2018-02), and what it cannot — said plainly, so no
  * reader takes a gap for a zero.
  */
-export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0 }) {
+export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0, participation = null }) {
   const coverHa = (landCover?.rows ?? []).filter((row) => row.treeCover).reduce((t, r) => t + r.areaHa, 0);
   const origin = compositionTable(trees).counts;
   const known = trees.length - origin.unrecorded;
@@ -427,8 +427,13 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
     },
     {
       name: 'Participation — citizen science',
-      value: `${n(communityTags)} community tags verified into the inventory`,
-      from: 'The public map’s tagging, confirmed in the field',
+      value: participation
+        ? `${n(participation.residents)} ${participation.residents === 1 ? 'resident' : 'residents'} signed in with Google and tagged trees here; ` +
+          `${n(participation.verified_tags)} of their ${n(participation.tags)} tags verified in the field`
+        : `${n(communityTags)} community tags verified into the inventory`,
+      from: participation
+        ? 'Green Tag residents’ accounts, counted where they tagged (community_counts)'
+        : 'The public map’s tagging, confirmed in the field',
     },
     { name: 'Budget, projects, policies, partnerships, outreach', value: 'Outside this system', from: 'The LGU’s own records' },
   ];
@@ -674,7 +679,8 @@ function sourcesSection(kind) {
  * and its narrative. `ctx` holds what the map sheet already has:
  *
  *   place, places, measured, placeLabel, tables (the attribute tables by key),
- *   trees, climate, populationOf, protectedHa, placeAreaHa, communityTags
+ *   trees, climate, populationOf, protectedHa, placeAreaHa, communityTags,
+ *   participation (community_counts() for the place: residents taking part)
  */
 export function buildThemeReport(kind, ctx) {
   const where = officialName(ctx.place);
@@ -706,6 +712,7 @@ export function buildThemeReport(kind, ctx) {
         placeAreaHa: ctx.placeAreaHa ?? 0,
         carbon: byKey.carbon?.totals ?? null,
         communityTags: ctx.communityTags ?? 0,
+        participation: ctx.participation ?? null,
       }),
     ].filter(Boolean);
     sections = biodiversitySections({ short, tables, trees, communityTags: ctx.communityTags ?? 0 });

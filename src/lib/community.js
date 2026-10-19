@@ -21,7 +21,7 @@ export const WHAT_IS_NOT_KEPT =
 
 export const WHY_IT_IS_KEPT =
   'To count the residents who take part, as the City Biodiversity Index asks of each LGU, and to rank the leaderboard. ' +
-  'Under the Data Privacy Act of 2012 (RA 10173), you can ask PGENRO to remove your account and everything kept with it.';
+  'Under the Data Privacy Act of 2012 (RA 10173), you can delete your account, and everything kept with it, at any time.';
 
 /** What can be checked before the database checks the rest. */
 export function nicknameShapeProblem(nickname) {
@@ -45,9 +45,9 @@ export const isMissingFunction = (error) =>
 /** Google sign-in not switched on in the Supabase dashboard. */
 export const isProviderOff = (error) => /provider is not enabled|unsupported provider/i.test(error?.message ?? '');
 
-/** Off to Google, and back to the Community page. */
-export async function signInWithGoogle() {
-  const redirectTo = `${globalThis.location?.origin ?? ''}/community`;
+/** Off to Google, and back to `path` — the Community page, or the map a tag was started from. */
+export async function signInWithGoogle(path = '/community') {
+  const redirectTo = `${globalThis.location?.origin ?? ''}${path}`;
   return supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
 }
 
@@ -56,8 +56,33 @@ export async function signInWithGoogle() {
  * run, so a page can say so instead of showing an empty board as if nobody
  * had joined.
  */
-export async function loadLeaderboard(limit = 10) {
-  const { data, error } = await supabase.rpc('community_leaderboard', { p_limit: limit });
+export async function loadLeaderboard(limit = 10, lgu = null) {
+  const { data, error } = await supabase.rpc('community_leaderboard', lgu ? { p_limit: limit, p_lgu: lgu } : { p_limit: limit });
   if (error) return { rows: [], ready: !isMissingFunction(error), error: isMissingFunction(error) ? null : error };
   return { rows: Array.isArray(data) ? data : [], ready: true, error: null };
+}
+
+/**
+ * Whether this visitor may tag a tree (supabase/community.sql, 19 October):
+ * an office account, or a resident who has joined. 'sign-in' and 'join' say
+ * what is missing; null outside an AuthProvider, where nobody is known.
+ */
+export function taggingAccess(auth) {
+  if (!auth) return null;
+  if (auth.loading) return 'checking';
+  if (auth.profile) return 'office';
+  if (!auth.session) return 'sign-in';
+  if (!auth.resident?.consented_at) return 'join';
+  return 'resident';
+}
+
+/**
+ * Residents taking part in one LGU, or in Laguna: { residents, taggers, tags,
+ * verified_tags }, or null before community.sql is in.
+ */
+export async function loadCommunityCounts(lgu = null) {
+  const { data, error } = await supabase.rpc('community_counts', lgu ? { p_lgu: lgu } : {});
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row && typeof row === 'object' ? row : null;
 }

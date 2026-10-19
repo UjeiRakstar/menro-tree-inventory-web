@@ -25,7 +25,7 @@ describe('bringing in a tree inventory', () => {
 
     expect(await screen.findByText(/1 tree ready to bring in, 1 row to look at/)).toBeInTheDocument();
     expect(screen.getByText('Left out as personal data: Owner.')).toBeInTheDocument();
-    expect(screen.getByText(/Row 3: This point is in Calamba, not Santa Cruz/)).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Rows to look at' })).toHaveTextContent('1 row: This point is in Calamba, not Santa Cruz. (row 3)');
 
     fireEvent.click(screen.getByRole('button', { name: 'Bring in 1 tree' }));
     await waitFor(() => expect(supabaseMock.writesTo('pending_trees', 'insert')).toHaveLength(1));

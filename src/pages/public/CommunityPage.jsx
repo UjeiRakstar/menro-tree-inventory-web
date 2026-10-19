@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, LogOut, MapPin, ShieldCheck, Users } from 'lucide-react';
+import { Loader2, LogOut, MapPin, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Leaderboard from '../../components/public/Leaderboard.jsx';
+import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import {
   WHAT_IS_KEPT,
   WHAT_IS_NOT_KEPT,
@@ -143,6 +144,60 @@ function SignOutButton() {
 }
 
 /**
+ * A resident's right to erasure (RA 10173): the account and everything kept
+ * of it, gone at once (delete_my_account() in community.sql). The trees they
+ * tagged stay, as trees, credited to nobody.
+ */
+function DeleteAccount({ onDeleted }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+
+  async function remove() {
+    setBusy(true);
+    setProblem('');
+    const { error } = await supabase.rpc('delete_my_account');
+    if (error) {
+      setBusy(false);
+      setProblem(isMissingFunction(error) ? 'Deleting an account opens soon: the database is still being set up.' : error.message);
+      return;
+    }
+    onDeleted?.();
+    await supabase.auth.signOut();
+  }
+
+  if (!asking) {
+    return (
+      <button type="button" onClick={() => setAsking(true)}
+        className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-red-700 ring-1 ring-red-200 hover:bg-red-50">
+        <Trash2 size={15} aria-hidden="true" /> Delete my account
+      </button>
+    );
+  }
+  return (
+    <div role="alertdialog" aria-labelledby="delete-title" aria-describedby="delete-what" className="space-y-3 rounded-2xl bg-red-50 p-5 ring-1 ring-red-200">
+      <h2 id="delete-title" className="text-base font-bold text-red-900">Delete your account?</h2>
+      <p id="delete-what" className="text-sm text-red-900">
+        Your sign-in, email, name or nickname and your agreement are deleted, and you leave the leaderboard. The trees you
+        tagged stay on the map as trees, credited to nobody. This cannot be undone; you can always join again.
+      </p>
+      {problem && <p role="alert" className="rounded-lg bg-white px-3 py-2 text-sm text-red-700">{problem}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={remove} disabled={busy}
+          className="inline-flex items-center gap-2 rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white hover:bg-red-800 disabled:opacity-50">
+          {busy && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
+          Yes, delete my account
+        </button>
+        <button type="button" onClick={() => setAsking(false)} disabled={busy}
+          className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-white">
+          Keep it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The community: residents who sign in with Google so the trees they tag are
  * counted for them — on the leaderboard, and in the count of residents taking
  * part that the City Biodiversity Index asks for. Only Google; only a name or
@@ -153,6 +208,8 @@ export default function CommunityPage() {
   const [starting, setStarting] = useState(false);
   const [problem, setProblem] = useState('');
   const [editing, setEditing] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [boardLgu, setBoardLgu] = useState('');
 
   async function join() {
     setStarting(true);
@@ -215,7 +272,10 @@ export default function CommunityPage() {
         </p>
         <WhatIsKept />
         <JoinForm resident={resident} joined={false} />
-        <SignOutButton />
+        <div className="flex flex-wrap gap-2">
+          <SignOutButton />
+          <DeleteAccount onDeleted={() => setDeleted(true)} />
+        </div>
       </div>
     );
   } else {
@@ -238,7 +298,10 @@ export default function CommunityPage() {
           </div>
         </div>
         {editing && <JoinForm resident={resident} joined onDone={() => setEditing(false)} />}
-        <SignOutButton />
+        <div className="flex flex-wrap gap-2">
+          <SignOutButton />
+          <DeleteAccount onDeleted={() => setDeleted(true)} />
+        </div>
       </div>
     );
   }
@@ -254,10 +317,23 @@ export default function CommunityPage() {
           Sign in with Google and the trees you tag are counted for you. The residents whose tags are verified in the field
           most often lead the board.
         </p>
+        {deleted && !session && (
+          <p role="status" className="mt-6 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-900 ring-1 ring-green-200">
+            Your account, and everything kept with it, is deleted.
+          </p>
+        )}
         <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_24rem]">
           <div>{panel}</div>
           <div className="self-start rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <Leaderboard limit={10} />
+            <label className="mb-3 block text-xs font-semibold text-slate-600">
+              Leaderboard for
+              <select value={boardLgu} onChange={(event) => setBoardLgu(event.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-normal text-slate-800">
+                <option value="">All of Laguna</option>
+                {MUNICIPALITY_LIST.map((item) => <option key={item.psgc} value={item.psgc}>{item.label}</option>)}
+              </select>
+            </label>
+            <Leaderboard limit={10} lgu={boardLgu ? Number(boardLgu) : null} />
           </div>
         </div>
       </div>

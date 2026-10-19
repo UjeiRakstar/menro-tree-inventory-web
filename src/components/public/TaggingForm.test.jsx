@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 
 vi.mock('react-confetti', () => ({ default: () => null }));
 
@@ -8,6 +8,7 @@ vi.mock('../../supabaseClient.js', async () => {
 });
 
 import { supabaseMock } from '../../test/supabaseMock.js';
+import { AuthProvider } from '../../context/AuthContext.jsx';
 import TaggingForm from './TaggingForm.jsx';
 
 // Labuin, Santa Cruz — inside a barangay whose name no other town shares.
@@ -95,5 +96,41 @@ describe('sending the tag', () => {
     submitWithSpecies();
     expect(await screen.findByText(/outside Laguna/)).toBeInTheDocument();
     expect(supabaseMock.writesTo('pending_trees', 'insert')).toHaveLength(0);
+  });
+});
+
+describe('who may tag (decided 19 October: a sign-in, for the CBI)', () => {
+  const renderSignedIn = () =>
+    render(
+      <AuthProvider>
+        <TaggingForm initialPosition={IN_LABUIN} onClose={() => {}} onSuccess={() => {}} />
+      </AuthProvider>
+    );
+  const asResident = (resident) => {
+    supabaseMock.supabase.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'r1', email: 'ana@gmail.com' } } }, error: null });
+    supabaseMock.setResponse('residents:select', { data: { id: 'r1', full_name: 'Ana Reyes', show_as: 'name', ...resident }, error: null });
+  };
+
+  it('asks a visitor to sign in with Google first, and brings them back to the map', async () => {
+    renderSignedIn();
+    const gate = await screen.findByRole('dialog', { name: 'Sign in to tag a tree' });
+    expect(screen.queryByRole('button', { name: 'Submit Tree Tag' })).not.toBeInTheDocument();
+    fireEvent.click(within(gate).getByRole('button', { name: 'Continue with Google' }));
+    await waitFor(() => expect(supabaseMock.supabase.auth.signInWithOAuth).toHaveBeenCalled());
+    expect(supabaseMock.supabase.auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toMatch(/\/public-map$/);
+  });
+
+  it('sends a resident who has not agreed yet to finish joining', async () => {
+    asResident({ consented_at: null });
+    renderSignedIn();
+    const gate = await screen.findByRole('dialog', { name: 'One step before you tag' });
+    expect(within(gate).getByRole('link', { name: 'Finish joining' })).toHaveAttribute('href', '/community');
+  });
+
+  it('opens the form for a resident who has joined, and says whose the tag is', async () => {
+    asResident({ consented_at: '2026-10-19T00:00:00Z' });
+    renderSignedIn();
+    expect(await screen.findByRole('button', { name: 'Submit Tree Tag' })).toBeInTheDocument();
+    expect(screen.getByText(/Counted for/)).toHaveTextContent('Counted for Ana Reyes on the leaderboard once it is verified.');
   });
 });

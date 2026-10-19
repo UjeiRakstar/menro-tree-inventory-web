@@ -3,7 +3,8 @@ import { saveAs } from 'file-saver';
 import { Download, FileUp, Loader2, ShieldCheck, TreePine } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { barangayAt, loadBarangayIndex } from '../../lib/barangayLookup.js';
-import { MAX_ROWS, inventoryRow, inventoryTemplate, readInventory, rowsOfFile } from '../../lib/treeInventory.js';
+import { MAX_ROWS, groupProblems, inventoryRow, inventoryTemplate, readInventory, rowsOfFile } from '../../lib/treeInventory.js';
+import { barangaysOf } from '../../lib/lguOptions.js';
 import Section, { Outcome, buttonClass } from './Section.jsx';
 
 const BATCH = 200;
@@ -30,7 +31,7 @@ export default function TreeInventorySection({ lgu, bare = false }) {
   async function downloadTemplate() {
     setBusy('template');
     try {
-      saveAs(await inventoryTemplate(lgu.label), `Green Tag tree inventory - ${lgu.name}.xlsx`);
+      saveAs(await inventoryTemplate(lgu.label, barangaysOf(lgu.name)), `Green Tag tree inventory - ${lgu.name}.xlsx`);
     } finally {
       setBusy('');
     }
@@ -125,11 +126,15 @@ export default function TreeInventorySection({ lgu, bare = false }) {
                 <p className="text-xs text-slate-600">Columns not in the template, not read: {read.ignored.join(', ')}.</p>
               )}
               {read.problems.length > 0 && (
-                <ul className="max-h-40 list-disc space-y-0.5 overflow-auto pl-5 text-xs text-amber-900">
-                  {read.problems.slice(0, 50).map((problem, i) => (
-                    <li key={i}>Row {problem.row}: {problem.text}</li>
+                <ul className="max-h-48 list-disc space-y-1 overflow-auto pl-5 text-xs text-amber-900" aria-label="Rows to look at">
+                  {groupProblems(read.problems).map((group) => (
+                    <li key={group.text}>
+                      <span className="font-semibold">{count(group.rows.length, 'row')}:</span> {group.text}{' '}
+                      <span className="text-amber-700">
+                        ({group.rows.length === 1 ? 'row' : 'rows'} {group.rows.slice(0, 12).join(', ')}{group.rows.length > 12 ? ', …' : ''})
+                      </span>
+                    </li>
                   ))}
-                  {read.problems.length > 50 && <li>…and {count(read.problems.length - 50, 'more row')}.</li>}
                 </ul>
               )}
               {read.trees.length > 0 && (

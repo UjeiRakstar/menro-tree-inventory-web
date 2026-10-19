@@ -8,6 +8,7 @@ import { useMapLayers } from '../hooks/useMapLayers.js';
 import { useMapAreas } from '../hooks/useMapAreas.js';
 import { useOfficeProfile } from '../hooks/useOfficeProfile.js';
 import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityAt, municipalityNamed } from '../lib/lagunaBoundaries.js';
+import { loadCommunityCounts } from '../lib/community.js';
 import { centroidOf, formatArea, geometryAreaM2 } from '../lib/areaGeometry.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
@@ -501,6 +502,19 @@ export default function MapSheet() {
   );
   // Which report: the general one, or a thematic one (Round C, 18 October).
   const [reportKind, setReportKind] = useState('general');
+  // Residents taking part, for the CBI: this LGU's own, or Laguna's (community.sql).
+  const [participation, setParticipation] = useState(null);
+  const lguPsgc = lgu?.psgc ?? null;
+  useEffect(() => {
+    if (reportKind !== 'biodiversity') return undefined;
+    let cancelled = false;
+    loadCommunityCounts(lguPsgc).then((counts) => {
+      if (!cancelled) setParticipation(counts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reportKind, lguPsgc]);
   const placeLabel = lgu ? 'Barangay' : 'City / municipality';
   const populationOf = useMemo(() => {
     if (lgu) {
@@ -528,10 +542,11 @@ export default function MapSheet() {
             protectedHa: scopeAreas.filter((f) => f.properties.designation).reduce((t, f) => t + siteAreaM2(f) / 10000, 0),
             placeAreaHa: places.reduce((t, p) => t + (p.areaHa || 0), 0),
             communityTags: tableTrees.filter((tree) => tree.source === 'crowdsource').length,
+            participation,
           }),
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas]
+    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation]
   );
 
   // The office's edits, by report and section; a section not edited follows the figures.

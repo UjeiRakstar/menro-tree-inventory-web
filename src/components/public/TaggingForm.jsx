@@ -6,7 +6,7 @@ import { municipalityAt } from '../../lib/lagunaBoundaries.js';
 import { barangayAt, loadBarangayIndex } from '../../lib/barangayLookup.js';
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
 import { useAuthIfAny } from '../../context/AuthContext.jsx';
-import { displayNameOf } from '../../lib/community.js';
+import { displayNameOf, isProviderOff, signInWithGoogle, taggingAccess } from '../../lib/community.js';
 
 /** Postgres's "no such column", or PostgREST's cached form of it. */
 const isMissingColumn = (error) =>
@@ -37,32 +37,81 @@ async function uploadToCloudinary(file) {
   return data.secure_url;
 }
 
-/**
- * Whether this tag is counted for whoever sends it (supabase/community.sql):
- * a resident who joined with Google, by name; anyone else is told how to be.
- */
+/** Whose this tag is counted for: the resident who joined, by name. */
 function CountedFor() {
   const auth = useAuthIfAny();
-  if (!auth || auth.loading || auth.profile) return null;
-  const { session, resident } = auth;
-  if (resident?.consented_at) {
-    return (
-      <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-900 ring-1 ring-green-200">
-        Counted for <span className="font-semibold">{displayNameOf(resident)}</span> on the leaderboard once it is verified.
-      </p>
-    );
-  }
+  if (taggingAccess(auth) !== 'resident') return null;
   return (
-    <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
-      {session && resident ? 'Finish joining' : 'Join the community with Google'} and the trees you tag are counted for you.{' '}
-      <a href="/community" target="_blank" rel="noopener" className="font-semibold text-green-800 underline">
-        {session && resident ? 'Finish joining' : 'Join'}
-      </a>
+    <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-900 ring-1 ring-green-200">
+      Counted for <span className="font-semibold">{displayNameOf(auth.resident)}</span> on the leaderboard once it is verified.
     </p>
   );
 }
 
+/**
+ * Before the form: a tag needs a resident who has joined, or an office
+ * (decided 19 October, so every tag is a real person's, for each city's City
+ * Biodiversity Index). The database refuses one sent otherwise; this says so
+ * first, and how.
+ */
+function TagGate({ access, onClose }) {
+  const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState('');
+
+  async function signIn() {
+    setStarting(true);
+    setProblem('');
+    const { error } = await signInWithGoogle('/public-map');
+    if (error) {
+      setStarting(false);
+      setProblem(isProviderOff(error) ? 'Signing in with Google is not switched on yet. Please try again soon.' : error.message);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="tag-gate-title" className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+        {access === 'checking' ? (
+          <p role="status" className="flex items-center gap-2 text-sm text-slate-600">
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Checking whether you are signed in…
+          </p>
+        ) : (
+          <>
+            <h2 id="tag-gate-title" className="text-lg font-bold text-slate-900">
+              {access === 'join' ? 'One step before you tag' : 'Sign in to tag a tree'}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              {access === 'join'
+                ? 'Choose how you are shown on the leaderboard and agree to what is kept, and your tags will count.'
+                : 'Each tag counts for the resident who sends it — on the leaderboard, and in your city’s City Biodiversity Index. Only your name or a nickname, your email (shown to nobody) and your tags are kept.'}
+            </p>
+            {problem && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
+            <div className="mt-5 flex flex-wrap gap-2">
+              {access === 'join' ? (
+                <a href="/community" className="rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-800">Finish joining</a>
+              ) : (
+                <button type="button" onClick={signIn} disabled={starting}
+                  className="inline-flex items-center gap-2 rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50">
+                  {starting && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
+                  Continue with Google
+                </button>
+              )}
+              <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50">
+                Not now
+              </button>
+            </div>
+            {access !== 'join' && (
+              <a href="/community" className="mt-3 inline-block text-xs font-semibold text-green-800 underline">What is kept, and the leaderboard</a>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
+  const auth = useAuthIfAny();
   const [latitude, setLatitude] = useState(initialPosition ? initialPosition[0].toFixed(6) : '');
   const [longitude, setLongitude] = useState(initialPosition ? initialPosition[1].toFixed(6) : '');
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -229,6 +278,12 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Not signed in, or not yet joined: the gate, not the form.
+  const access = taggingAccess(auth);
+  if (access === 'checking' || access === 'sign-in' || access === 'join') {
+    return <TagGate access={access} onClose={onClose} />;
   }
 
   // Success screen with confetti

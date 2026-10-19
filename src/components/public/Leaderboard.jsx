@@ -10,19 +10,20 @@ const MEDALS = ['bg-amber-400 text-amber-950', 'bg-slate-300 text-slate-800', 'b
  *
  *   compact  the phone mockup's screen on About Us: small type, the top five
  *   limit    how many to ask for
+ *   lgu      one city or municipality's PSGC code, or null for all Laguna
  */
-export default function Leaderboard({ compact = false, limit = compact ? 5 : 10 }) {
+export default function Leaderboard({ compact = false, limit = compact ? 5 : 10, lgu = null }) {
   const [state, setState] = useState({ loading: true, rows: [], ready: true, error: null });
 
   useEffect(() => {
     let cancelled = false;
-    loadLeaderboard(limit).then((result) => {
+    loadLeaderboard(limit, lgu).then((result) => {
       if (!cancelled) setState({ loading: false, ...result });
     });
     return () => {
       cancelled = true;
     };
-  }, [limit]);
+  }, [limit, lgu]);
 
   const text = compact ? 'text-[11px]' : 'text-sm';
   let body;
