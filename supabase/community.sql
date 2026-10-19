@@ -163,11 +163,17 @@ begin
   end if;
   new.submitted_by := auth.uid();
   if new.source = 'import' then
-    if coalesce(public.my_role(), '') <> 'lgu_admin' then
-      raise exception 'Only a MENRO / CENRO imports its tree inventory.' using errcode = '42501';
-    end if;
-    -- Its own LGU's trees only: route_pending_tree() has placed the row by now.
-    if new.lgu_psgc is distinct from public.my_lgu() then
+    -- route_pending_tree() has placed the row in its LGU by now.
+    if public.is_pgenro() then
+      -- PGENRO brings in an LGU's inventory for it — San Pedro's, before San
+      -- Pedro has an account (19 October) — as long as it is in an LGU.
+      if new.lgu_psgc is null then
+        raise exception 'A tree in the spreadsheet is in no city or municipality of Laguna.' using errcode = '42501';
+      end if;
+    elsif coalesce(public.my_role(), '') <> 'lgu_admin' then
+      raise exception 'Only a MENRO / CENRO, or PGENRO, imports a tree inventory.' using errcode = '42501';
+    -- A MENRO / CENRO: its own LGU's trees only.
+    elsif new.lgu_psgc is distinct from public.my_lgu() then
       raise exception 'A tree in the spreadsheet is outside your LGU.' using errcode = '42501';
     end if;
   else

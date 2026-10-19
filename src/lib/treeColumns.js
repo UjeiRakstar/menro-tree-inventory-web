@@ -1,3 +1,4 @@
+import { everyRow } from './everyRow.js';
 /**
  * NOT LISTED, DELIBERATELY: data_source.
  *
@@ -108,12 +109,12 @@ function isMissingColumn(error) {
  * the console says which column to fix.
  */
 export async function selectPublicTrees(supabase, columns) {
-  const narrow = await supabase.from('trees').select(columns);
+  const narrow = await everyRow(() => supabase.from('trees').select(columns));
   if (!isMissingColumn(narrow.error)) return narrow;
 
   console.warn(
     `[trees] ${narrow.error.message} — falling back to every column. ` +
       'Fix the list in src/lib/treeColumns.js; tools/show-tree-columns.mjs prints the real one.'
   );
-  return supabase.from('trees').select('*');
+  return everyRow(() => supabase.from('trees').select('*'));
 }

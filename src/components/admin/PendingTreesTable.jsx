@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Trash2, CheckCircle2, User, X, MapPin, Calendar, TreePine, Upload } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
+import { everyRow } from '../../lib/everyRow.js';
 
 /**
  * Community tags waiting on their LGU: verify (dispatch a field officer),
  * reject, and publish once checked. `readOnly` is PGENRO's view — the
  * province's tags, without the buttons: that work is the MENRO / CENRO's.
+ *
+ * Trees from an office's inventory spreadsheet (community.sql) are not
+ * residents' tags and are not shown as cards: a city's inventory runs to
+ * thousands. They are counted by barangay instead, and a field officer is
+ * sent to a barangay's at once. They have no Publish here — they are
+ * verified in the field, with photos.
  */
+
+const UPDATE_BATCH = 200;
+const isImport = (row) => row?.source === 'import';
 export default function PendingTreesTable({ onCountChange, readOnly = false }) {
   const [pendingTrees, setPendingTrees] = useState([]);
   // Submissions an arborist is out verifying. They used to vanish from this
@@ -15,7 +25,9 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
   const [publishError, setPublishError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [dispatchModal, setDispatchModal] = useState(null); // holds the pending tree being dispatched
+  // What is being dispatched: { label, ids }, one tag or a barangay's inventory trees.
+  const [dispatchModal, setDispatchModal] = useState(null);
+  const [imports, setImports] = useState([]);
   const [arborists, setArborists] = useState([]);
   const [arboristsLoading, setArboristsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // id of tree being acted on
@@ -27,21 +39,22 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
 
   async function fetchPending() {
     setLoading(true);
-    const { data, error: err } = await supabase
-      .from('pending_trees')
-      .select('*')
-      .order('submitted_at', { ascending: false });
+    const { data, error: err } = await everyRow(() =>
+      supabase.from('pending_trees').select('*').order('submitted_at', { ascending: false })
+    );
 
     if (err) {
       setError(err.message);
       setPendingTrees([]);
       setDispatchedTrees([]);
     } else {
-      const rows = Array.isArray(data) ? data : [];
+      const all = Array.isArray(data) ? data : [];
       const statusOf = (t) => (t.status || '').toLowerCase();
+      const rows = all.filter((t) => !isImport(t));
       const list = rows.filter((t) => statusOf(t) === 'pending' || statusOf(t) === '');
       setPendingTrees(list);
       setDispatchedTrees(rows.filter((t) => statusOf(t) === 'dispatched'));
+      setImports(all.filter((t) => isImport(t) && ['pending', 'dispatched', ''].includes(statusOf(t))));
       onCountChange?.(list.length);
     }
     setLoading(false);
@@ -84,7 +97,11 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
 
   // Open dispatch modal
   async function handleOpenDispatch(tree) {
-    setDispatchModal(tree);
+    openDispatch({ label: `${tree.species} — ${tree.barangay || 'Unknown location'}`, ids: [tree.id] });
+  }
+
+  async function openDispatch(target) {
+    setDispatchModal(target);
     setArboristsLoading(true);
     const { data } = await supabase.from('arborists').select('*');
     setArborists(Array.isArray(data) ? data : []);
@@ -94,31 +111,33 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
   // Dispatch to arborist
   async function handleDispatch(arboristEmail) {
     if (!dispatchModal) return;
-    setActionLoading(dispatchModal.id);
+    const { ids } = dispatchModal;
+    setActionLoading(ids[0]);
 
-    // Only update the pending_trees row — no insert into trees
-    const { error: updateError } = await supabase
-      .from('pending_trees')
-      .update({ status: 'dispatched', assigned_to: arboristEmail })
-      .eq('id', dispatchModal.id);
-
-    if (updateError) {
-      console.error('Failed to update pending_trees:', updateError);
-      alert(`Error dispatching: ${updateError.message}`);
-      setActionLoading(null);
-      return;
+    // Only the pending_trees rows change — no insert into trees. A barangay's
+    // inventory trees go in batches, so the request stays a sensible size.
+    for (let i = 0; i < ids.length; i += UPDATE_BATCH) {
+      const { error: updateError } = await supabase
+        .from('pending_trees')
+        .update({ status: 'dispatched', assigned_to: arboristEmail })
+        .in('id', ids.slice(i, i + UPDATE_BATCH));
+      if (updateError) {
+        console.error('Failed to update pending_trees:', updateError);
+        alert(`Error dispatching: ${updateError.message}`);
+        setActionLoading(null);
+        return;
+      }
     }
 
-    // Remove from local list
+    const sent = new Set(ids);
+    const dispatched = (t) => (sent.has(t.id) ? { ...t, status: 'dispatched', assigned_to: arboristEmail } : t);
     setPendingTrees((prev) => {
-      const next = prev.filter((t) => t.id !== dispatchModal.id);
+      const next = prev.filter((t) => !sent.has(t.id));
       onCountChange?.(next.length);
       return next;
     });
-    setDispatchedTrees((prev) => [
-      { ...dispatchModal, status: 'dispatched', assigned_to: arboristEmail },
-      ...prev,
-    ]);
+    setDispatchedTrees((prev) => [...pendingTrees.filter((t) => sent.has(t.id)).map(dispatched), ...prev]);
+    setImports((prev) => prev.map(dispatched));
 
     setDispatchModal(null);
     setActionLoading(null);
@@ -141,7 +160,7 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
     );
   }
 
-  if (pendingTrees.length === 0 && dispatchedTrees.length === 0) {
+  if (pendingTrees.length === 0 && dispatchedTrees.length === 0 && imports.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
         <CheckCircle2 className="mx-auto text-green-500 mb-3" size={36} />
@@ -184,6 +203,15 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
             ))}
           </div>
         </section>
+      )}
+
+      {imports.length > 0 && (
+        <ImportedInventory
+          imports={imports}
+          readOnly={readOnly}
+          busy={Boolean(actionLoading)}
+          onSend={(barangay, ids) => openDispatch({ label: `${ids.length.toLocaleString('en-US')} inventory trees in ${barangay}`, ids })}
+        />
       )}
 
       {/* Out with an arborist. Publishing is what finally puts a community tag
@@ -246,9 +274,7 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
 
             <div className="px-5 py-3 border-b border-slate-50 bg-slate-50">
               <p className="text-xs text-slate-500">Dispatching verification for:</p>
-              <p className="text-sm font-medium text-slate-800">
-                {dispatchModal.species} — {dispatchModal.barangay || 'Unknown location'}
-              </p>
+              <p className="text-sm font-medium text-slate-800">{dispatchModal.label}</p>
             </div>
 
             <div className="p-5">
@@ -267,7 +293,7 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
                     <button
                       key={arb.id || arb.email}
                       onClick={() => handleDispatch(arb.email)}
-                      disabled={actionLoading === dispatchModal.id}
+                      disabled={actionLoading === dispatchModal.ids[0]}
                       className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-slate-200 hover:border-green-400 hover:bg-green-50 transition text-left disabled:opacity-50"
                     >
                       <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
@@ -289,6 +315,55 @@ export default function PendingTreesTable({ onCountChange, readOnly = false }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The office's inventory trees still to verify, by barangay: how many wait,
+ * how many are out with whom, and a field officer sent to the rest at once.
+ */
+function ImportedInventory({ imports, readOnly, busy, onSend }) {
+  const byBarangay = new Map();
+  for (const tree of imports) {
+    const name = tree.barangay || 'No barangay';
+    if (!byBarangay.has(name)) byBarangay.set(name, { waiting: [], out: new Map() });
+    const entry = byBarangay.get(name);
+    const who = tree.assigned_to || 'someone';
+    if (tree.status === 'dispatched') entry.out.set(who, (entry.out.get(who) ?? 0) + 1);
+    else entry.waiting.push(tree.id);
+  }
+  const rows = [...byBarangay].sort((a, b) => b[1].waiting.length - a[1].waiting.length || a[0].localeCompare(b[0]));
+  const waiting = imports.filter((t) => t.status !== 'dispatched').length;
+
+  return (
+    <section aria-label="Inventory trees to verify" className="space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">Inventory trees to verify — from the spreadsheet</h3>
+        <p className="text-xs text-slate-500">
+          {imports.length.toLocaleString('en-US')} trees brought in from the office&apos;s inventory, grey on the map;{' '}
+          {waiting.toLocaleString('en-US')} not yet sent to a field officer. Each joins the inventory once a field officer
+          checks it and takes its photos in the app.
+        </p>
+      </div>
+      <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {rows.map(([name, entry]) => (
+          <li key={name} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
+            <span className="min-w-[10rem] font-semibold text-slate-800">{name}</span>
+            <span className="text-slate-600">{entry.waiting.length.toLocaleString('en-US')} waiting</span>
+            {[...entry.out].map(([who, n]) => (
+              <span key={who} className="text-xs text-slate-500">{n.toLocaleString('en-US')} with {who}</span>
+            ))}
+            {!readOnly && entry.waiting.length > 0 && (
+              <button type="button" disabled={busy} onClick={() => onSend(name, entry.waiting)}
+                aria-label={`Send a field officer to ${name}`}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-800 disabled:opacity-50">
+                <User size={13} aria-hidden="true" /> Send a field officer
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

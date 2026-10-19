@@ -4,6 +4,7 @@ import { Users, UserPlus, Trash2, UserCheck, Check, X, MapPin } from 'lucide-rea
 import { LGU_OPTIONS, barangaysOf, labelOf } from '../lib/lguOptions.js';
 import { useAuthIfAny } from '../context/AuthContext.jsx';
 import { ROLES, roleOf } from '../lib/roles.js';
+import { everyRow } from '../lib/everyRow.js';
 
 export default function ManageArborists() {
   // A MENRO / CENRO makes field officers for its own LGU only: an officer
@@ -93,7 +94,7 @@ export default function ManageArborists() {
   // Fetch task counts from trees table
   useEffect(() => {
     async function fetchTaskCounts() {
-      const { data } = await supabase.from('trees').select('assigned_to, task_status');
+      const { data } = await everyRow(() => supabase.from('trees').select('id, assigned_to, task_status'));
       if (!Array.isArray(data)) return;
       const counts = {};
       data.forEach(t => {

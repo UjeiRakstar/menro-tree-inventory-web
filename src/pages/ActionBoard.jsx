@@ -11,6 +11,7 @@ import IssuePermitModal from '../components/IssuePermitModal.jsx';
 import WalkInPermitForm from '../components/WalkInPermitForm.jsx';
 import PermitsLog from './PermitsLog.jsx';
 import PlantingRequests from '../components/PlantingRequests.jsx';
+import { everyRow } from '../lib/everyRow.js';
 
 // Inline wrapper so PermitsLog renders as a tab without its own page heading
 function PermitsLogTab({ lgu }) {
@@ -57,7 +58,7 @@ function OfficeBoard({ lgu }) {
     let cancelled = false;
     async function fetchTrees() {
       try {
-        const { data, error } = await supabase.from('trees').select('*');
+        const { data, error } = await everyRow(() => supabase.from('trees').select('*'));
         if (cancelled) return;
         if (error) {
           setErrorMessage(error.message ?? 'Unknown Supabase error');

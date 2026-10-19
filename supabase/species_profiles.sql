@@ -116,7 +116,7 @@ alter table public.trees
 alter table public.trees
   drop constraint if exists trees_source_check;
 alter table public.trees
-  add constraint trees_source_check check (source in ('field', 'crowdsource'));
+  add constraint trees_source_check check (source in ('field', 'crowdsource', 'inventory'));
 
 -- ---------------------------------------------------------------------------
 -- 4. A starting row, so the panel can be seen working end to end.

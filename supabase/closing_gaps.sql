@@ -18,6 +18,12 @@
 --                  for the field officer the tag was dispatched to, a tree in
 --                  the tag's own LGU — and the same side of the wall.
 --
+--    Since 19 October it also tells an office's inventory apart: a tree
+--    brought in from the inventory spreadsheet (community.sql) and then
+--    verified in the field becomes source 'inventory', not 'crowdsource', and
+--    keeps what the sheet gave — its number, scientific name, DBH and heights
+--    — where the field officer did not record their own.
+--
 -- 2. Area documents are filed by LGU, so an office can clear out its own.
 --
 --    Uploads now go in a folder named after the office: the LGU's PSGC code,
@@ -29,6 +35,17 @@
 -- ===========================================================================
 -- 1. Publishing and turning down tags
 -- ===========================================================================
+-- Where a tree came from: the field app, a resident's tag, or the office's
+-- inventory spreadsheet.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'trees' and column_name = 'source') then
+    alter table public.trees drop constraint if exists trees_source_check;
+    alter table public.trees add constraint trees_source_check check (source in ('field', 'crowdsource', 'inventory'));
+  end if;
+end $$;
+
 create or replace function public.promote_pending_tree(
   p_pending_id text,
   p_tree_id text default null
@@ -42,6 +59,11 @@ declare
   v_pending public.pending_trees%rowtype;
   v_tree    public.trees%rowtype;
   v_tree_id text;
+  -- A tree from an office's inventory spreadsheet (community.sql), read
+  -- through to_jsonb so a database without those columns yet still works.
+  v_import  boolean;
+  v_details jsonb;
+  v_source  text;
 begin
   if not public.can_verify_crowdsourced() then
     raise exception 'Not allowed to publish crowdsourced submissions'
@@ -66,6 +88,12 @@ begin
     return v_pending.published_tree_id;
   end if;
 
+  -- A resident's tag becomes a crowdsourced tree; a tree from the office's
+  -- inventory spreadsheet becomes an inventory tree, with what the sheet gave.
+  v_import := (to_jsonb(v_pending) ->> 'source') = 'import';
+  v_details := case when v_import then coalesce(to_jsonb(v_pending) -> 'details', '{}'::jsonb) else '{}'::jsonb end;
+  v_source := case when v_import then 'inventory' else 'crowdsource' end;
+
   if p_tree_id is not null then
     select * into v_tree from public.trees where id = p_tree_id for update;
     -- The tree must be one the caller may change — or, for the field officer
@@ -79,19 +107,30 @@ begin
        or v_tree.is_training is distinct from public.in_training() then
       raise exception 'Tree % does not exist', p_tree_id using errcode = 'P0002';
     end if;
-    update public.trees set source = 'crowdsource' where id = p_tree_id;
+    -- The officer's own measurements stand; the spreadsheet fills only what
+    -- they left blank.
+    update public.trees
+    set source = v_source,
+        tree_id = coalesce(tree_id, v_details ->> 'tree_no'),
+        scientific_name = coalesce(scientific_name, v_details ->> 'scientific_name')
+    where id = p_tree_id;
     v_tree_id := p_tree_id;
   else
     v_tree_id := gen_random_uuid()::text;
     insert into public.trees (
       id, species, barangay, latitude, longitude,
       "imageUrl", leaves_url, bark_url, fruits_url,
-      source, "dateCaptured"
+      source, "dateCaptured",
+      tree_id, scientific_name, dbh, total_height, "heightClass", merchantable_height
     )
     values (
       v_tree_id, v_pending.species, v_pending.barangay, v_pending.latitude, v_pending.longitude,
       v_pending.photo_url, v_pending.leaves_url, v_pending.bark_url, v_pending.fruits_url,
-      'crowdsource', coalesce(v_pending.submitted_at, now())
+      v_source, coalesce(v_pending.submitted_at, now()),
+      v_details ->> 'tree_no', v_details ->> 'scientific_name',
+      (v_details ->> 'dbh_cm')::numeric, (v_details ->> 'height_m')::numeric,
+      case when v_details ? 'height_class' then (v_details ->> 'height_class') || ' m' end,
+      (v_details ->> 'merchantable_height_m')::numeric
     );
   end if;
 
@@ -197,6 +236,10 @@ notify pgrst, 'reload schema';
 select 'publishing a tag checks whose it is' as check,
        position('can_see_tag' in pg_get_functiondef('public.promote_pending_tree(text, text)'::regprocedure)) > 0 as ok,
        '' as detail
+union all
+select 'a verified inventory tree is the office''s, not crowdsourced',
+       position('inventory' in pg_get_functiondef('public.promote_pending_tree(text, text)'::regprocedure)) > 0,
+       ''
 union all
 select 'turning one down does too',
        position('can_see_tag' in pg_get_functiondef('public.reject_pending_tree(text, text)'::regprocedure)) > 0,

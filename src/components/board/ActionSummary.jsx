@@ -16,6 +16,7 @@ import {
 } from '../../lib/provinceBoard.js';
 import { namriaClassById } from '../../lib/namriaCover.js';
 import { barangayForTree } from '../../lib/barangayLookup.js';
+import { everyRow } from '../../lib/everyRow.js';
 
 /**
  * What needs doing, what to watch, and how far along things are — the
@@ -398,8 +399,8 @@ export function useBoardData() {
 
   const load = useCallback(async () => {
     const [trees, tags, areas, profiles, lgus, permits] = await Promise.all([
-      supabase.from('trees').select('*'),
-      supabase.from('pending_trees').select('*'),
+      everyRow(() => supabase.from('trees').select('*')),
+      everyRow(() => supabase.from('pending_trees').select('*')),
       supabase.from('map_areas').select('*'),
       supabase.from('profiles').select('*').eq('role', 'lgu_admin'),
       supabase.from('lgus').select('psgc, name, label').order('label'),

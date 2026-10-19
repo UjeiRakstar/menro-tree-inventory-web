@@ -115,6 +115,22 @@ can do everything. The RISE details on the public tree panel, more of them.
     coordinates and are listed, not guessed.
   - Parked: the field app showing an imported tree's DBH and heights when
     it is verified (they are in `pending_trees.details`).
+- A city's own inventory, at scale (San Pedro's, 19 October) — **ready:**
+  - PGENRO brings an LGU's inventory in for it (Settings → Tree inventory →
+    choose the LGU), so San Pedro's goes in before San Pedro has an account;
+    each tree is still the LGU it stands in.
+  - Every list of trees and tags is read in pages of 1,000. It used to stop
+    at 1,000 without a word (Supabase's limit), which San Pedro alone passes.
+  - The same file brought in twice adds nothing twice.
+  - Imported trees are grey on the office maps, counted apart from the
+    residents' tags ("To verify" on the board), and listed by barangay on
+    the Tags tab with Send a field officer for a barangay's batch at once.
+  - Verified in the field, an imported tree becomes an `inventory` tree, not
+    a crowdsourced one, keeping the sheet's number, scientific name, DBH and
+    heights where the officer recorded none of their own.
+  - **To decide:** unverified imported trees are not on the public map, and
+    the dashboards count only verified trees. Should the public see them,
+    grey, as "from the LGU's inventory, not yet verified"?
   - Still open: the nickname word list is a starting list
     (`nickname_problem()` in community.sql); PGENRO may want words added.
 - News & Events, asked 19 October: archive a post (as well as edit and
@@ -225,8 +241,11 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     the redirect URLs, and the map's `/public-map` address (Tag a tree comes
     back there). Until then, Continue with Google says it is not on yet.
     **Run community.sql again after 19 October's changes** (safe to run
-    again): tags need a sign-in, each LGU's own count and leaderboard, and
-    a resident deleting their own account.
+    again): tags need a sign-in, each LGU's own count and leaderboard, a
+    resident deleting their own account, and PGENRO bringing in an LGU's
+    inventory. **Then run closing_gaps.sql again** (step 10, safe to run
+    again): a verified inventory tree becomes the office's, with its sheet's
+    details.
 19. `supabase/onboarding.sql` (19 October) — the office's first sign-in:
     designation, address and when it finished. Accounts that have already
     signed in are marked done and never see it. The photo goes in the
@@ -234,7 +253,7 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 12 suites, 487 checks — the final check query on its
+allow and refuse — 12 suites, 493 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is
@@ -248,9 +267,14 @@ computer): the public reads no permits, profiles, tags, inbox, account codes
 or residents; trees and News & Events read; the columns of steps 16, 18 and
 19 are there; the leaderboard, counts and nickname check answer. Edge
 functions `ai-key-test`, `improve-report` and `rise-extract` answer;
-**`identify-tree` and `manage-account` do not (404)** — in the dashboard,
-check that functions with exactly these names exist (one made by pasting
-gets a random name unless renamed). Google sign-in is off.
+**`identify-tree` and `manage-account` do not (404).** Found: they were
+created as `clever-processor` and `swift-action`, and renaming them in the
+dashboard changes only the label — the address keeps the name a function was
+created with. To fix: **Deploy a new function → Via editor**, name it exactly
+`manage-account`, paste `supabase/functions/manage-account/index.ts`,
+deploy; the same for `identify-tree`; then delete `swift-action` and
+`clever-processor`. Both apps already call the right names. Google sign-in
+is off.
 
 **Steps 1–12 are in the live database** (map layers and CLIRAM seen working, 15 October); step 13 is new. Not deployed: the
 `manage-account` server function — until it is, PGENRO's "Update email" and

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../supabaseClient.js';
 import { X, Image, ArrowUpDown, MapPin, Download, Printer } from 'lucide-react';
+import { everyRow } from '../lib/everyRow.js';
 
 const NULL_CELL_PLACEHOLDER = '—';
 
@@ -37,7 +38,7 @@ export default function InventoryView() {
     let cancelled = false;
     async function fetchTrees() {
       try {
-        const { data, error } = await supabase.from('trees').select('*');
+        const { data, error } = await everyRow(() => supabase.from('trees').select('*'));
         if (cancelled) return;
         if (error) {
           setErrorMessage(error.message ?? 'Unknown Supabase error');

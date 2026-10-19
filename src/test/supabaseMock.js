@@ -64,6 +64,9 @@ function createSupabaseMock() {
     });
     passthrough('order');
     passthrough('limit');
+    passthrough('range', (from, to) => {
+      record.range = [from, to];
+    });
     passthrough('single');
     passthrough('maybeSingle');
     passthrough('eq', (column, value) => record.filters.push([column, value]));

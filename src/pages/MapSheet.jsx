@@ -32,6 +32,7 @@ import { reportDocx } from '../lib/reportDocx.js';
 import TablesView from './sheet/TablesView.jsx';
 import ReportView from './sheet/ReportView.jsx';
 import ThemeReportView from './sheet/ThemeReportView.jsx';
+import { everyRow } from '../lib/everyRow.js';
 import {
   PAPERS,
   SHEET_BASEMAPS,
@@ -325,9 +326,11 @@ export default function MapSheet() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('trees')
-        .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, source');
+      const { data } = await everyRow(() =>
+        supabase
+          .from('trees')
+          .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, source')
+      );
       if (cancelled || !Array.isArray(data)) return;
       setTrees(
         data

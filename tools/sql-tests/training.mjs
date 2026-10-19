@@ -300,6 +300,29 @@ check('the officer a tag was dispatched to publishes it with the tree they recor
 const ownPath = await as(FIELD_SCZ, 'authenticated', () => fails(() => db.query(`select public.promote_pending_tree($1)`, [realTag.id])));
 check('a field officer publishes a tag in their own LGU, as before', ownPath === null, ownPath ?? '');
 
+// A tree from the office's inventory spreadsheet (community.sql), verified:
+// the office's inventory, not a resident's tag, with what the sheet gave.
+await db.exec(`alter table public.pending_trees add column if not exists source text not null default 'community',
+                                                add column if not exists details jsonb`);
+const imported = (await db.query(
+  `insert into public.pending_trees (barangay, species, municipality, status, source, details)
+   values ('Labuin', 'Kaimito', 'Santa Cruz', 'dispatched', 'import',
+           '{"tree_no": "65", "scientific_name": "Chrysophyllum cainito", "dbh_cm": 34.3, "height_class": "16-20"}') returning id`)).rows[0];
+const importedId = await as(FIELD_SCZ, 'authenticated', () => db.query(`select public.promote_pending_tree($1) as id`, [imported.id]));
+const importedTree = await one(`select source, tree_id, scientific_name, dbh, "heightClass" from public.trees where id = $1`, [importedId.rows[0].id]);
+check('a verified inventory tree is the office’s, and keeps the spreadsheet’s details',
+  importedTree.source === 'inventory' && importedTree.tree_id === '65' && Number(importedTree.dbh) === 34.3 && importedTree.heightClass === '16-20 m',
+  JSON.stringify(importedTree));
+const importedTag = (await db.query(
+  `insert into public.pending_trees (barangay, species, municipality, status, source, details)
+   values ('Labuin', 'Narra', 'Santa Cruz', 'dispatched', 'import', '{"scientific_name": "Pterocarpus indicus", "dbh_cm": 50}') returning id`)).rows[0];
+await as(FIELD_SCZ, 'authenticated', () => db.query(
+  `insert into public.trees (id, species, barangay_psgc, dbh) values ('scz-measured', 'Narra', 403426001, 41)`));
+await as(FIELD_SCZ, 'authenticated', () => db.query(`select public.promote_pending_tree($1, 'scz-measured')`, [importedTag.id]));
+const measured = await one(`select source, dbh, scientific_name from public.trees where id = 'scz-measured'`);
+check('…and the officer’s own measurement stands over the sheet’s',
+  measured.source === 'inventory' && Number(measured.dbh) === 41 && measured.scientific_name === 'Pterocarpus indicus', JSON.stringify(measured));
+
 // ---- The log -----------------------------------------------------------------------------
 const pgLog = await as(PGENRO, 'authenticated', () => count(`select count(*) n from public.activity_log where is_training`));
 check('PGENRO\u2019s activity log shows no training entries', pgLog === 0);

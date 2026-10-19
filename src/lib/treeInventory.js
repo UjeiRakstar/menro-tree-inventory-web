@@ -338,6 +338,34 @@ export function groupProblems(problems) {
   return [...groups].map(([text, rows]) => ({ text, rows })).sort((a, b) => b.rows.length - a.rows.length);
 }
 
+/** What makes a tree the same tree in two uploads: its number, species and position to about 10 cm. */
+const sameTreeKey = (tree) =>
+  [tree.details?.tree_no ?? '', String(tree.species ?? '').trim().toLowerCase(), Number(tree.latitude).toFixed(6), Number(tree.longitude).toFixed(6)].join('|');
+
+/**
+ * The trees not brought in before: { fresh, repeated }. `existing` are the
+ * LGU's earlier imports (pending_trees rows). Counted, not just matched: two
+ * trees of one species at one GPS point — San Pedro's sheet has them — are
+ * two trees, and only as many as were already in are left out.
+ */
+export function notYetImported(trees, existing = []) {
+  const seen = new Map();
+  for (const row of existing) {
+    const key = sameTreeKey(row);
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  const fresh = [];
+  let repeated = 0;
+  for (const tree of trees) {
+    const key = sameTreeKey(tree);
+    if ((seen.get(key) ?? 0) > 0) {
+      seen.set(key, seen.get(key) - 1);
+      repeated += 1;
+    } else fresh.push(tree);
+  }
+  return { fresh, repeated };
+}
+
 /** One tree as the pending_trees row the import writes. */
 export function inventoryRow(tree, { lguName, fileName }) {
   return {

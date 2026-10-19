@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { User, X } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
+import { everyRow } from '../lib/everyRow.js';
 
 /**
  * Dispatch Field Worker modal — lists all arborists with their pending task
@@ -19,7 +20,7 @@ export default function DispatchModal({ tree, onClose, onDispatched }) {
       setArborists(arbList);
 
       // Count pending tasks per arborist (trees assigned to them)
-      const { data: treesData } = await supabase.from('trees').select('assigned_to');
+      const { data: treesData } = await everyRow(() => supabase.from('trees').select('id, assigned_to'));
       const counts = {};
       if (Array.isArray(treesData)) {
         treesData.forEach((t) => {

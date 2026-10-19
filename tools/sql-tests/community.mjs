@@ -216,6 +216,17 @@ check('a MENRO imports its own LGU’s inventory, with the spreadsheet’s detai
 const otherImport = await as(MENRO, 'authenticated', () => fails(() => db.query(
   `insert into public.pending_trees (barangay, species, municipality, source) values ('Bucal', 'import-clb', 'Calamba City', 'import')`)));
 check('…but not another LGU’s trees', otherImport !== null);
+const pgenroImport = await as(ADMIN, 'authenticated', () => fails(() => db.query(
+  `insert into public.pending_trees (barangay, species, municipality, source, details)
+   values ('Bucal', 'pgenro-import', 'Calamba City', 'import', '{"dbh_cm": 20}')`)));
+const pgenroRow = await one(`select lgu_psgc, source, submitted_by from public.pending_trees where species = 'pgenro-import'`);
+check('PGENRO brings in an LGU’s inventory for it, each tree to its own LGU',
+  pgenroImport === null && Number(pgenroRow?.lgu_psgc) === CLB && pgenroRow.source === 'import' && pgenroRow.submitted_by === ADMIN,
+  pgenroImport ?? JSON.stringify(pgenroRow));
+const nowhere = await as(ADMIN, 'authenticated', () => fails(() => db.query(
+  `insert into public.pending_trees (barangay, species, municipality, source) values ('Nowhere', 'pgenro-nowhere', 'Atlantis', 'import')`)));
+check('…but not a tree in no LGU of Laguna', nowhere !== null);
+await db.query(`delete from public.pending_trees where species = 'pgenro-import'`);
 const badSource = await tag(BEN, 'authenticated', 'ben-odd', `source='scraped'`);
 check('a tag’s source is community or import, nothing else', badSource === null &&
   (await one(`select source from public.pending_trees where species = 'ben-odd'`)).source === 'community', badSource ?? '');

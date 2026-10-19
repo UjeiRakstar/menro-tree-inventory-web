@@ -7,6 +7,7 @@ import { basemapById } from '../lib/basemaps.js';
 import { parentTileOnError } from '../lib/tileFallback.js';
 import { inOfficeLgu } from '../lib/roles.js';
 import { lguOfTree } from '../hooks/useAttention.js';
+import { everyRow } from '../lib/everyRow.js';
 
 const SATELLITE = basemapById('satellite');
 
@@ -61,7 +62,7 @@ export default function WalkInPermitForm({ lgu = undefined }) {
   useEffect(() => {
     let cancelled = false;
     async function fetchTrees() {
-      const { data, error } = await supabase.from('trees').select('*');
+      const { data, error } = await everyRow(() => supabase.from('trees').select('*'));
       if (cancelled || error) return;
       setTrees((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(lgu, lguOfTree(tree))));
     }

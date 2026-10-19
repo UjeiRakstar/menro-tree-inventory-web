@@ -75,6 +75,7 @@ import TreeDetailPanel from '../../components/public/TreeDetailPanel.jsx';
 import AreaDetailPanel from '../../components/public/AreaDetailPanel.jsx';
 import SitePanel from '../../components/public/SitePanel.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
+import { everyRow } from '../../lib/everyRow.js';
 // The LGU map's two action dialogs: nobody on the public map can reach them,
 // so the public map never downloads them.
 const DispatchModal = lazy(() => import('../../components/DispatchModal.jsx'));
@@ -1019,7 +1020,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         // The office needs every column — hazards, assignment, permit — that
         // the public map deliberately does not download.
         const { data, error } = admin
-          ? await supabase.from('trees').select('*')
+          ? await everyRow(() => supabase.from('trees').select('*'))
           : await selectPublicTrees(supabase, PUBLIC_MAP_COLUMNS);
         if (cancelled) return;
         if (error) {
@@ -1031,10 +1032,9 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         if (admin) {
           // Tags out for field checking, and the trees an office brought in
           // from its inventory spreadsheet, waiting for theirs (community.sql).
-          const { data: pending } = await supabase
-            .from('pending_trees')
-            .select('*')
-            .in('status', ['dispatched', 'pending']);
+          const { data: pending } = await everyRow(() =>
+            supabase.from('pending_trees').select('*').in('status', ['dispatched', 'pending'])
+          );
           if (!cancelled) {
             setPendingTrees(
               (Array.isArray(pending) ? pending : []).filter((tag) => tag.status === 'dispatched' || tag.source === 'import')

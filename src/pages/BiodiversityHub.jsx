@@ -8,6 +8,7 @@ import { classifyPinColor } from '../lib/pinColor.js';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { X, Image, ArrowUpDown, MapPin, Download, Search, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { everyRow } from '../lib/everyRow.js';
 
 const BARANGAYS = [
   'Alipit', 'Bagumbayan', 'Barangay I', 'Barangay II', 'Barangay III',
@@ -43,7 +44,7 @@ export default function BiodiversityHub() {
   useEffect(() => {
     let cancelled = false;
     async function fetch() {
-      const { data } = await supabase.from('trees').select('*');
+      const { data } = await everyRow(() => supabase.from('trees').select('*'));
       if (cancelled) return;
       // An office's own LGU only; PGENRO, the province.
       setTrees((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(officeLgu, lguOfTree(tree))));

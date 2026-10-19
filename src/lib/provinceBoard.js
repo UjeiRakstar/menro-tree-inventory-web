@@ -12,7 +12,10 @@ import { namriaClassById } from './namriaCover.js';
  * Three kinds of figure, in the order the columns read:
  *
  *   needs action   hazards nobody has been sent to; hazards an arborist is
- *                  on; public tags awaiting a field check; permits issued
+ *                  on; public tags awaiting a field check; permits issued;
+ *                  trees from an office's inventory spreadsheet, not yet
+ *                  verified in the field — counted apart from the residents'
+ *                  tags, so San Pedro's 1,428 do not bury them
  *   watch list     stems graded Code 3, several defects (the field app's
  *                  stem quality, tree_details_screen.dart) — the grade most
  *                  likely to become tomorrow's hazard. Codes 1 and 2 are
@@ -67,7 +70,16 @@ export const BOARD_METRICS = Object.freeze([
     short: 'Tags',
     tone: 'grey',
     of: 'tags',
-    test: () => true,
+    test: (tag) => tag.source !== 'import',
+  },
+  {
+    key: 'imported',
+    group: 'action',
+    label: 'Inventory trees to verify — from the spreadsheet',
+    short: 'To verify',
+    tone: 'grey',
+    of: 'tags',
+    test: (tag) => tag.source === 'import',
   },
   {
     key: 'permitted',
@@ -172,7 +184,10 @@ export function tallyBoard(trees = [], tags = [], areas = [], { now = Date.now()
 
   for (const tag of Array.isArray(tags) ? tags : []) {
     if (!tag || !isOpenTag(tag)) continue;
-    count(entry(lguOfTag(tag)), 'tags');
+    const row = entry(lguOfTag(tag));
+    for (const metric of BOARD_METRICS) {
+      if (metric.of === 'tags' && metric.test(tag)) count(row, metric.key);
+    }
   }
 
   for (const area of Array.isArray(areas) ? areas : []) {
@@ -212,7 +227,7 @@ export function rowsBehind(metricKey, lgu, trees = [], tags = [], areas = [], { 
   if (!metric) return [];
   const inLgu = (code) => lgu === undefined || code === lgu;
   if (metric.of === 'tags') {
-    return tags.filter((tag) => tag && isOpenTag(tag) && inLgu(lguOfTag(tag)));
+    return tags.filter((tag) => tag && isOpenTag(tag) && metric.test(tag) && inLgu(lguOfTag(tag)));
   }
   if (metric.of === 'areas') {
     return areas.filter((area) => area && metric.test(area) && inLgu(lguOfArea(area)));

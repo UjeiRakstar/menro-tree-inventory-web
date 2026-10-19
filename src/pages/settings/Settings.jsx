@@ -53,7 +53,7 @@ export default function Settings() {
       {lguInfo && <BarangaySection lgu={lguInfo} />}
       <TeamSection pgenro={pgenro} />
       <DocumentsSection office={office} pgenro={pgenro} />
-      {lguInfo && <TreeInventorySection lgu={lguInfo} />}
+      {(lguInfo || pgenro) && <TreeInventorySection lgu={lguInfo} pgenro={pgenro} />}
       <ImportSection lgu={lguInfo} />
       <AiSection office={office} pgenro={pgenro} />
       <PasswordSection />

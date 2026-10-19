@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { groupByBarangay, countBySpeciesType, countByTreeCategory, computePercentage } from '../lib/analyticsEngine.js';
+import { everyRow } from '../lib/everyRow.js';
 
 /**
  * Analytics_Page — renders the /analytics route with Biodiversity Dashboard
@@ -28,7 +29,7 @@ export default function AnalyticsView() {
 
     async function fetchTrees() {
       try {
-        const { data, error } = await supabase.from('trees').select('*');
+        const { data, error } = await everyRow(() => supabase.from('trees').select('*'));
         if (cancelled) return;
         if (error) {
           setErrorMessage(error.message ?? 'Unknown Supabase error');

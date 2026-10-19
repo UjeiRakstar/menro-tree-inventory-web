@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { needingAction } from '../lib/adminPins.js';
+import { everyRow } from '../lib/everyRow.js';
 
 /**
  * The barangay's PSGC code, cut down to its city or municipality's.
@@ -74,7 +75,7 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
     let cancelled = false;
     (async () => {
       const [trees, pending, proposals, requests, inbox] = await Promise.all([
-        supabase.from('trees').select('*'),
+        everyRow(() => supabase.from('trees').select('*')),
         supabase
           .from('profiles')
           .select('id')
