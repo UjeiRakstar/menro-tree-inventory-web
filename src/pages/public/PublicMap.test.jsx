@@ -1325,6 +1325,41 @@ describe('the office map, round three', () => {
     expect(clusters().find((m) => m.dataset.label === 'Provincial Capitol')).toBeTruthy();
   });
 
+  it('lets the super admin move an LGU’s hall, inside that LGU only', async () => {
+    const onMoveOtherHall = vi.fn().mockResolvedValue({});
+    const CALAMBA_HALL = { psgc: 403405000, lgu: 'Calamba', name: 'Calamba City City Hall', position: [14.2117, 121.1653] };
+    render(
+      <MemoryRouter>
+        <TreeMap mode="admin" hallName="Provincial Capitol" otherHalls={[CALAMBA_HALL]} onMoveOtherHall={onMoveOtherHall} />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    fireEvent.click(clusters().find((m) => m.dataset.label === 'Calamba City City Hall'));
+    const card = screen.getByRole('dialog', { name: 'Calamba City City Hall' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Move pin' }));
+    expect(card).toHaveTextContent('Click the map where the Calamba City City Hall stands.');
+
+    // Santa Cruz is not Calamba.
+    await act(async () => mapEventHandlers.click({ latlng: { lat: 14.2794, lng: 121.4157 } }));
+    expect(await screen.findByText('That is outside Calamba City.')).toBeInTheDocument();
+    expect(onMoveOtherHall).not.toHaveBeenCalled();
+
+    await act(async () => mapEventHandlers.click({ latlng: { lat: 14.2117, lng: 121.1653 } }));
+    await waitFor(() => expect(onMoveOtherHall).toHaveBeenCalledWith(CALAMBA_HALL, [14.2117, 121.1653]));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Calamba City City Hall' })).not.toBeInTheDocument());
+  });
+
+  it('opens no card on an LGU’s hall for PGENRO, who does not move it', async () => {
+    render(
+      <MemoryRouter>
+        <TreeMap mode="admin" hallName="Provincial Capitol" otherHalls={[{ psgc: 403405000, lgu: 'Calamba', name: 'Calamba City City Hall', position: [14.2117, 121.1653] }]} />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    fireEvent.click(clusters().find((m) => m.dataset.label === 'Calamba City City Hall'));
+    expect(screen.queryByRole('dialog', { name: 'Calamba City City Hall' })).not.toBeInTheDocument();
+  });
+
   it('asks PGENRO to pin the Capitol when it is not pinned yet', async () => {
     render(
       <MemoryRouter>

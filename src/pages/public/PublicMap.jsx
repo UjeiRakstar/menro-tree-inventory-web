@@ -992,8 +992,10 @@ export default function PublicMap() {
  *   hall        [lat, lng] the centre button flies to: the LGU's hall, or for
  *               PGENRO the Provincial Capitol
  *   hallName    what that place is called, when it is not the LGU's hall
- *   otherHalls  [{ psgc, name, position }] — the halls the LGUs have pinned,
- *               shown on PGENRO's map
+ *   otherHalls  [{ psgc, lgu, name, position }] — the halls the LGUs have
+ *               pinned, shown on PGENRO's map
+ *   onMoveOtherHall  (hall, [lat, lng]) => { error? } — the super admin's
+ *               alone: moves an LGU's hall (super_admin.sql)
  */
 export function TreeMap({
   mode = 'public',
@@ -1001,6 +1003,7 @@ export function TreeMap({
   hall = null,
   hallName = null,
   otherHalls = [],
+  onMoveOtherHall = null,
   canPinHall = false,
   onPinHall = null,
   profile = null,
@@ -1065,6 +1068,10 @@ export function TreeMap({
   // Pinning the hall: the prompt, the mode, and what went wrong.
   const [pinningHall, setPinningHall] = useState(false);
   const [hallCardOpen, setHallCardOpen] = useState(false);
+  // The super admin moving an LGU's hall: the hall chosen, and whether the next click places it.
+  const [otherHall, setOtherHall] = useState(null);
+  const [movingOtherHall, setMovingOtherHall] = useState(false);
+  const [otherHallNotice, setOtherHallNotice] = useState('');
   const [hallPromptDismissed, setHallPromptDismissed] = useState(false);
   const [hallNotice, setHallNotice] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1618,6 +1625,24 @@ export function TreeMap({
     setPinningHall(false);
   }
 
+  /** The super admin places an LGU's hall: inside that LGU, or refused in words. */
+  async function handleOtherHallClick(point) {
+    const feature = municipalityNamed(otherHall.lgu);
+    if (feature && !containsPoint(feature.geometry, point)) {
+      setOtherHallNotice(`That is outside ${feature.properties.municipality_label}.`);
+      return;
+    }
+    setOtherHallNotice('Saving…');
+    const { error } = (await onMoveOtherHall(otherHall, point)) ?? {};
+    if (error) {
+      setOtherHallNotice(error.message ?? 'The pin could not be saved.');
+      return;
+    }
+    setOtherHallNotice('');
+    setMovingOtherHall(false);
+    setOtherHall(null);
+  }
+
   const toggleLayer = (id) => setLayers((current) => ({ ...current, [id]: !current[id] }));
   const toggleTool = (tool) => setOpenTool((current) => (current === tool ? null : tool));
 
@@ -2133,9 +2158,11 @@ export function TreeMap({
         )}
         {admin &&
           otherHalls.map((other) => (
-            <Marker key={other.psgc} position={other.position} icon={OTHER_HALL_ICON} title={other.name} alt={other.name} />
+            <Marker key={other.psgc} position={other.position} icon={OTHER_HALL_ICON} title={other.name} alt={other.name}
+              eventHandlers={onMoveOtherHall ? { click: () => { setOtherHall(other); setMovingOtherHall(false); setOtherHallNotice(''); } } : undefined} />
           ))}
         {pinningHall && <MapClick onClick={handleHallClick} />}
+        {movingOtherHall && otherHall && <MapClick onClick={handleOtherHallClick} />}
 
         {drawing && (
           <DrawLayer
@@ -2650,6 +2677,36 @@ export function TreeMap({
           >
             <X size={14} />
           </button>
+        </div>
+      )}
+
+      {/* The super admin moving an LGU's hall */}
+      {admin && otherHall && (
+        <div
+          role="dialog"
+          aria-label={otherHall.name}
+          className="absolute left-1/2 top-3 z-[650] w-[min(26rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg"
+        >
+          <div className="flex items-start gap-3">
+            <p className="flex-1 text-xs leading-snug text-slate-700">
+              {movingOtherHall ? (
+                <><strong>Click the map where the {otherHall.name} stands.</strong> As the super admin, for its LGU.</>
+              ) : (
+                <><strong>{otherHall.name}</strong> — pinned by its LGU&apos;s office.</>
+              )}
+            </p>
+            {!movingOtherHall && (
+              <button type="button" onClick={() => setMovingOtherHall(true)}
+                className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-200 hover:bg-green-50">
+                Move pin
+              </button>
+            )}
+            <button type="button" onClick={() => { setOtherHall(null); setMovingOtherHall(false); setOtherHallNotice(''); }}
+              aria-label="Close" className="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-100">
+              <X size={14} />
+            </button>
+          </div>
+          {otherHallNotice && <p className="mt-2 text-xs text-amber-800">{otherHallNotice}</p>}
         </div>
       )}
 

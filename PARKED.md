@@ -97,9 +97,11 @@ can do everything. The RISE details on the public tree panel, more of them.
   the SQL editor only (super_admin.sql), acting as every LGU's office —
   permits, dispatch, verifying and deleting tags, approvals — and alone
   archiving permits.
-- Parked from Round F: the super admin moving an LGU's hall from the map,
-  and working inside one LGU's Settings and field team pages (the database
-  already allows it; the pages are still PGENRO's).
+- The super admin moving an LGU's hall from the map — **done 20 October:**
+  on PGENRO's map, click a hall, Move pin, click inside that LGU.
+- Parked from Round F: the super admin working inside one LGU's Settings and
+  field team pages (the database already allows it; the pages are still
+  PGENRO's).
 
 **Parked, to keep this manageable:**
 - The super admin role reaches every policy in the database; it is the last
@@ -149,8 +151,9 @@ can do everything. The RISE details on the public tree panel, more of them.
   - **To decide:** unverified imported trees are not on the public map, and
     the dashboards count only verified trees. Should the public see them,
     grey, as "from the LGU's inventory, not yet verified"?
-  - Still open: the nickname word list is a starting list
-    (`nickname_problem()` in community.sql); PGENRO may want words added.
+  - The nickname word list — **done 20 October:** PGENRO adds and removes
+    its own words in Settings → Nicknames (the built-in ones stay), and tries
+    a nickname against the list there (step 24).
 - Done 19 October, second batch: the PGENRO dashboard's ten figures in two
   rows of five; the Tags tab by city and municipality; unverified trees grey
   on the public map (from an LGU's inventory or a resident's tag), so nobody
@@ -159,9 +162,13 @@ can do everything. The RISE details on the public tree panel, more of them.
   officers; logos and photos of any size, resized before they are kept; the
   QR tag printing of the first version removed; replies to the public from
   the Inbox (step 21).
-- Parked from that batch: a "!" on the resident's navbar name when a reply
-  is waiting; a warning on the tag form when a tree is already tagged within
-  a few metres.
+- From that batch, **done 20 October:** a "!" on the resident's navbar name
+  when a reply is waiting; the tag form asks first when a tree is already
+  tagged within 5 metres.
+- A data privacy request, **done 20 October:** Contact Us has a "Data
+  privacy request" topic that goes to PGENRO's Inbox, and
+  `public/privacy.html` points to it (step 24). A named Data Protection
+  Officer can be added to the policy later.
 - News & Events, asked 19 October — **done 20 October:** publish now or
   schedule a day and time; archive (off the home page, kept) and restore; a
   month calendar of posts by the day each goes public (scheduled dashed,
@@ -306,6 +313,10 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     on the site, switch on **pg_cron** (Database → Extensions) and then run
     inbox.sql once more: it sets the five-minute job itself. Without it they
     go out the next time anyone opens Green Tag.
+24. **Smaller improvements, 20 October** — run `supabase/community.sql`
+    again (the nickname words PGENRO adds to) and `supabase/inbox.sql` again
+    (Contact Us's data privacy topic; one run covers step 23 too). Neither
+    touches what super_admin.sql changes, so it need not be run again.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must

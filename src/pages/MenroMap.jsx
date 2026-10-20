@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { ROLES, roleOf } from '../lib/roles.js';
+import { ROLES, isSuperAdmin, roleOf } from '../lib/roles.js';
 import { TreeMap } from './public/PublicMap.jsx';
 
 /** PostgREST's "no such function", said as the file that brings it. */
@@ -48,6 +48,7 @@ export default function MenroMap() {
         .filter((item) => item.hall_lat != null && item.hall_lng != null)
         .map((item) => ({
           psgc: item.psgc,
+          lgu: item.name,
           name: `${item.label} ${item.is_city ? 'City Hall' : 'Municipal Hall'}`,
           position: [Number(item.hall_lat), Number(item.hall_lng)],
         }))
@@ -68,6 +69,14 @@ export default function MenroMap() {
     return {};
   }
 
+  // The super admin alone moves an LGU's hall from here (super_admin.sql).
+  async function moveLguHall(hall, [lat, lng]) {
+    const { error } = await supabase.rpc('set_lgu_hall', { p_lat: lat, p_lng: lng, p_lgu: hall.psgc });
+    if (error) return { error };
+    await loadProvincePins();
+    return {};
+  }
+
   async function pinCapitol([lat, lng]) {
     const { error } = await supabase.rpc('set_capitol', { p_lat: lat, p_lng: lng });
     if (error) return { error: missingFunction(error, 'municipal_halls.sql') };
@@ -84,6 +93,7 @@ export default function MenroMap() {
         hall={pgenro ? capitol : ownHall}
         hallName={pgenro ? 'Provincial Capitol' : null}
         otherHalls={pgenro ? halls : []}
+        onMoveOtherHall={isSuperAdmin(profile) ? moveLguHall : null}
         canPinHall={!inTraining && ((isLguAdmin && Boolean(lgu)) || pgenro)}
         profile={profile}
         onPinHall={pgenro ? pinCapitol : pinHall}
