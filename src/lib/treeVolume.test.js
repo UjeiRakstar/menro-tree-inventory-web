@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BIOMASS_EXPANSION_FACTOR,
-  CARBON_FRACTION,
-  CO2_PER_CARBON,
   VOLUME_COEFFICIENT,
-  WOOD_DENSITY,
-  biomassKg,
-  carbonDioxideKg,
   dbhCm,
   isDipterocarp,
   measuredCoverage,
@@ -16,9 +10,6 @@ import {
   diameterClassRange,
   diameterDistribution,
   readDiameterShape,
-  ANNUAL_DBH_GROWTH_CM,
-  annualBiomassKg,
-  annualCo2Kg,
 } from './treeVolume.js';
 
 describe('the DENR volume equation', () => {
@@ -116,27 +107,6 @@ describe('an unmeasured tree', () => {
     // to contain nothing. Null says the figure is unknown.
     expect(volumeOf({ species: 'Narra', dbh: 37 })).toBeNull();
     expect(volumeOf({ species: 'Narra', merchantable_height: 9 })).toBeNull();
-    expect(biomassKg({ dbh: 37 })).toBeNull();
-    expect(carbonDioxideKg({ dbh: 37 })).toBeNull();
-  });
-});
-
-describe('carbon', () => {
-  const tree = { species: 'Narra', dbh: 37, merchantable_height: 9 };
-
-  it('follows volume → biomass → carbon → carbon dioxide', () => {
-    const volume = volumeOf(tree);
-    expect(biomassKg(tree)).toBeCloseTo(volume * WOOD_DENSITY * 1000 * BIOMASS_EXPANSION_FACTOR, 6);
-    expect(carbonDioxideKg(tree)).toBeCloseTo(
-      biomassKg(tree) * CARBON_FRACTION * CO2_PER_CARBON,
-      6
-    );
-  });
-
-  it('uses the carbon content of Philippine wood, and the molecular weights', () => {
-    // Lasco & Pulhin (2000), not the IPCC tropical default of 0.47.
-    expect(CARBON_FRACTION).toBe(0.45);
-    expect(CO2_PER_CARBON).toBeCloseTo(3.6667, 4);
   });
 });
 
@@ -261,48 +231,5 @@ describe('readDiameterShape', () => {
 
   it('says nothing about a set nobody measured', () => {
     expect(readDiameterShape(diameterDistribution([{}, {}]))).toBeNull();
-  });
-});
-
-describe('a year of growth', () => {
-  const tree = { species: 'Narra', dbh: 37, merchantable_height: 9 };
-
-  it('is the volume equation run twice, a year apart', () => {
-    const c = VOLUME_COEFFICIENT.nonDipterocarp;
-    const grown = c * (37 + ANNUAL_DBH_GROWTH_CM) ** 2 * 9;
-    const now = c * 37 * 37 * 9;
-    const expected = (grown - now) * WOOD_DENSITY * 1000 * BIOMASS_EXPANSION_FACTOR;
-
-    expect(annualBiomassKg(tree)).toBeCloseTo(expected, 6);
-  });
-
-  it('turns that into CO₂ the same way the stock figure does', () => {
-    expect(annualCo2Kg(tree)).toBeCloseTo(
-      annualBiomassKg(tree) * CARBON_FRACTION * CO2_PER_CARBON,
-      6
-    );
-  });
-
-  it('does not round a half-centimetre of growth away to nothing', () => {
-    // Flooring is how the bulletin records a field measurement. Applying it to
-    // an increment would make every year's growth zero.
-    expect(annualBiomassKg(tree)).toBeGreaterThan(0);
-    expect(annualCo2Kg({ species: 'Mahogany', dbh: 17, merchantable_height: 4 })).toBeGreaterThan(0);
-  });
-
-  it('grows less than it holds, which is the point of a rate', () => {
-    // A year's uptake should be a small fraction of the standing stock.
-    expect(annualCo2Kg(tree)).toBeLessThan(carbonDioxideKg(tree));
-  });
-
-  it('has nothing to say about a tree nobody measured', () => {
-    expect(annualBiomassKg({ species: 'Narra', dbh: 37 })).toBeNull();
-    expect(annualCo2Kg({ species: 'Narra', merchantable_height: 9 })).toBeNull();
-    expect(annualCo2Kg({})).toBeNull();
-  });
-
-  it('grows a tree by the Philippine mean annual increment', () => {
-    // Schneider et al. (2013), as applied to city trees by Pansit (2019).
-    expect(ANNUAL_DBH_GROWTH_CM).toBe(1.19);
   });
 });

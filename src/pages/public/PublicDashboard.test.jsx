@@ -198,8 +198,9 @@ describe('PublicDashboard', () => {
     // behind it, and this is the tab those readers are on.
     expect(within(forestry).getByText('How these are worked out')).toBeInTheDocument();
     expect(within(forestry).getByText('V = c × D² × H')).toBeInTheDocument();
-    expect(within(forestry).getByText('0.57 t/m³')).toBeInTheDocument();
-    expect(within(forestry).getByText('1.5×')).toBeInTheDocument();
+    expect(within(forestry).getByText('AGB = 0.0673 × (ρD²H)^0.976')).toBeInTheDocument();
+    expect(within(forestry).getByText('Chave et al. 2014, on total height')).toBeInTheDocument();
+    expect(within(forestry).getByText('0.57 g/cm³')).toBeInTheDocument();
     expect(within(forestry).getByText('0.45')).toBeInTheDocument();
     expect(within(forestry).getByText('Philippine wood (Lasco & Pulhin 2000)')).toBeInTheDocument();
 

@@ -12,13 +12,13 @@ import {
   pairOfMetric,
   summarise,
 } from './dashboardMetrics.js';
-import { carbonDioxideKg } from './treeVolume.js';
+import { carbonDioxideKg } from './treeCarbon.js';
 
 const tree = (over = {}) => ({ id: 't', dbh: '10 cm', barangay: 'Bubukal', ...over });
 
 describe('dashboardMetrics carbon', () => {
-  it('comes from the DENR volume equation, not a proxy', () => {
-    const tree = { species: 'Narra', dbh: '37 cm', merchantable_height: 9 };
+  it('comes from Chave et al. 2014 on the total height, not a proxy', () => {
+    const tree = { species: 'Narra', dbh: '37 cm', total_height: 14 };
     expect(carbonForTree(tree)).toBe(carbonDioxideKg(tree));
     expect(carbonForTree(tree)).toBeGreaterThan(0);
   });
@@ -27,8 +27,10 @@ describe('dashboardMetrics carbon', () => {
     // Zero would be added into a total as though the tree were measured and
     // found to hold no carbon.
     expect(carbonForTree({ dbh: '10 cm' })).toBeNull();
-    expect(carbonForTree({ merchantable_height: 9 })).toBeNull();
-    expect(carbonForTree({ dbh: 'not measured', merchantable_height: 9 })).toBeNull();
+    expect(carbonForTree({ total_height: 14 })).toBeNull();
+    expect(carbonForTree({ dbh: 'not measured', total_height: 14 })).toBeNull();
+    // A merchantable height alone is not enough any more.
+    expect(carbonForTree({ dbh: '37 cm', merchantable_height: 9 })).toBeNull();
     expect(carbonForTree({})).toBeNull();
   });
 });
@@ -36,9 +38,9 @@ describe('dashboardMetrics carbon', () => {
 describe('dashboardMetrics totals', () => {
   it('counts trees, invasives and carbon together', () => {
     const rows = [
-      tree({ id: '1', species: 'Narra', biodiversity_status: 'Endemic', dbh: '37 cm', merchantable_height: 9 }),
-      tree({ id: '2', species: 'Mango', biodiversity_status: 'Invasive', dbh: '20 cm', merchantable_height: 5 }),
-      // No merchantable height: counted as a tree, left out of the carbon.
+      tree({ id: '1', species: 'Narra', biodiversity_status: 'Endemic', dbh: '37 cm', total_height: 14, merchantable_height: 9 }),
+      tree({ id: '2', species: 'Mango', biodiversity_status: 'Invasive', dbh: '20 cm', total_height: 7 }),
+      // No total height: counted as a tree, left out of the carbon.
       tree({ id: '3', species: 'Acacia', species_type: 'Invasive', dbh: '2 cm' }),
     ];
 
@@ -46,6 +48,8 @@ describe('dashboardMetrics totals', () => {
     expect(totals.treeCount).toBe(3);
     expect(totals.invasiveCount).toBe(2);
     expect(totals.carbonMeasured).toBe(2);
+    // Only the Narra has a merchantable height, for the volume.
+    expect(totals.volumeMeasured).toBe(1);
     expect(totals.carbonKg).toBe(
       Math.round(carbonDioxideKg(rows[0]) + carbonDioxideKg(rows[1]))
     );
@@ -69,6 +73,7 @@ describe('dashboardMetrics totals', () => {
       timberVolumeM3: 0,
       maiAgbMg: 0,
       carbonMeasured: 0,
+      volumeMeasured: 0,
     };
     expect(summarise([])).toEqual(empty);
     expect(summarise(undefined)).toEqual(empty);
@@ -184,8 +189,8 @@ describe('the figures still waiting on another system', () => {
 describe('a rate is not a stock', () => {
   it('counts what the trees hold and what they add as different figures', () => {
     const rows = [
-      { species: 'Narra', dbh: '37 cm', merchantable_height: 9 },
-      { species: 'Mango', dbh: '20 cm', merchantable_height: 5 },
+      { species: 'Narra', dbh: '37 cm', total_height: 14, merchantable_height: 9 },
+      { species: 'Mango', dbh: '20 cm', total_height: 7, merchantable_height: 5 },
     ];
     const totals = summarise(rows);
 
@@ -197,13 +202,14 @@ describe('a rate is not a stock', () => {
     expect(totals.maiAgbMg).toBeGreaterThan(0);
   });
 
-  it('leaves an unmeasured tree out of all four, not just the carbon', () => {
+  it('leaves an unmeasured tree out of the carbon, and counts the volume apart', () => {
     const totals = summarise([
-      { species: 'Narra', dbh: '37 cm', merchantable_height: 9 },
-      { species: 'Acacia', dbh: '30 cm' },
+      { species: 'Narra', dbh: '37 cm', total_height: 14 },
+      { species: 'Acacia', dbh: '30 cm', merchantable_height: 6 },
     ]);
 
     expect(totals.treeCount).toBe(2);
     expect(totals.carbonMeasured).toBe(1);
+    expect(totals.volumeMeasured).toBe(1);
   });
 });

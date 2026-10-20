@@ -1,6 +1,6 @@
 import { treeClassOf } from './mapSheet.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from './mapSites.js';
-import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON, volumeOf } from './treeVolume.js';
+import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON } from './treeCarbon.js';
 import { barangayFacts, PSGC_EDITION } from './psgc.js';
 import { namriaClassById } from './namriaCover.js';
 
@@ -182,9 +182,9 @@ export function hazardTable({ places = [], measured = null, placeLabel = 'Barang
 }
 
 /**
- * The carbon in the tagged trees, by place: the stock they hold now and what
- * they take up in a year, from the DENR volume equation (treeVolume.js). Only
- * trees with a diameter and a merchantable height count; the table says how
+ * The carbon in the tagged trees, by place: the stock they hold above ground
+ * now and what they take up in a year, from Chave et al. 2014 (treeCarbon.js).
+ * Only trees with a diameter and a total height count; the table says how
  * many those are, and leaves a place blank rather than call it zero.
  *
  *   places     [{ name }]
@@ -195,7 +195,7 @@ export function carbonTable({ places = [], trees = [], placeOf = (tree) => tree.
   const byPlace = new Map(places.map(({ name }) => [name, []]));
   for (const tree of trees) byPlace.get(placeOf(tree))?.push(tree);
   const figures = (list) => {
-    const measured = list.filter((tree) => volumeOf(tree) !== null);
+    const measured = list.filter((tree) => carbonDioxideKg(tree) !== null);
     if (measured.length === 0) return { trees: list.length, measured: 0, carbonT: null, co2T: null, sequestrationT: null };
     const co2 = measured.reduce((total, tree) => total + carbonDioxideKg(tree), 0) / 1000;
     return {
@@ -213,7 +213,7 @@ export function carbonTable({ places = [], trees = [], placeOf = (tree) => tree.
     columns: [
       { key: 'name', label: placeLabel, kind: 'text' },
       { key: 'trees', label: 'Tagged trees', kind: 'number' },
-      { key: 'measured', label: 'Measured (DBH and height)', kind: 'number' },
+      { key: 'measured', label: 'Measured (DBH and total height)', kind: 'number' },
       { key: 'carbonT', label: 'Carbon stock (t C)', kind: 'tonnes' },
       { key: 'co2T', label: 'CO₂ stored (t)', kind: 'tonnes' },
       { key: 'sequestrationT', label: 'CO₂ taken up a year (t)', kind: 'tonnes' },

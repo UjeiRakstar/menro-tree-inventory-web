@@ -1,10 +1,6 @@
 import { canonicalBarangay } from './barangayNames.js';
-import {
-  annualBiomassKg,
-  annualCo2Kg,
-  carbonDioxideKg,
-  volumeOf,
-} from './treeVolume.js';
+import { annualBiomassKg, annualCo2Kg, carbonDioxideKg } from './treeCarbon.js';
+import { volumeOf } from './treeVolume.js';
 
 /**
  * The figures behind the public BioDashboard.
@@ -21,19 +17,20 @@ import {
  */
 
 /**
- * Carbon comes from src/lib/treeVolume.js now: the DENR's own volume equation
- * for Southern Luzon, from FMB Technical Bulletin No. 3, applied to the
- * diameter and merchantable height the field team already records.
+ * Carbon comes from src/lib/treeCarbon.js: Chave et al. 2014, on the diameter
+ * and total height the field team records (decided 20 October). Timber volume
+ * stays the DENR's (src/lib/treeVolume.js), which needs a merchantable height.
  *
  * It used to be a flat 2.5 kg of CO₂ per centimetre of diameter, which had no
- * source at all.
+ * source at all, then the DENR volume equation, which most trees lacked the
+ * merchantable height for.
  */
 
 /**
  * Carbon held by one tree, in kg CO₂, or null when it has not been measured
  * well enough to say.
  *
- * Null rather than zero: a tree nobody recorded a merchantable height for has
+ * Null rather than zero: a tree nobody recorded a total height for has
  * an unknown carbon figure, not a carbon figure of nothing, and adding those
  * two together would understate the province.
  */
@@ -75,7 +72,8 @@ export function barangayOf(tree) {
  * Totals for a set of trees.
  *
  * `carbonMeasured` and `treeCount` together say how much of the set the carbon
- * figure speaks for. A total built from a third of the inventory is not wrong,
+ * figure speaks for; `volumeMeasured` the same for the timber volume, which
+ * needs a merchantable height as well. A total built from a third of the inventory is not wrong,
  * but showing it without saying so would be, so every screen that shows the
  * figure shows the coverage beside it.
  */
@@ -86,18 +84,23 @@ export function summarise(trees) {
   let volume = 0;
   let biomassPerYear = 0;
   let measured = 0;
+  let volumeMeasured = 0;
 
   for (const tree of rows) {
-    // One measurement test for all four: they come from the same equation, so
-    // a tree is either measured well enough for all of them or for none.
+    // Two equations, two tests: carbon wants a total height, volume a
+    // merchantable one, and a tree may have either.
+    const co2 = carbonDioxideKg(tree);
+    if (co2 !== null) {
+      carbon += co2;
+      carbonPerYear += annualCo2Kg(tree) ?? 0;
+      biomassPerYear += annualBiomassKg(tree) ?? 0;
+      measured += 1;
+    }
     const cubicMetres = volumeOf(tree);
-    if (cubicMetres === null) continue;
-
-    volume += cubicMetres;
-    carbon += carbonDioxideKg(tree) ?? 0;
-    carbonPerYear += annualCo2Kg(tree) ?? 0;
-    biomassPerYear += annualBiomassKg(tree) ?? 0;
-    measured += 1;
+    if (cubicMetres !== null) {
+      volume += cubicMetres;
+      volumeMeasured += 1;
+    }
   }
 
   // Diversity and origin, counted here so that grouping by place gets them
@@ -122,6 +125,7 @@ export function summarise(trees) {
     // Kilograms to megagrams: a tonne of biomass is the unit MAI is written in.
     maiAgbMg: Math.round((biomassPerYear / 1000) * 1000) / 1000,
     carbonMeasured: measured,
+    volumeMeasured,
   };
 }
 
@@ -213,11 +217,11 @@ export const METRIC_PAIRS = [
         tone: 'green',
         available: true,
         hint:
-          'How much carbon the trees hold TODAY — a stock, not a rate. ' +
-          'From the DENR volume equation for Southern Luzon (FMB Technical Bulletin No. 3), ' +
-          'using each tree’s diameter at breast height and merchantable height. Trees with no ' +
-          'recorded merchantable height are left out rather than guessed at.' +
-          ' Then wood density, biomass expansion and the carbon content of Philippine wood (Lasco & Pulhin 2000).',
+          'How much carbon the trees hold above ground TODAY — a stock, not a rate. ' +
+          'From Chave et al. (2014), the equation Pansit (2019) applies to Philippine city trees, ' +
+          'using each tree’s diameter at breast height and total height. Trees with no recorded ' +
+          'total height are left out rather than guessed at.' +
+          ' Then the carbon content of Philippine wood (Lasco & Pulhin 2000).',
       },
       {
         key: 'carbonPerYearKg',
@@ -227,10 +231,9 @@ export const METRIC_PAIRS = [
         available: true,
         hint:
           'How much carbon the trees take up EACH YEAR — a rate, which is what climate ' +
-          'commitments are written in. From a year of growth put through the same equation. ' +
-          'Growth is assumed at 0.5 cm of diameter a year, deliberately conservative so the ' +
-          'figure understates rather than flatters; replace it with a measured or published ' +
-          'rate and this becomes exact.',
+          'commitments are written in. From a year of growth put through the same equation: ' +
+          '1.19 cm of diameter a year, measured on Leyte (Schneider et al. 2013) and applied to ' +
+          'city trees by Pansit (2019), with the height held where it is so the figure leans low.',
       },
     ],
   },
@@ -273,10 +276,10 @@ export const FORESTRY_PAIR = {
         tone: 'green',
         available: true,
         hint:
-          'How much biomass the tagged trees add in a year: the same volume equation applied ' +
-          'twice, to each tree as it is and after a year of growth. For the TAGGED TREES, not ' +
-          'per hectare — hectares need the mapping feature. Growth is assumed at ' +
-          '0.5 cm of diameter a year, which is deliberately conservative.',
+          'How much biomass the tagged trees add above ground in a year: Chave et al. (2014) ' +
+          'applied twice, to each tree as it is and after a year of growth (1.19 cm of diameter, ' +
+          'Schneider et al. 2013). For the TAGGED TREES, not per hectare — a per-hectare figure ' +
+          'needs a plot survey.',
       },
     ],
 };

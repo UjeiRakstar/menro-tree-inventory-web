@@ -76,6 +76,8 @@ export const PUBLIC_DASHBOARD_COLUMNS = [
   'longitude',
   'dbh',
   'merchantable_height',
+  // Carbon: Chave et al. 2014 on the total height (treeCarbon.js).
+  'total_height',
   'biodiversity_status',
   'species_type',
   // The species layer: the genus comes from the binomial, and the mix of

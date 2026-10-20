@@ -1,5 +1,9 @@
 /**
- * Timber volume and carbon, the way the DENR computes them.
+ * Timber volume, the way the DENR computes it.
+ *
+ * Carbon is no longer worked out from it: since 20 October it comes from
+ * Chave et al. 2014 on the total height (src/lib/treeCarbon.js), which far
+ * more trees have recorded than a merchantable height.
  *
  * SOURCE
  * FMB Technical Bulletin No. 3, "Measurement Standards and Procedures in the
@@ -20,11 +24,6 @@
  * per centimetre. That had no source; it was a stand-in. This has one, and it
  * uses the two measurements the field team is already trained to take.
  *
- * WHAT IS STILL AN ASSUMPTION
- * The bulletin stops at volume. Turning cubic metres of wood into kilograms of
- * carbon needs three more numbers, and those are NOT in it — see CARBON below.
- * They are kept separate and named so they can be replaced with figures PGENRO
- * or ERDB will stand behind, rather than buried in a multiplication.
  */
 
 /**
@@ -126,63 +125,11 @@ export function volumeOf(tree) {
   return coefficient * diameter * diameter * height;
 }
 
-/* ===========================================================================
- * CARBON
- *
- * Volume is wood. Carbon is what that wood is made of, and the chain from one
- * to the other is:
- *
- *   above-ground biomass = volume × wood density × biomass expansion factor
- *   carbon               = above-ground biomass × carbon fraction
- *   carbon dioxide       = carbon × 44/12
- *
- * CARBON_FRACTION is Philippine: 0.45, the average carbon content of wood
- * sampled across the Philippines (Lasco & Pulhin 2000, "Forestland use change
- * in the Philippines and climate change mitigation", Mitigation and Adaptation
- * Strategies for Global Change 5: 81–97), rather than the IPCC tropical default
- * of 0.47. CO2_PER_CARBON, 44/12, is the ratio of the molecular weights.
- *
- * WOOD_DENSITY and BIOMASS_EXPANSION_FACTOR are not. Both vary by species and
- * by stand, the values here are broad tropical-hardwood defaults, and they are
- * the two numbers to replace when PGENRO or ERDB say what Laguna should use.
- * Anything derived from them is labelled an estimate wherever it is shown.
- * =========================================================================== */
-
-/** Oven-dry tonnes per cubic metre. A broad tropical hardwood default. */
-export const WOOD_DENSITY = 0.57;
-
-/** Branches, twigs and foliage, as a multiple of the merchantable bole. */
-export const BIOMASS_EXPANSION_FACTOR = 1.5;
-
-/** Carbon as a share of oven-dry biomass, as measured in Philippine wood (Lasco & Pulhin 2000). */
-export const CARBON_FRACTION = 0.45;
-
-/** Molecular weight of CO₂ over that of carbon. */
-export const CO2_PER_CARBON = 44 / 12;
-
-/** Above-ground biomass of one tree, in kilograms, or null. */
-export function biomassKg(tree) {
-  const volume = volumeOf(tree);
-  if (volume === null) return null;
-  return volume * WOOD_DENSITY * 1000 * BIOMASS_EXPANSION_FACTOR;
-}
-
 /**
- * Carbon dioxide held in one tree, in kilograms, or null when it has not been
- * measured well enough to say.
- */
-export function carbonDioxideKg(tree) {
-  const biomass = biomassKg(tree);
-  if (biomass === null) return null;
-  return biomass * CARBON_FRACTION * CO2_PER_CARBON;
-}
-
-/**
- * How much of a set of trees this can actually speak for.
+ * How much of a set of trees the volume can actually speak for.
  *
  * A total built from a third of the inventory is not wrong, but presenting it
- * without saying so would be. Every screen showing a carbon or volume figure
- * shows this beside it.
+ * without saying so would be. Every screen showing a volume shows this beside it.
  */
 export function measuredCoverage(trees) {
   const rows = Array.isArray(trees) ? trees : [];
@@ -319,81 +266,4 @@ export function readDiameterShape(distribution) {
       'The trees measured here are spread across the size classes rather than bunched in one, ' +
       'which is what lets a forest replace itself as older trees are lost.',
   };
-}
-
-/* ===========================================================================
- * GROWTH — what the trees add in a year
- *
- * Carbon STORED is a stock: how much is held today. SEQUESTRATION is a rate:
- * how much is taken up per year. Climate commitments are written in rates, so
- * the rate is the figure a city reporting against one is actually looking for.
- *
- * It comes from the volume equation applied twice — the tree as it is, and the
- * tree one year of growth later:
- *
- *     biomass added = AGB(D + a year's growth) − AGB(D)
- *     CO₂ sequestered = biomass added × carbon fraction × 44/12
- *
- * Mean Annual Increment of Above Ground Biomass is the same arithmetic
- * stopping one step earlier: the biomass, before it is turned into carbon.
- *
- * MAI AGB was marked unavailable on this dashboard because the figure wanted
- * was Mg per HECTARE per year, and hectares need the mapping feature. Mg per
- * year for the tagged trees needs no area at all — it is the sum of the
- * per-tree increments — so that is what is shown, labelled for what it is.
- * Divide by hectares when the mapping work lands.
- * =========================================================================== */
-
-/**
- * How much a trunk thickens in a year, in centimetres of diameter.
- *
- * 1.19 cm: the mean annual increment in diameter at breast height of sixty
- * species in smallholder reforestation on Leyte (Schneider, Ashton, Montagnini
- * & Milan 2013, "Growth performance of sixty tree species in smallholder
- * reforestation trials on Leyte, Philippines", New Forests 45: 83–96), the
- * figure Pansit (2019, "Carbon storage and sequestration potential of urban
- * trees in Cebu City, Philippines", Mindanao Journal of Science and Technology
- * 17: 98–111) applies to city trees. It replaces 0.5 cm, which was chosen
- * rather than measured.
- *
- * It is borrowed: measured in the Philippines, not in Laguna, and on
- * reforestation sites rather than streets — an urban tree may grow slower.
- * Better still would be, in order: two diameter readings of the same tree at
- * different dates (the field app's dateCaptured makes that possible), then a
- * per-species figure from PGENRO or ERDB.
- */
-export const ANNUAL_DBH_GROWTH_CM = 1.19;
-
-/** The volume equation itself, so a year's growth can be put through it. */
-function volumeFrom(diameterCm, heightM, dipterocarp) {
-  const coefficient = dipterocarp
-    ? VOLUME_COEFFICIENT.dipterocarp
-    : VOLUME_COEFFICIENT.nonDipterocarp;
-  return coefficient * diameterCm * diameterCm * heightM;
-}
-
-/**
- * The biomass one tree adds in a year, in kilograms, or null.
- *
- * The diameter is NOT re-floored here. Rounding down is how the bulletin says
- * to record a field measurement; applying it to an increment of half a
- * centimetre would round every year's growth to nothing.
- */
-export function annualBiomassKg(tree) {
-  const diameter = dbhCm(tree);
-  const height = merchantableHeightM(tree);
-  if (diameter === null || height === null) return null;
-
-  const dipterocarp = isDipterocarp(tree?.species);
-  const grown = volumeFrom(diameter + ANNUAL_DBH_GROWTH_CM, height, dipterocarp);
-  const now = volumeFrom(diameter, height, dipterocarp);
-
-  return (grown - now) * WOOD_DENSITY * 1000 * BIOMASS_EXPANSION_FACTOR;
-}
-
-/** The CO₂ one tree takes up in a year, in kilograms, or null. */
-export function annualCo2Kg(tree) {
-  const biomass = annualBiomassKg(tree);
-  if (biomass === null) return null;
-  return biomass * CARBON_FRACTION * CO2_PER_CARBON;
 }

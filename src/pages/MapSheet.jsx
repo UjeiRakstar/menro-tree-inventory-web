@@ -329,7 +329,7 @@ export default function MapSheet() {
       const { data } = await everyRow(() =>
         supabase
           .from('trees')
-          .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, source')
+          .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, total_height, source')
       );
       if (cancelled || !Array.isArray(data)) return;
       setTrees(

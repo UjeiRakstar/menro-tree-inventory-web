@@ -13,7 +13,7 @@ const BARANGAYS_SHOWN = 6;
 /**
  * Which part of the place's trees the carbon figure speaks for.
  *
- * The DENR equation needs a merchantable height, and not every record has one.
+ * The carbon equation needs a diameter and a total height, and not every record has both.
  * A total from some of the trees is worth showing, but only if it says so.
  */
 function carbonNote(totals) {

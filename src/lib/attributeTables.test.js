@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { barangayTable, carbonTable, formatCell, hazardTable, landCoverTable, plantingSiteTable } from './attributeTables.js';
-import { carbonDioxideKg } from './treeVolume.js';
+import { carbonDioxideKg } from './treeCarbon.js';
 import { listOf, writeReport } from './reportWriter.js';
 
 // About a hectare, in Santa Cruz.
@@ -12,7 +12,7 @@ const BARANGAYS = [
   { properties: { barangay: 'Gatid', barangay_psgc: 403426006, area_km2: 0.16 } },
 ];
 const TREES = [
-  { species: 'Narra', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Timber', origin: 'native', dbh: 30, merchantable_height: 8 },
+  { species: 'Narra', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Timber', origin: 'native', dbh: 30, total_height: 12, merchantable_height: 8 },
   { species: 'Mahogany', barangay: 'Alipit', species_type: 'Invasive', tree_category: 'Timber', origin: 'invasive' },
   { species: 'Mango', barangay: 'Alipit', biodiversity_status: 'Endemic', tree_category: 'Fruit', origin: 'native' },
 ];
@@ -137,7 +137,7 @@ describe('writeReport', () => {
   });
 
   it('says what the trees hold in carbon, and how many of them that speaks for', () => {
-    expect(section('inventory')).toMatch(/1 of them have a diameter and merchantable height recorded: together they hold an estimated [\d.]+ t of carbon \([\d.]+ t CO₂\) and take up about [\d.]+ t of CO₂ a year/);
+    expect(section('inventory')).toMatch(/1 of them have a diameter and total height recorded: together they hold an estimated [\d.]+ t of carbon \([\d.]+ t CO₂\) and take up about [\d.]+ t of CO₂ a year/);
   });
 
   it('says how much of the place lies in each hazard, and where most', () => {
@@ -150,7 +150,7 @@ describe('writeReport', () => {
     expect(section('recommendations')).toMatch(/Extend the inventory to the 1 barangay not yet surveyed/);
     expect(section('recommendations')).toMatch(/Choose flood-tolerant species for Alipit Riverbank/);
     expect(section('recommendations')).toMatch(/riverbank and flood-tolerant planting in Alipit, the most exposed to flooding/);
-    expect(section('recommendations')).toMatch(/Record the merchantable height of the 2 trees without one/);
+    expect(section('recommendations')).toMatch(/Record the diameter and total height of the 2 trees without them/);
   });
 
   it('lists names as people write them', () => {

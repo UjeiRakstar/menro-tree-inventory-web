@@ -423,7 +423,7 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
     {
       name: 'Climate regulation — carbon storage',
       value: carbon?.co2T ? `${hectares(carbon.co2T)} t CO₂ in ${n(carbon.measured)} measured trees` : 'No tree measured for carbon yet',
-      from: 'DENR volume equation (FMB TB No. 3)',
+      from: 'Chave et al. 2014, on diameter and total height',
     },
     {
       name: 'Participation — citizen science',
@@ -665,7 +665,7 @@ function sourcesSection(kind) {
     soil: 'Soils: DA–BSWM soil map, measured on a grid of about 60 m (2 arc-seconds).',
     hazards: 'Hazards: UP NOAH flood and rain-induced landslide susceptibility, measured on a grid of about 60 m. Population: PSA 2024 Census (PSGC 3Q 2026), or the office’s own figures. Climate: DOST-PAGASA CLIRAM.',
     terrain: 'Elevation: Copernicus DEM, on a grid of about 60 m; slope worked out from it cell by cell.',
-    biodiversity: 'Trees: the Green Tag field inventory and verified community tags. Diversity indices as TB 2018-02 Attachment 1 gives them. Carbon: DENR FMB TB No. 3 volume equation with Philippine rates.',
+    biodiversity: 'Trees: the Green Tag field inventory and verified community tags. Diversity indices as TB 2018-02 Attachment 1 gives them. Carbon: Chave et al. 2014 on diameter and total height, with Philippine rates.',
   };
   return {
     key: 'sources',

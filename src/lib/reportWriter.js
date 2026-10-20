@@ -34,8 +34,8 @@ function mostCommon(values, limit = 3) {
 /** What the tagged trees hold and take up, from the carbon table's totals. */
 function carbonSentence(totals) {
   if (!totals?.trees) return '';
-  if (!totals.measured) return 'None has a merchantable height recorded yet, so their carbon cannot be estimated.';
-  return `${totals.measured === totals.trees ? 'All of them have' : `${n(totals.measured)} of them have`} a diameter and merchantable height recorded: ` +
+  if (!totals.measured) return 'None has a diameter and total height recorded yet, so their carbon cannot be estimated.';
+  return `${totals.measured === totals.trees ? 'All of them have' : `${n(totals.measured)} of them have`} a diameter and total height recorded: ` +
     `together they hold an estimated ${tonnes(totals.carbonT)} t of carbon (${tonnes(totals.co2T)} t CO₂) and take up about ` +
     `${tonnes(totals.sequestrationT)} t of CO₂ a year.`;
 }
@@ -245,7 +245,7 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
   const carbon = tables.carbon?.totals;
   if (carbon?.trees && carbon.measured < carbon.trees) {
     recommendations.push(
-      `Record the merchantable height of the ${n(carbon.trees - carbon.measured)} trees without one, so that the carbon of the whole inventory can be estimated.`
+      `Record the diameter and total height of the ${n(carbon.trees - carbon.measured)} trees without them, so that the carbon of the whole inventory can be estimated.`
     );
   }
   if (!cover?.rows?.length) recommendations.push('Map the land cover, so that tree cover can be measured and planned for.');
@@ -261,10 +261,10 @@ export function writeReport({ place = null, tables, trees = [], climate = null, 
     text:
       'Trees: the Green Tag field inventory, tagged by the field officers and verified by the office. Boundaries: PSA and NAMRIA. ' +
       'Hazards: UP NOAH, measured over each barangay on a grid of about 60 m. Elevation: Copernicus DEM. Soils: DA–BSWM. ' +
-      'Climate: DOST-PAGASA CLIRAM. Carbon: the DENR volume equations for Southern Luzon (FMB Technical Bulletin No. 3) with ' +
-      'default wood density and biomass expansion, the carbon content of Philippine wood (Lasco & Pulhin 2000) and a year\'s ' +
-      'growth of 1.19 cm in diameter (Schneider et al. 2013) — estimates, from the trees with a diameter and ' +
-      'merchantable height recorded. Land cover and tree planting sites are as the offices drew them on the map. The inventory ' +
+      'Climate: DOST-PAGASA CLIRAM. Carbon: Chave et al. (2014) on diameter and total height, as Pansit (2019) applies it ' +
+      'to city trees, with the tropical Asian mean wood density (0.57 g/cm³, Reyes et al. 1992), the carbon content of ' +
+      'Philippine wood (Lasco & Pulhin 2000) and a year\'s growth of 1.19 cm in diameter (Schneider et al. 2013) — ' +
+      'estimates of what stands above ground, from the trees with a diameter and total height recorded. Land cover and tree planting sites are as the offices drew them on the map. The inventory ' +
       'counts only the trees tagged so far, not every tree standing.',
   });
 

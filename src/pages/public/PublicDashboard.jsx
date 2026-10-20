@@ -53,15 +53,13 @@ import {
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
 import { PUBLIC_DASHBOARD_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js';
+import { MIN_MERCHANTABLE_HEIGHT_M, VOLUME_COEFFICIENT, measuredCoverage } from '../../lib/treeVolume.js';
 import {
   ANNUAL_DBH_GROWTH_CM,
-  BIOMASS_EXPANSION_FACTOR,
   CARBON_FRACTION,
-  MIN_MERCHANTABLE_HEIGHT_M,
-  VOLUME_COEFFICIENT,
-  WOOD_DENSITY,
-  measuredCoverage,
-} from '../../lib/treeVolume.js';
+  DEFAULT_WOOD_DENSITY,
+  carbonCoverage,
+} from '../../lib/treeCarbon.js';
 import InfoHint from '../../components/public/InfoHint.jsx';
 import {
   ProvisionalKey,
@@ -212,7 +210,9 @@ function StatCard({ metric, value, note = '', active, onSelect }) {
 }
 
 /**
- * Every constant behind the two forestry figures, and which of them is a guess.
+ * Every constant behind the two forestry figures, and which of them is a guess:
+ * the volume from the DENR's equation, the growth from Chave et al. 2014 —
+ * the equation the carbon on the headline comes from too.
  *
  * This sits on the Forestry tab because that is who it is for: a MENRO officer
  * putting standing volume into a report needs to be able to say where each
@@ -222,6 +222,7 @@ function StatCard({ metric, value, note = '', active, onSelect }) {
  */
 function WorkingsCard({ trees }) {
   const coverage = measuredCoverage(trees);
+  const growthCoverage = carbonCoverage(trees);
 
   const rows = [
     {
@@ -234,14 +235,22 @@ function WorkingsCard({ trees }) {
       value: `${VOLUME_COEFFICIENT.dipterocarp} / ${VOLUME_COEFFICIENT.nonDipterocarp}`,
       note: 'dipterocarp / non-dipterocarp',
     },
-    { label: 'Wood density', value: `${WOOD_DENSITY} t/m³` },
-    { label: 'Biomass expansion factor', value: `${BIOMASS_EXPANSION_FACTOR}×` },
-    { label: 'Carbon fraction', value: `${CARBON_FRACTION}`, note: 'Philippine wood (Lasco & Pulhin 2000)' },
     {
       label: 'Shortest bole counted',
       value: `${MIN_MERCHANTABLE_HEIGHT_M} m`,
       note: 'anything less is not a merchantable bole',
     },
+    {
+      label: 'Biomass and carbon',
+      value: 'AGB = 0.0673 × (ρD²H)^0.976',
+      note: 'Chave et al. 2014, on total height',
+    },
+    {
+      label: 'Wood density ρ',
+      value: `${DEFAULT_WOOD_DENSITY} g/cm³`,
+      note: 'tropical Asian mean (Reyes et al. 1992)',
+    },
+    { label: 'Carbon fraction', value: `${CARBON_FRACTION}`, note: 'Philippine wood (Lasco & Pulhin 2000)' },
   ];
 
   return (
@@ -281,8 +290,9 @@ function WorkingsCard({ trees }) {
 
       {/* Live, so NOT amber: this moves every time somebody records a height. */}
       <p className="mt-2.5 text-[10.5px] leading-snug text-slate-400">
-        Both figures cover {formatFigure(coverage.measured)} of {formatFigure(coverage.total)} trees
-        — the rest have no recorded merchantable height and are left out rather than guessed at.
+        The volume covers {formatFigure(coverage.measured)} of {formatFigure(coverage.total)} trees, the
+        ones with a merchantable height; the growth {formatFigure(growthCoverage.measured)}, the ones with
+        a total height. The rest are left out rather than guessed at.
       </p>
     </div>
   );
@@ -575,7 +585,7 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
   const carbonCoverage = useMemo(() => {
     const { carbonMeasured, treeCount } = totals;
     if (treeCount === 0) return '';
-    if (carbonMeasured === 0) return 'No tree here has a merchantable height recorded yet';
+    if (carbonMeasured === 0) return 'No tree here has a diameter and total height recorded yet';
     if (carbonMeasured === treeCount) return '';
     return `From ${formatFigure(carbonMeasured)} of ${formatFigure(treeCount)} trees measured`;
   }, [totals]);
