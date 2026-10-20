@@ -24,7 +24,7 @@ const PIE_COLORS = ['#16a34a', '#dc2626', '#f97316', '#eab308', '#06b6d4'];
 const SpeciesLibrary = lazy(() => import('../components/pgenro/SpeciesLibrary.jsx'));
 
 export default function BiodiversityHub() {
-  const { profile } = useAuth();
+  const { profile, lgu } = useAuth();
   const forester = isPgenro(profile);
   const officeLgu = officeLguOf(profile);
   const [trees, setTrees] = useState([]);
@@ -123,7 +123,7 @@ export default function BiodiversityHub() {
               // Fetched on the click rather than with the page: ExcelJS is
               // 900 KB, and most visits here never export anything.
               const { generateMenroExcel } = await import('../lib/excelExport.js');
-              await generateMenroExcel(trees);
+              await generateMenroExcel(trees, { lgu: officeLgu === undefined ? null : lgu, preparedBy: profile?.full_name || '' });
             }}
             className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-800 transition"
           >

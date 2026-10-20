@@ -729,7 +729,7 @@ export default function MapSheet() {
   async function downloadExcel() {
     setExcelBusy(true);
     try {
-      const blob = await tablesWorkbook(tables, { place: lgu ? `${officialName(lgu)}, Laguna` : 'Province of Laguna', preparedBy: preparedText });
+      const blob = await tablesWorkbook(tables, { lgu, preparedBy: preparedText });
       saveFile(blob, `${fileStem}_Tables.xlsx`);
     } finally {
       setExcelBusy(false);

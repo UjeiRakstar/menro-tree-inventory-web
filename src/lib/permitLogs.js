@@ -75,57 +75,52 @@ export function summarisePermits(permits, lguOf, labelOf) {
  * The report as a workbook: a summary sheet, then every permit with its LGU.
  * ExcelJS is large, so it arrives only when a report is asked for.
  */
-export async function downloadPermitReport({ permits, lguOf, labelOf, from = '', to = '' }) {
-  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([import('exceljs'), import('file-saver')]);
+export async function downloadPermitReport({ permits, lguOf, labelOf, from = '', to = '', preparedBy = 'PGENRO Laguna' }) {
+  const [{ addTableSheet, createWorkbook, workbookBlob }, { saveAs }] = await Promise.all([import('./workbookLook.js'), import('file-saver')]);
   const chosen = permitsBetween(permits, from, to);
   const period = from || to ? `${from || 'the start'} to ${to || 'today'}` : 'all dates';
 
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Green Tag — PGENRO Laguna';
-
-  const summary = workbook.addWorksheet('Summary');
-  summary.addRow([`Tree cutting permits by LGU, ${period}`]).font = { bold: true, size: 13 };
-  summary.addRow([]);
-  summary.addRow(['City / municipality', 'Permits', 'Trees covered']).font = { bold: true };
+  const workbook = await createWorkbook();
   const rows = summarisePermits(chosen, lguOf, labelOf);
-  for (const row of rows) summary.addRow([row.label, row.permits, row.trees]);
-  summary.addRow([
-    'Laguna',
-    rows.reduce((sum, row) => sum + row.permits, 0),
-    rows.reduce((sum, row) => sum + row.trees, 0),
-  ]).font = { bold: true };
-  summary.columns = [{ width: 32 }, { width: 12 }, { width: 16 }];
+  await addTableSheet(workbook, {
+    name: 'Summary',
+    title: 'TREE CUTTING PERMITS BY CITY AND MUNICIPALITY',
+    subtitle: `Issued ${period === 'all dates' ? 'on all dates' : period}`,
+    preparedBy,
+    columns: [{ label: 'City / municipality', width: 32 }, { label: 'Permits', kind: 'number', width: 12 }, { label: 'Trees covered', kind: 'number', width: 16 }],
+    rows: rows.map((row) => [row.label, row.permits, row.trees]),
+    totals: ['Laguna', rows.reduce((sum, row) => sum + row.permits, 0), rows.reduce((sum, row) => sum + row.trees, 0)],
+    notes: ['Each permit is counted in the LGU its tree stands in, or where a walk-in permit was issued for; one with neither is "Not placed".'],
+  });
+  await addTableSheet(workbook, {
+    name: 'Permits',
+    title: 'TREE CUTTING PERMITS',
+    subtitle: `Issued ${period === 'all dates' ? 'on all dates' : period}`,
+    preparedBy,
+    landscape: true,
+    columns: [
+      { label: 'Issued', width: 12 },
+      { label: 'City / municipality', width: 22 },
+      { label: 'Client', width: 24 },
+      { label: 'Reason', width: 38 },
+      { label: 'Species', width: 18 },
+      { label: 'Trees', kind: 'number', width: 8 },
+      { label: 'Address', width: 30 },
+      { label: 'Archived', width: 10 },
+    ],
+    rows: chosen.map((permit) => [
+      dayOf(permit.created_at),
+      labelOf(lguOf(permit)),
+      permit.client_name ?? '',
+      permit.reason ?? '',
+      permit.species ?? '',
+      treesCovered(permit),
+      permit.address ?? '',
+      permit.archived_at ? 'Yes' : '',
+    ]),
+  });
 
-  const sheet = workbook.addWorksheet('Permits');
-  sheet.columns = [
-    { header: 'Issued', key: 'issued', width: 12 },
-    { header: 'City / municipality', key: 'lgu', width: 24 },
-    { header: 'Client', key: 'client', width: 24 },
-    { header: 'Reason', key: 'reason', width: 40 },
-    { header: 'Species', key: 'species', width: 18 },
-    { header: 'Trees', key: 'trees', width: 8 },
-    { header: 'Address', key: 'address', width: 32 },
-    { header: 'Archived', key: 'archived', width: 10 },
-  ];
-  sheet.getRow(1).font = { bold: true };
-  for (const permit of chosen) {
-    sheet.addRow({
-      issued: dayOf(permit.created_at),
-      lgu: labelOf(lguOf(permit)),
-      client: permit.client_name ?? '',
-      reason: permit.reason ?? '',
-      species: permit.species ?? '',
-      trees: treesCovered(permit),
-      address: permit.address ?? '',
-      archived: permit.archived_at ? 'Yes' : '',
-    });
-  }
-
-  const buffer = await workbook.xlsx.writeBuffer();
   const stamp = new Date().toISOString().slice(0, 10);
-  saveAs(
-    new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-    `permits-by-lgu-${stamp}.xlsx`
-  );
+  saveAs(await workbookBlob(workbook), `permits-by-lgu-${stamp}.xlsx`);
   return { permits: chosen.length };
 }

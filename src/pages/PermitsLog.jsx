@@ -2,8 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import CertificatePrint from '../components/CertificatePrint.jsx';
-import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { useAuth } from '../context/AuthContext.jsx';
 import { inOfficeLgu } from '../lib/roles.js';
 import { lguOfPermitRow } from '../lib/permitLogs.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
@@ -16,6 +16,9 @@ const PAGE_SIZE = 50;
  *        the list right before that file is run.
  */
 export default function PermitsLog({ lgu = undefined }) {
+  const { profile } = useAuth();
+  // The letterhead's LGU, by the office's code; PGENRO's file is the province's.
+  const officeLgu = lgu ? MUNICIPALITY_LIST.find((item) => item.psgc === Number(lgu)) ?? null : null;
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lightboxUrl, setLightboxUrl] = useState(null);
@@ -93,53 +96,32 @@ export default function PermitsLog({ lgu = undefined }) {
     setTimeout(() => { window.print(); setPrintPermit(null); }, 300);
   }
 
+  // In the standard look (workbookLook.js), under the office's own letterhead.
   async function exportPermitsToExcel(data) {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Permit Logs');
-
-    // Header
-    sheet.mergeCells('A1:H1');
-    sheet.getCell('A1').value = 'CUTTING PERMIT LOGBOOK';
-    sheet.getCell('A1').font = { bold: true, size: 14 };
-    sheet.getCell('A1').alignment = { horizontal: 'center' };
-
-    sheet.mergeCells('A2:H2');
-    sheet.getCell('A2').value = `Municipality of Santa Cruz, Laguna • Generated: ${new Date().toLocaleDateString()}`;
-    sheet.getCell('A2').font = { size: 10, italic: true };
-    sheet.getCell('A2').alignment = { horizontal: 'center' };
-
-    // Column headers
-    const headers = ['Client Name', 'Contact', 'Address', 'Species', 'Quantity', 'Reason', 'Status', 'Date Issued'];
-    const headerRow = sheet.getRow(4);
-    headers.forEach((h, i) => {
-      const cell = headerRow.getCell(i + 1);
-      cell.value = h;
-      cell.font = { bold: true, size: 10 };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
-      cell.border = { bottom: { style: 'thin' } };
+    const { addTableSheet, createWorkbook, workbookBlob } = await import('../lib/workbookLook.js');
+    const workbook = await createWorkbook();
+    const issuedOn = (p) => (p.created_at ? new Date(p.created_at).toISOString().slice(0, 10) : '');
+    await addTableSheet(workbook, {
+      name: 'Permit Logs',
+      lgu: officeLgu,
+      title: 'CUTTING PERMIT LOGBOOK',
+      subtitle: dateFrom || dateTo ? `Issued ${dateFrom || 'from the start'} to ${dateTo || 'today'}` : '',
+      preparedBy: profile?.full_name || '',
+      landscape: true,
+      columns: [
+        { label: 'Client name', width: 22 },
+        { label: 'Contact', width: 18 },
+        { label: 'Address', width: 26 },
+        { label: 'Species', width: 16 },
+        { label: 'Quantity', kind: 'number', width: 9 },
+        { label: 'Reason', width: 32 },
+        { label: 'Status', width: 11 },
+        { label: 'Date issued', width: 12 },
+      ],
+      rows: data.map((p) => [p.client_name || '', p.contact_info || '', p.address || '', p.species || '', p.number_of_trees || 1, p.reason || '', p.status || 'Pending', issuedOn(p)]),
+      totals: [`${data.length} ${data.length === 1 ? 'permit' : 'permits'}`, null, null, null, data.reduce((sum, p) => sum + (Number(p.number_of_trees) || 1), 0), null, null, null],
     });
-
-    // Data
-    data.forEach((p, idx) => {
-      const row = sheet.getRow(5 + idx);
-      row.getCell(1).value = p.client_name || '';
-      row.getCell(2).value = p.contact_info || '';
-      row.getCell(3).value = p.address || '';
-      row.getCell(4).value = p.species || '';
-      row.getCell(5).value = p.number_of_trees || 1;
-      row.getCell(6).value = p.reason || '';
-      row.getCell(7).value = p.status || 'Pending';
-      row.getCell(8).value = p.created_at ? new Date(p.created_at).toLocaleDateString() : '';
-    });
-
-    sheet.columns = [
-      { width: 20 }, { width: 18 }, { width: 25 }, { width: 15 },
-      { width: 8 }, { width: 30 }, { width: 10 }, { width: 14 },
-    ];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Permit_Logs_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    saveAs(await workbookBlob(workbook), `Permit_Logs_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   return (

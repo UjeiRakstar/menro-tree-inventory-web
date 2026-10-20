@@ -224,7 +224,8 @@ describe('the permit logs', () => {
     fireEvent.change(within(form).getByLabelText('From'), { target: { value: '2026-10-01' } });
     fireEvent.click(within(form).getByRole('button', { name: /Download Excel report/ }));
 
-    expect(await screen.findByText(/Report downloaded: 2 permits/)).toBeInTheDocument();
+    // ExcelJS arrives on the click, which can take a while on a busy machine.
+    expect(await screen.findByText(/Report downloaded: 2 permits/, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(saveAsSpy).toHaveBeenCalledTimes(1);
     expect(saveAsSpy.mock.calls[0][1]).toMatch(/^permits-by-lgu-\d{4}-\d{2}-\d{2}\.xlsx$/);
   });

@@ -1,6 +1,7 @@
 import { treeClassOf } from './mapSheet.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from './mapSites.js';
 import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON } from './treeCarbon.js';
+import { addTableSheet, createWorkbook, officeOf, workbookBlob } from './workbookLook.js';
 import { barangayFacts, PSGC_EDITION } from './psgc.js';
 import { namriaClassById } from './namriaCover.js';
 
@@ -223,6 +224,12 @@ export function carbonTable({ places = [], trees = [], placeOf = (tree) => tree.
       name: `${rows.length} ${placeLabel === 'Barangay' ? 'barangays' : 'cities and municipalities'}`,
       ...figures([...byPlace.values()].flat()),
     },
+    notes: [
+      'Carbon above ground: Chave et al. (2014), AGB = 0.0673 × (ρD²H)^0.976, on each tree’s diameter at breast height and total height, ' +
+        'with the tropical Asian mean wood density of 0.57 g/cm³ (Reyes et al. 1992); carbon 45% of biomass (Lasco & Pulhin 2000); CO₂ = C × 44/12.',
+      'A year’s uptake: the same equation after 1.19 cm of diameter growth (Schneider et al. 2013, as applied to city trees by Pansit 2019).',
+      'A blank is a place with no tree measured, not a place with no carbon.',
+    ],
   };
 }
 
@@ -324,42 +331,32 @@ export function formatCell(value, kind) {
 }
 
 /**
- * The tables as an Excel workbook — one sheet each, headed with the LGU and
- * the date, the header row bold, the totals row last. Returns a Blob.
+ * The tables as an Excel workbook, in the standard look (workbookLook.js):
+ * one sheet each, under the LGU's letterhead, with its totals and notes.
+ * Returns a Blob.
+ *
+ *   lgu   the sheet's LGU, or null for the province
  */
-export async function tablesWorkbook(tables, { place, preparedBy, date = new Date() }) {
-  const { default: ExcelJS } = await import('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Green Tag Tree Inventory System';
+export async function tablesWorkbook(tables, { lgu = null, preparedBy, date = new Date() }) {
+  const workbook = await createWorkbook();
   for (const table of tables) {
-    const sheet = workbook.addWorksheet(table.title.slice(0, 31));
-    sheet.addRow([`${table.title} — ${place}`]).font = { bold: true, size: 13 };
-    sheet.addRow([`Prepared by ${preparedBy} · ${date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`]);
-    sheet.addRow([]);
-    const header = sheet.addRow(table.columns.map((column) => column.label));
-    header.font = { bold: true };
-    header.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-    });
-    for (const row of table.rows) {
-      sheet.addRow(
-        table.columns.map((column) => {
-          const value = row[column.key];
-          if (value === null || value === undefined) return null;
-          if (column.kind === 'ha' || column.kind === 'tonnes' || column.kind === 'decimal') return Math.round(Number(value) * 100) / 100;
-          if (column.kind === 'percent') return Math.round(Number(value) * 1000) / 10;
-          return value;
-        })
-      );
-    }
-    if (table.totals) {
-      const totals = sheet.addRow(table.columns.map((column) => table.totals[column.key] ?? null));
-      totals.font = { bold: true };
-    }
-    sheet.columns.forEach((column, i) => {
-      column.width = Math.min(40, Math.max(12, table.columns[i]?.label.length + 2 || 12));
+    await addTableSheet(workbook, {
+      name: table.title,
+      lgu,
+      title: table.title.toUpperCase(),
+      subtitle: officeOf(lgu).place,
+      preparedBy,
+      date,
+      columns: table.columns.map((column) => ({
+        label: column.label,
+        kind: column.kind,
+        width: column.kind === 'text' || !column.kind ? Math.min(36, Math.max(14, column.label.length + 2)) : Math.max(11, Math.min(18, column.label.length + 2)),
+      })),
+      rows: table.rows.map((row) => table.columns.map((column) => row[column.key] ?? null)),
+      totals: table.totals ? table.columns.map((column) => table.totals[column.key] ?? null) : null,
+      notes: table.notes ?? [],
+      landscape: table.columns.length > 6,
     });
   }
-  const buffer = await workbook.xlsx.writeBuffer();
-  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  return workbookBlob(workbook);
 }
