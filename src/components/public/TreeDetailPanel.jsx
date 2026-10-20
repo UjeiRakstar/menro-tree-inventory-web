@@ -10,6 +10,14 @@ import InfoHint from './InfoHint.jsx';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
 import dbhIcon from '../../assets/DBH_icon.png';
+import SpeciesFacts from './SpeciesFacts.jsx';
+
+/** Whether a species record has any RISE detail beyond its description. */
+const hasFacts = (profile) =>
+  Boolean(profile) && ['family', 'local_names', 'conservation_status', 'distribution', 'site_requirements', 'propagation', 'uses', 'pests_diseases', 'phenology_note', 'origin']
+    .some((key) => String(profile[key] ?? '').trim()) ||
+  (Array.isArray(profile?.flowering_months) && profile.flowering_months.length > 0) ||
+  (Array.isArray(profile?.fruiting_months) && profile.fruiting_months.length > 0);
 
 const ERDB_LINK = 'https://erdbservices.denr.gov.ph/eskris/iec_for_guest.php';
 
@@ -256,7 +264,7 @@ function DescriptionTab({ profile, profileLoading }) {
           </p>
         )}
 
-        {!profileLoading && paragraphs.length === 0 && (
+        {!profileLoading && paragraphs.length === 0 && !hasFacts(profile) && (
           <p className="text-sm text-slate-500">
             The description for this species has not been published yet. PGENRO adds these from the
             DENR-ERDB references.
@@ -269,6 +277,8 @@ function DescriptionTab({ profile, profileLoading }) {
               {paragraph}
             </p>
           ))}
+
+        {!profileLoading && <SpeciesFacts profile={profile} />}
       </div>
 
       <div className="px-5 pb-6 pt-2 border-t border-slate-100">
