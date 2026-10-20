@@ -78,6 +78,13 @@ app before proceeding to the mobile app"). The hagameter steps replaced by
 typing in what was measured with a real hagameter and tape (DBH, total and
 merchantable height); the trainee banner.
 
+**Going live — parked 20 October** (no access yet to the IT team that uploads
+the site). Everything for it is in **GOING_LIVE.md**: the database and server
+functions to have ready, Google sign-in in testing, what IT uploads, and the
+Google Branding values for publishing on `greentag.laguna.gov.ph`. Still
+needed from you: the Data Protection Officer's contact for
+`public/privacy.html`.
+
 **Round F — PGENRO and the super admin.** Each LGU pins its own hall, PGENRO
 the capitol, and PGENRO sees every hall pinned. PGENRO sees permits and whom
 they were issued to, and does nothing to them; a super admin account (yours)
