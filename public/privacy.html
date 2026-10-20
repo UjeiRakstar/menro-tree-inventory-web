@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Green Tag</title>
+  <meta name="description" content="How Green Tag, the tree inventory system of the Province of Laguna, handles personal information under the Data Privacy Act of 2012." />
+  <!--
+    A page of its own, not a route of the app: it can be placed beside any
+    version of the site (greentag.laguna.gov.ph/privacy.html) and is the link
+    Google's sign-in screen shows. Kept in public/ so it ships with the app.
+
+    BEFORE IT GOES LIVE: fill in the contact in "Your rights, and whom to ask"
+    (search this file for FILL IN) and remove the yellow box.
+  -->
+  <style>
+    :root { --green: #15803d; --ink: #0f172a; --muted: #475569; --line: #e2e8f0; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { background: var(--green); color: #fff; padding: 20px 16px; }
+    header .wrap { display: flex; align-items: center; gap: 12px; }
+    header p { margin: 0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 0; font-size: 22px; }
+    .wrap { max-width: 820px; margin: 0 auto; }
+    main { padding: 24px 16px 48px; }
+    section { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin: 0 0 16px; }
+    h2 { margin: 0 0 8px; font-size: 18px; color: var(--green); }
+    h3 { margin: 14px 0 4px; font-size: 15px; }
+    p, li { color: var(--ink); }
+    ul { padding-left: 20px; margin: 6px 0; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .todo { background: #fef9c3; border: 2px dashed #ca8a04; border-radius: 10px; padding: 10px 14px; }
+    a { color: var(--green); }
+    footer { text-align: center; color: var(--muted); font-size: 13px; padding: 0 16px 32px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div>
+        <p>Green Tag · Province of Laguna</p>
+        <h1>Privacy Policy</h1>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p class="muted">Effective 20 October 2026. Written under the Data Privacy Act of 2012 (Republic Act No. 10173) and its implementing rules.</p>
+
+    <section>
+      <h2>Who we are</h2>
+      <p>
+        Green Tag (<a href="https://greentag.laguna.gov.ph">greentag.laguna.gov.ph</a>) is the tree inventory and biodiversity
+        system of the Provincial Government of Laguna, run by the Provincial Government Environment and Natural Resources
+        Office (PGENRO) with the Municipal and City Environment and Natural Resources Offices (MENRO / CENRO) of Laguna,
+        and developed with Laguna State Polytechnic University. PGENRO is the personal information controller for the
+        system.
+      </p>
+    </section>
+
+    <section>
+      <h2>What we collect, and from whom</h2>
+      <h3>Visitors</h3>
+      <p>Looking at the map, the BioDashboard and the other public pages needs no account, and we collect nothing personal
+        from it. We use no advertising or tracking cookies and no analytics services.</p>
+
+      <h3>Residents who sign in with Google</h3>
+      <ul>
+        <li>Your name as Google gives it, or the nickname you choose instead. The leaderboard shows only this.</li>
+        <li>The email address of your Google account, so the same person is counted once. It is shown to nobody, not
+          even the offices.</li>
+        <li>The trees you tag: where each tree stands, its species, the photos you take of it, and whether a field
+          officer has verified it.</li>
+      </ul>
+      <p>Nothing else is taken from your Google account: not your contacts, your photos or your location.</p>
+
+      <h3>People who write to an office through Contact Us</h3>
+      <p>Your name, email address and message, and the address and affiliation if you give them. Only the office you
+        choose reads them.</p>
+
+      <h3>Office accounts (PGENRO, MENRO / CENRO and their field officers)</h3>
+      <p>Name, email address, designation, office address, contact number and photo; and a record of the changes made
+        through the account, kept so the inventory can be audited.</p>
+
+      <h3>Tree photos and inventories</h3>
+      <p>Photos are of trees. Please do not photograph people. When an office brings in an existing inventory or map file,
+        the system leaves out columns holding personal data, such as owners' names, before anything is saved.</p>
+    </section>
+
+    <section>
+      <h2>Why we use it</h2>
+      <ul>
+        <li>To keep the province's inventory of trees and green spaces, and to verify what residents tag.</li>
+        <li>To count the residents who take part, as the City Biodiversity Index asks of each city and municipality, and
+          to rank the leaderboard.</li>
+        <li>To let the offices answer the messages sent to them.</li>
+        <li>To run the office accounts securely, and to know who changed what.</li>
+      </ul>
+      <p>We do not sell personal information, use it for advertising, or share it beyond what this page says.</p>
+    </section>
+
+    <section>
+      <h2>Who else handles it for us</h2>
+      <p>These services run parts of Green Tag under their own security and privacy terms. They handle the information
+        only to provide their service.</p>
+      <ul>
+        <li><strong>Supabase</strong>: the database, the accounts and sign-in.</li>
+        <li><strong>Google</strong>: the "Continue with Google" sign-in; and Gemini, which the field app and the offices
+          use to suggest a tree's species from its photos.</li>
+        <li><strong>Cloudinary</strong>: stores the photos of tagged trees.</li>
+        <li><strong>Brevo</strong>: sends an office's email reply to a message, when the office replies by email.</li>
+        <li><strong>Map providers</strong> (such as OpenStreetMap and Esri): draw the map. Your browser asks them for map
+          pictures, as with any web map.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What the public sees</h2>
+      <ul>
+        <li>Trees, with their species, measurements and photos, so everyone can learn about the province's trees.</li>
+        <li>Trees tagged and not yet verified, shown grey so nobody tags one twice: where they are and what species,
+          never who tagged them.</li>
+        <li>The leaderboard: names or nicknames and counts only.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How long we keep it</h2>
+      <ul>
+        <li><strong>A resident's account</strong>: until you delete it. On the Community page, "Delete my account" removes
+          your sign-in, email, name or nickname and agreement at once. The trees you tagged stay in the inventory, as trees,
+          credited to nobody.</li>
+        <li><strong>Messages</strong>: until the office that received them deletes them.</li>
+        <li><strong>Office accounts</strong>: kept, and archived when their holder leaves, so the records they made keep
+          their author, as government records must.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>How we protect it</h2>
+      <p>Information travels encrypted (HTTPS). Every office sees only its own city or municipality's records, and the
+        database itself enforces it. Access keys are kept on the server, never in your browser.</p>
+    </section>
+
+    <section>
+      <h2>Your rights, and whom to ask</h2>
+      <p>Under the Data Privacy Act you may ask to be told what we hold about you, to see it, to have it corrected, to
+        have it deleted, and to object to its use. A resident can delete their own account at any time from the Community
+        page. For anything else, write to:</p>
+
+      <div class="todo">
+        <!-- FILL IN: the Data Protection Officer's name, office and email, then remove this box's yellow style. -->
+        <strong>FILL IN before this page goes live:</strong> Data Protection Officer — name, office, and email address.
+      </div>
+
+      <p>You may also write to an office through the Contact Us form on the <a href="https://greentag.laguna.gov.ph/about">About page</a>. If you
+        believe your information was mishandled, you may complain to the National Privacy Commission
+        (<a href="https://privacy.gov.ph">privacy.gov.ph</a>).</p>
+    </section>
+
+    <section>
+      <h2>Changes to this policy</h2>
+      <p>When this policy changes, the new version is posted here with its date.</p>
+    </section>
+  </main>
+
+  <footer>
+    <a href="/">Back to Green Tag</a> · A collaboration of the Provincial Government of Laguna, PGENRO and Laguna State
+    Polytechnic University.
+  </footer>
+</body>
+</html>
