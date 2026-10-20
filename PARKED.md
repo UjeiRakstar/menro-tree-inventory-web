@@ -126,11 +126,11 @@ can do everything. The RISE details on the public tree panel, more of them.
   carbon map; a tree-by-tree list in its Excel file. Still outside it: carbon
   lost to cutting, fuelwood and disturbance (the permits could feed the first,
   once they record volume), and the other sectors' emissions.
-- CDRA hatching for hazard levels — **done 20 October:** on the map sheet,
-  flood and landslide levels are hatched (low sparse lines, medium denser,
-  high crosshatched) in their colours over a light tint, the legend to
-  match; "Solid colours" stays an option. The thematic reports' hazard maps
-  get it too.
+- CDRA hatching for hazard levels — **tried and dropped 20 October** (it did
+  not look good on a real sheet). Instead, every hazard map, legend and chart
+  uses **DHSUD's CDRA colours**: yellow low, purple moderate, red high (dark
+  red kept for a very high level). Published layers are repainted in the
+  browser; nothing needs uploading again.
 - Incentives for residents: after the leaderboard.
 - The inventory template is provisional (`src/lib/treeInventory.js`): Tree
   No., Common and Scientific name, Latitude, Longitude, Barangay, DBH, Total
@@ -429,7 +429,7 @@ stayed online** after the area was deleted or its PDF replaced.
   Laguna-BuiltUp.geojson (28 MB) could mark built-up ground on the map, or
   feed the land cover suggestion — not asked for yet.
 - **Phase 5: reports** — done: the GHG inventory report (20 October), the City
-  Biodiversity Index in the biodiversity report, CDRA hatching. *Built:* the map sheet (Make map on the office map → /map-sheet): the
+  Biodiversity Index in the biodiversity report, DHSUD's CDRA colours. *Built:* the map sheet (Make map on the office map → /map-sheet): the
   CDRA layout with Santa Cruz's plate as the template, any survey layer, A4 or
   A3, printed or saved as PDF at its stated scale, or as a PNG. Not yet:
   hazard data other than NOAH's — Santa Cruz's own CDRA landslide plate (UPLB) shows low

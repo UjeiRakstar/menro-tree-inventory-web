@@ -2,33 +2,44 @@
  * How PGENRO's layers are coloured on the map — decided here, not when the
  * file was uploaded.
  *
- * The map already speaks in colour: tree pins are red, orange and green for
- * what each tree needs, land cover is outlined green and planting sites
- * yellow. A layer underneath in the same colours makes a red pin on a red
- * flood zone disappear. So the layers keep out of those hues:
+ *   flood, landslide   DHSUD's CDRA colours (decided 20 October): yellow
+ *                      low, purple moderate, red high — the standard for
+ *                      hazard, exposure and risk maps in the Philippines,
+ *                      so a map reads the way every CDRA plate reads
+ *   elevation          sand to brown, the way a topographic map shades height
+ *   soil               muted earth and slate tones, one per soil series
  *
- *   flood       blues — water, darker the worse
- *   landslide   purples
- *   elevation   sand to brown, the way a topographic map shades height
- *   soil        muted earth and slate tones, one per soil series
+ * The hazards used to keep out of the tree pins' red, orange and green (blues
+ * for flood, purples for landslide). The standard comes first now; a red pin
+ * on a high hazard is told apart by its white outline.
  *
  * Pictures published before this palette are repainted in the browser
  * (browser.js repaintPicture), so nobody has to upload them again.
  */
 
+/**
+ * DHSUD's Climate and Disaster Risk Assessment colours, as the risk matrix
+ * gives them (Low, Moderate, High, Very High). NOAH's hazard maps have three
+ * levels, low to high; very high is kept for a map, or a risk score, that
+ * has four.
+ */
+export const CDRA_COLOURS = Object.freeze({
+  low: Object.freeze([255, 255, 0]),
+  moderate: Object.freeze([112, 48, 160]),
+  high: Object.freeze([255, 0, 0]),
+  veryHigh: Object.freeze([192, 0, 0]),
+});
+
+const cdraLevels = () =>
+  Object.freeze({
+    1: [...CDRA_COLOURS.low, 170],
+    2: [...CDRA_COLOURS.moderate, 170],
+    3: [...CDRA_COLOURS.high, 180],
+  });
+
 export const HAZARD_PALETTES = Object.freeze({
-  flood: Object.freeze({
-    1: [166, 189, 219, 150],
-    2: [49, 130, 189, 170],
-    3: [8, 48, 107, 190],
-  }),
-  // Strong enough that low still reads on a light grey base map, where most
-  // of a lowland LGU is.
-  landslide: Object.freeze({
-    1: [196, 178, 222, 175],
-    2: [142, 104, 191, 185],
-    3: [84, 39, 143, 200],
-  }),
+  flood: cdraLevels(),
+  landslide: cdraLevels(),
 });
 
 /** Elevation bands 1–5 (elevation.js ELEVATION_BANDS), low to high. */
@@ -49,62 +60,6 @@ export const SOIL_PALETTE = Object.freeze([
 
 /** The lake, and BSWM's "no data" with it: nothing to colour. */
 export const isWaterBody = (soil) => /water body/i.test(`${soil?.description ?? ''} ${soil?.series ?? ''}`);
-
-/**
- * Hazard levels as a CDRA map draws them (20 October): hatched rather than
- * filled, so the ground under a hazard — roads, buildings, the base map —
- * still reads through it. Each level keeps its colour and gets its own
- * pattern, so the levels still tell apart in a black-and-white print:
- *
- *   low      sparse diagonal lines
- *   medium   denser diagonal lines
- *   high     dense crosshatch
- *
- * Under the lines, a light tint of the same colour. Measured in millimetres
- * on the paper, so a print at any scale has the same weight of line.
- */
-export const HAZARD_HATCH = Object.freeze({
-  1: Object.freeze({ spacing: 2.2, width: 0.32, cross: false, tint: 0.18 }),
-  2: Object.freeze({ spacing: 1.4, width: 0.32, cross: false, tint: 0.24 }),
-  3: Object.freeze({ spacing: 1.6, width: 0.3, cross: true, tint: 0.3 }),
-});
-
-export const HATCHED_KINDS = Object.freeze(['flood', 'landslide']);
-
-/** Each level's pattern for a hazard: its colour, in full, and HAZARD_HATCH. */
-export function hatchOf(kind, level) {
-  const colour = HAZARD_PALETTES[kind]?.[level];
-  const hatch = HAZARD_HATCH[level];
-  if (!colour || !hatch) return null;
-  return { ...hatch, colour: `rgb(${colour[0]},${colour[1]},${colour[2]})` };
-}
-
-/**
- * Where one level is, in a hazard picture: RGBA bytes, opaque white where a
- * pixel is that level's colour and clear everywhere else — an SVG mask for
- * the level's hatching. A canvas reads semi-transparent pixels back a step
- * or two off what was drawn, so a pixel goes to the nearest level's colour.
- */
-export function levelMask(data, kind, level) {
-  const palette = HAZARD_PALETTES[kind];
-  const levels = Object.entries(palette ?? {}).map(([value, rgba]) => ({ value: Number(value), rgb: rgba.slice(0, 3) }));
-  const out = new Uint8ClampedArray(data.length);
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) continue;
-    let best = null;
-    let bestDistance = 24;
-    for (const candidate of levels) {
-      const distance =
-        Math.abs(candidate.rgb[0] - data[i]) + Math.abs(candidate.rgb[1] - data[i + 1]) + Math.abs(candidate.rgb[2] - data[i + 2]);
-      if (distance < bestDistance) {
-        best = candidate.value;
-        bestDistance = distance;
-      }
-    }
-    if (best === level) out.set([255, 255, 255, 255], i);
-  }
-  return out;
-}
 
 /** The colour of a value in a picture layer, as [r, g, b, a], or null. */
 export function pictureColour(kind, value) {
@@ -157,7 +112,7 @@ export function layerKey(kind, meta) {
   }
   return (meta.legend ?? []).map((item) => {
     const colour = pictureColour(kind, item.value);
-    return { label: item.label, value: item.value, colour: colour ? css([...colour.slice(0, 3), 255]) : css(item.colour) };
+    return { label: item.label, colour: colour ? css([...colour.slice(0, 3), 255]) : css(item.colour) };
   });
 }
 

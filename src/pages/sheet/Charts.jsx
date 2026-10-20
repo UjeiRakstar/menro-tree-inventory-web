@@ -209,7 +209,7 @@ export function climateChart(table, props) {
         <YAxis yAxisId="temp" orientation="right" tick={AXIS_TICK} width={36} domain={['dataMin - 1', 'dataMax + 1']} />
         <Tooltip />
         <Legend wrapperStyle={{ fontSize: 10 }} />
-        <Bar yAxisId="rain" dataKey="rainfall" name="Rainfall (mm, left)" fill={rgb(HAZARD_PALETTES.flood[2])} isAnimationActive={false} />
+        <Bar yAxisId="rain" dataKey="rainfall" name="Rainfall (mm, left)" fill="#3182bd" isAnimationActive={false} />
         <Line yAxisId="temp" dataKey="temperature" name="Temperature (°C, right)" stroke="#dc2626" strokeWidth={2} dot isAnimationActive={false} />
       </ComposedChart>
     </ChartBox>

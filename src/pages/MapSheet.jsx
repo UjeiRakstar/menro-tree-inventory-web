@@ -12,12 +12,12 @@ import { loadCommunityCounts } from '../lib/community.js';
 import { centroidOf, formatArea, geometryAreaM2 } from '../lib/areaGeometry.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
-import { hazardMasks, loadGrid, loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
+import { loadGrid, loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
 import { slopeKey, slopePicture, terrainFacts } from '../lib/layers/terrain.js';
 import { REPORT_KINDS, REPORT_MAPS, buildThemeReport, reportKindById } from '../lib/reports/thematic.js';
 import { LAGUNA_GRID } from '../lib/layers/grid.js';
 import { areaFacts } from '../lib/layers/measure.js';
-import { HATCHED_KINDS, hatchOf, layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
+import { layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
 import { PLANNING_ONLY } from '../lib/namriaCover.js';
 import { PROVINCE_LOGO, logoFor } from '../lib/lguLogos.js';
 import pgenroLogo from '../assets/lgu-thumbs/PGENRO_LGU_logo.png';
@@ -276,13 +276,7 @@ export default function MapSheet() {
 
   // ---- What goes on it -------------------------------------------------------------
   const surveyLayer = survey ? layerFor(survey) : null;
-  // Flood and landslide levels hatched, as a CDRA plate draws them (20
-  // October), unless the office asks for solid colours (?levels=solid).
-  const hatched = HATCHED_KINDS.includes(survey) && params.get('levels') !== 'solid';
   const [picture, setPicture] = useState(null);
-  // Where each hazard level is, one mask a level: undefined while they are
-  // made, null when the browser could not (the sheet falls back to colour).
-  const [masks, setMasks] = useState(undefined);
   const [slopeBounds, setSlopeBounds] = useState(null);
   const [soil, setSoil] = useState(null);
   const [trees, setTrees] = useState([]);
@@ -384,19 +378,8 @@ export default function MapSheet() {
     : [];
   const soilColour = useMemo(() => soilColours(surveyLayer?.meta?.classes ?? []), [surveyLayer]);
 
-  useEffect(() => {
-    setMasks(undefined);
-    if (!hatched || !picture) return undefined;
-    let cancelled = false;
-    hazardMasks(picture, survey).then((made) => !cancelled && setMasks(made));
-    return () => {
-      cancelled = true;
-    };
-  }, [hatched, picture, survey]);
-  const hatching = hatched && Boolean(masks);
-
   // The sheet is ready to be taken as a picture once its layer is drawn.
-  const loading = !mapLayers.loaded || Boolean(surveyLayer && !picture && !soil) || Boolean(hatched && picture && masks === undefined);
+  const loading = !mapLayers.loaded || Boolean(surveyLayer && !picture && !soil);
 
   // Picture placed by its bounds: [[south, west], [north, east]].
   const pictureBox = useMemo(() => {
@@ -858,7 +841,7 @@ export default function MapSheet() {
       const ly = y + (i % perColumn) * row;
       blocks.push(
         <g key={`s${i}`}>
-          <rect x={lx} y={ly} width={4} height={2.2} fill={hatching && item.value ? `url(#sheet-hatch-${item.value})` : item.colour} stroke="#64748b" strokeWidth={0.15} />
+          <rect x={lx} y={ly} width={4} height={2.2} fill={item.colour} stroke="#64748b" strokeWidth={0.15} />
           <text x={lx + 5} y={ly + 1.8} fontSize={1.7 * big}>{wrap(item.label, Math.floor(chars / 2.3))[0]}</text>
         </g>
       );
@@ -1173,15 +1156,6 @@ export default function MapSheet() {
             </option>
           </select>
         </label>
-        {HATCHED_KINDS.includes(survey) && (
-          <label className={label}>
-            Hazard levels
-            <select value={hatched ? 'hatched' : 'solid'} onChange={(e) => set('levels', e.target.value === 'solid' ? 'solid' : null)} className={control}>
-              <option value="hatched">Hatched, as on a CDRA map</option>
-              <option value="solid">Solid colours</option>
-            </select>
-          </label>
-        )}
         <fieldset className="space-y-1">
           <legend className={label}>On the map</legend>
           {[
@@ -1281,26 +1255,6 @@ export default function MapSheet() {
             <clipPath id="sheet-place">
               <path d={placePath} clipRule="evenodd" />
             </clipPath>
-            {hatching &&
-              [1, 2, 3].map((level) => {
-                const hatch = hatchOf(survey, level);
-                if (!hatch) return null;
-                const mid = hatch.spacing / 2;
-                return (
-                  <pattern key={`hatch-${level}`} id={`sheet-hatch-${level}`} patternUnits="userSpaceOnUse" width={hatch.spacing} height={hatch.spacing} patternTransform="rotate(45)">
-                    <rect width={hatch.spacing} height={hatch.spacing} fill={hatch.colour} fillOpacity={hatch.tint} />
-                    <line x1={mid} y1={0} x2={mid} y2={hatch.spacing} stroke={hatch.colour} strokeWidth={hatch.width} />
-                    {hatch.cross && <line x1={0} y1={mid} x2={hatch.spacing} y2={mid} stroke={hatch.colour} strokeWidth={hatch.width} />}
-                  </pattern>
-                );
-              })}
-            {hatching &&
-              pictureBox &&
-              Object.entries(masks).map(([level, url]) => (
-                <mask key={`mask-${level}`} id={`sheet-level-${level}`} maskUnits="userSpaceOnUse" x={pictureBox.x} y={pictureBox.y} width={pictureBox.width} height={pictureBox.height}>
-                  <image href={url} x={pictureBox.x} y={pictureBox.y} width={pictureBox.width} height={pictureBox.height} preserveAspectRatio="none" />
-                </mask>
-              ))}
           </defs>
           <rect width={paper.width} height={paper.height} fill="#fff" />
 
@@ -1311,14 +1265,9 @@ export default function MapSheet() {
               <image key={tile.key} href={tile.url} x={tile.x} y={tile.y} width={tile.size + 0.05} height={tile.size + 0.05} preserveAspectRatio="none" />
             ))}
             <g clipPath="url(#sheet-place)">
-              {picture && pictureBox && hatching
-                ? Object.keys(masks).map((level) => (
-                    <rect key={`level-${level}`} x={pictureBox.x} y={pictureBox.y} width={pictureBox.width} height={pictureBox.height}
-                      fill={`url(#sheet-hatch-${level})`} mask={`url(#sheet-level-${level})`} />
-                  ))
-                : picture && pictureBox && (
-                    <image href={picture} x={pictureBox.x} y={pictureBox.y} width={pictureBox.width} height={pictureBox.height} preserveAspectRatio="none" opacity={0.85} />
-                  )}
+              {picture && pictureBox && (
+                <image href={picture} x={pictureBox.x} y={pictureBox.y} width={pictureBox.width} height={pictureBox.height} preserveAspectRatio="none" opacity={0.85} />
+              )}
               {soil?.features?.map((feature, i) => {
                 const colour = soilColourOf(soilColour, feature.properties);
                 return colour ? (
