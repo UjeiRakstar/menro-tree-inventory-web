@@ -306,6 +306,22 @@ check('…nor anyone else’s details', others === 0);
 const already = await one(`select onboarded_at from public.profiles where id = $1`, [ADMIN]);
 check('accounts already in use are not sent through set-up', already.onboarded_at !== null);
 
+// ---- PGENRO's own nickname words (20 October) -----------------------------------------
+const before = await verdict('Kadiri Ka');
+const added = await as(ADMIN, 'authenticated', () => fails(() => db.query(`insert into public.nickname_words (word, anywhere) values ('Kadiri', true)`)));
+check('PGENRO adds a word to the nickname list', added === null && before === null, added ?? before ?? '');
+check('…and a nickname holding it is refused from then on', (await verdict('Kadiri Ka')) !== null);
+const stored = await one(`select word, built_in, added_by from public.nickname_words where word = 'kadiri'`);
+check('…stored in lower case, as PGENRO’s, never as built in', stored?.built_in === false && stored.added_by === ADMIN, JSON.stringify(stored));
+const menroWord = await as(MENRO, 'authenticated', () => fails(() => db.query(`insert into public.nickname_words (word) values ('bawal')`)));
+check('an office does not change the list', menroWord !== null);
+const builtInGone = (await as(ADMIN, 'authenticated', () => db.query(`delete from public.nickname_words where word = 'tanga'`))).affectedRows;
+check('PGENRO cannot remove a built-in word', builtInGone === 0);
+const ownGone = (await as(ADMIN, 'authenticated', () => db.query(`delete from public.nickname_words where word = 'kadiri'`))).affectedRows;
+check('…only its own', ownGone === 1 && (await verdict('Kadiri Ka')) === null);
+const anonList = await as(null, 'anon', () => fails(() => db.query(`select word from public.nickname_words`)));
+check('the public cannot read the list', anonList !== null);
+
 // ---- health_check.sql: read-only, runs on a part-built database -----------------
 try {
   const before = (await db.query(`select count(*)::int n from public.profiles`)).rows[0].n;

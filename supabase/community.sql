@@ -196,12 +196,72 @@ create trigger stamp_tag_sender
 -- ===========================================================================
 -- 3. Nicknames
 -- ===========================================================================
+-- The words a nickname may not hold. Built in, and PGENRO's own additions
+-- (20 October: "PGENRO may want words added"), made in Settings. 'anywhere'
+-- words are looked for anywhere in the name; the rest only as whole words, so
+-- "Essex" and "Dickson" are not caught. The built-in words stay built in:
+-- running this file again restores them, and PGENRO removes only its own.
+create table if not exists public.nickname_words (
+  word      text primary key,
+  anywhere  boolean not null default false,
+  built_in  boolean not null default false,
+  added_by  uuid,
+  added_at  timestamptz not null default now()
+);
+alter table public.nickname_words drop constraint if exists nickname_words_word_check;
+alter table public.nickname_words add constraint nickname_words_word_check check (word ~ '^[a-z]{2,30}$');
+
+insert into public.nickname_words (word, anywhere, built_in)
+select word, true, true from unnest(array[
+  'fuck', 'fvck', 'phuck', 'shit', 'bitch', 'cunt', 'pussy', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'porn', 'penis',
+  'vagina', 'asshole', 'bastard', 'blowjob', 'dildo', 'orgasm', 'horny', 'hentai', 'masturb', 'rapist',
+  'putangina', 'putang', 'tangina', 'kantot', 'kantut', 'jakol', 'burat', 'pekpek', 'tamod', 'libog',
+  'pokpok', 'hindot', 'kupal', 'tarantado', 'pakyu', 'pakshet', 'etits', 'bilat', 'kiffy'
+]) as word
+on conflict (word) do update set built_in = true, anywhere = true;
+insert into public.nickname_words (word, anywhere, built_in)
+select word, false, true from unnest(array[
+  'sex', 'sexy', 'ass', 'dick', 'cock', 'tit', 'tits', 'boob', 'boobs', 'cum', 'xxx', 'rape', 'fag', 'puta',
+  'gago', 'gaga', 'ulol', 'bobo', 'tanga', 'iyot', 'tite', 'titi', 'puke', 'bayag', 'suso', 'hayop', 'nude',
+  'admin', 'administrator', 'moderator', 'pgenro', 'menro', 'cenro', 'denr', 'official', 'greentag'
+]) as word
+on conflict (word) do update set built_in = true, anywhere = false;
+
+-- PGENRO's additions: lower case, letters only; never built in.
+create or replace function public.stamp_nickname_word()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  new.word := lower(trim(new.word));
+  if current_user in ('authenticated', 'anon') then
+    new.built_in := false;
+    new.added_by := auth.uid();
+    new.added_at := now();
+  end if;
+  return new;
+end $$;
+drop trigger if exists stamp_nickname_word on public.nickname_words;
+create trigger stamp_nickname_word before insert or update on public.nickname_words
+  for each row execute function public.stamp_nickname_word();
+
+alter table public.nickname_words enable row level security;
+drop policy if exists "pgenro reviews the nickname words" on public.nickname_words;
+create policy "pgenro reviews the nickname words" on public.nickname_words
+  for select to authenticated using (public.is_pgenro());
+drop policy if exists "pgenro adds nickname words" on public.nickname_words;
+create policy "pgenro adds nickname words" on public.nickname_words
+  for insert to authenticated with check (public.is_pgenro());
+drop policy if exists "pgenro removes its own nickname words" on public.nickname_words;
+create policy "pgenro removes its own nickname words" on public.nickname_words
+  for delete to authenticated using (public.is_pgenro() and not built_in);
+revoke all on public.nickname_words from anon;
+revoke update on public.nickname_words from authenticated;
+grant select, insert, delete on public.nickname_words to authenticated;
+
 -- Why a nickname is refused, or null. Spellings with numbers for letters are
 -- read as letters (4 → a, 1 → i, 0 → o …); a word repeated letter by letter
--- ("fuuuck") is read once. Long words are looked for anywhere in the name; short
--- ones only as whole words, so "Essex" and "Dickson" are not caught.
+-- ("fuuuck") is read once.
 create or replace function public.nickname_problem(p_nickname text)
-returns text language plpgsql immutable set search_path = public as $$
+returns text language plpgsql stable security definer set search_path = public as $$
 declare
   v_name text := trim(coalesce(p_nickname, ''));
   v_plain text;
@@ -210,18 +270,9 @@ declare
   v_word text;
   v_tokens text[];
   -- Anywhere in the name.
-  v_long text[] := array[
-    'fuck', 'fvck', 'phuck', 'shit', 'bitch', 'cunt', 'pussy', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'porn', 'penis',
-    'vagina', 'asshole', 'bastard', 'blowjob', 'dildo', 'orgasm', 'horny', 'hentai', 'masturb', 'rapist',
-    'putangina', 'putang', 'tangina', 'kantot', 'kantut', 'jakol', 'burat', 'pekpek', 'tamod', 'libog',
-    'pokpok', 'hindot', 'kupal', 'tarantado', 'pakyu', 'pakshet', 'etits', 'bilat', 'kiffy'
-  ];
+  v_long text[] := array(select word from public.nickname_words where anywhere);
   -- As whole words only.
-  v_short text[] := array[
-    'sex', 'sexy', 'ass', 'dick', 'cock', 'tit', 'tits', 'boob', 'boobs', 'cum', 'xxx', 'rape', 'fag', 'puta',
-    'gago', 'gaga', 'ulol', 'bobo', 'tanga', 'iyot', 'tite', 'titi', 'puke', 'bayag', 'suso', 'hayop', 'nude',
-    'admin', 'administrator', 'moderator', 'pgenro', 'menro', 'cenro', 'denr', 'official', 'greentag'
-  ];
+  v_short text[] := array(select word from public.nickname_words where not anywhere);
 begin
   if length(v_name) < 3 or length(v_name) > 24 then
     return 'A nickname is 3 to 24 characters.';
@@ -428,6 +479,11 @@ select 'a Google sign-in becomes a resident',
 union all
 select 'tags carry who sent them',
        exists (select 1 from information_schema.columns where table_name = 'pending_trees' and column_name = 'submitted_by'),
+       ''
+union all
+select 'PGENRO adds to the nickname words',
+       to_regclass('public.nickname_words') is not null
+       and (select count(*) from public.nickname_words where built_in) >= 70,
        ''
 union all
 select 'nicknames are checked',

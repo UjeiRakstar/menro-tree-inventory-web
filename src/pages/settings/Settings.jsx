@@ -12,6 +12,7 @@ import DocumentsSection from './DocumentsSection.jsx';
 import ImportSection from './ImportSection.jsx';
 import TreeInventorySection from './TreeInventorySection.jsx';
 import AiSection from './AiSection.jsx';
+import NicknameWordsSection from './NicknameWordsSection.jsx';
 import PasswordSection from './PasswordSection.jsx';
 
 /**
@@ -56,6 +57,7 @@ export default function Settings() {
       {(lguInfo || pgenro) && <TreeInventorySection lgu={lguInfo} pgenro={pgenro} />}
       <ImportSection lgu={lguInfo} />
       <AiSection office={office} pgenro={pgenro} />
+      {pgenro && <NicknameWordsSection />}
       <PasswordSection />
     </section>
   );
