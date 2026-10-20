@@ -12,6 +12,12 @@ export const CONTACT_OFFICES = [
   ...MUNICIPALITY_LIST.map((lgu) => ({ office: String(lgu.psgc), name: `${officialName(lgu)} — MENRO / CENRO` })),
 ];
 const nameOf = (office) => CONTACT_OFFICES.find((entry) => entry.office === String(office))?.name ?? office;
+
+/**
+ * A request about one's own personal data in Green Tag (RA 10173): it goes to
+ * PGENRO, which keeps the records, under its own subject (inbox.sql).
+ */
+export const PRIVACY_REQUEST = { office: 'privacy', name: 'PGENRO — data privacy request (your personal information in Green Tag)' };
 const hasContact = (p) => Boolean(p?.email || p?.phone || p?.facebook_url || p?.website_url || p?.address_line1);
 const href = (url) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 
@@ -118,14 +124,20 @@ export function ContactForm() {
       return;
     }
     setSending(true);
-    const { error } = await supabase.rpc('send_contact_message', {
-      p_office: form.office,
+    const privacy = form.office === PRIVACY_REQUEST.office;
+    const params = {
+      p_office: privacy ? 'pgenro' : form.office,
       p_name: form.name,
       p_email: form.email,
       p_address: form.address,
       p_affiliation: form.affiliation,
       p_message: form.message,
-    });
+    };
+    let { error } = await supabase.rpc('send_contact_message', privacy ? { ...params, p_topic: 'privacy' } : params);
+    // A database not yet given the privacy topic: send it to PGENRO, marked in the message.
+    if (error && privacy && /Could not find the function|p_topic/i.test(error.message ?? '')) {
+      ({ error } = await supabase.rpc('send_contact_message', { ...params, p_message: `[Data privacy request] ${form.message}` }));
+    }
     setSending(false);
     if (error) {
       setOutcome({
@@ -136,11 +148,12 @@ export function ContactForm() {
       });
       return;
     }
+    const to = privacy ? 'PGENRO, as a data privacy request' : nameOf(form.office);
     setOutcome({
       ok: true,
       text: resident
-        ? `Sent to ${nameOf(form.office)}. Their reply will be waiting for you on the Community page.`
-        : `Sent to ${nameOf(form.office)}. They will reply to ${form.email}.`,
+        ? `Sent to ${to}. The reply will be waiting for you on the Community page.`
+        : `Sent to ${to}. They will reply to ${form.email}.`,
     });
     setForm((current) => ({ ...current, message: '' }));
   }
@@ -159,7 +172,13 @@ export function ContactForm() {
           {CONTACT_OFFICES.map((entry) => (
             <option key={entry.office} value={entry.office}>{entry.name}</option>
           ))}
+          <option value={PRIVACY_REQUEST.office}>{PRIVACY_REQUEST.name}</option>
         </select>
+        {form.office === PRIVACY_REQUEST.office && (
+          <p className="mt-1 text-xs text-slate-600">
+            To ask what Green Tag keeps about you, to see it, to correct it or to have it deleted. PGENRO answers it.
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
         <div>

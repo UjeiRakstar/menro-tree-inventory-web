@@ -357,11 +357,17 @@ create trigger notify_unknown_species
 -- ===========================================================================
 -- 5. The public's messages
 -- ===========================================================================
+-- p_topic 'privacy' (20 October): a request about one's own personal data in
+-- Green Tag (RA 10173). It goes to PGENRO, which keeps the records, whatever
+-- office was chosen, under a subject that says what it is.
+drop function if exists public.send_contact_message(text, text, text, text, text, text);
 create or replace function public.send_contact_message(
-  p_office text, p_name text, p_email text, p_address text, p_affiliation text, p_message text)
+  p_office text, p_name text, p_email text, p_address text, p_affiliation text, p_message text,
+  p_topic text default null)
 returns void language plpgsql security definer set search_path = public as $$
 declare
-  v_office text := trim(coalesce(p_office, ''));
+  v_privacy boolean := coalesce(p_topic, '') = 'privacy';
+  v_office text := case when coalesce(p_topic, '') = 'privacy' then 'pgenro' else trim(coalesce(p_office, '')) end;
   v_name text := trim(coalesce(p_name, ''));
   v_email text := lower(trim(coalesce(p_email, '')));
   v_message text := trim(coalesce(p_message, ''));
@@ -385,12 +391,14 @@ begin
   end if;
 
   insert into public.inbox_messages (kind, office, subject, body, sender_name, sender_email, sender_address, sender_affiliation)
-  values ('contact', v_office, 'Message from ' || v_name, v_message, v_name, v_email,
+  values ('contact', v_office,
+          case when v_privacy then 'Data privacy request from ' else 'Message from ' end || v_name,
+          v_message, v_name, v_email,
           nullif(trim(coalesce(p_address, '')), ''), nullif(trim(coalesce(p_affiliation, '')), ''));
 end $$;
 
-revoke all on function public.send_contact_message(text, text, text, text, text, text) from public;
-grant execute on function public.send_contact_message(text, text, text, text, text, text) to anon, authenticated;
+revoke all on function public.send_contact_message(text, text, text, text, text, text, text) from public;
+grant execute on function public.send_contact_message(text, text, text, text, text, text, text) to anon, authenticated;
 
 
 -- ===========================================================================

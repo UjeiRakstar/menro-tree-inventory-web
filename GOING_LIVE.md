@@ -39,9 +39,10 @@ Google dashboards) or **IT** (whoever uploads to the website).
    (brevo.com) → Senders → verify the sending address → SMTP & API → make an
    API key. In Supabase → Edge Functions → Secrets: `BREVO_API_KEY` and
    `MAIL_FROM`. Without them the Inbox opens the office's own email app.
-4. **The privacy page's contact.** In `public/privacy.html`, under "Your
-   rights, and whom to ask", replace the yellow FILL IN box with the Data
-   Protection Officer's name, office and email.
+4. **The privacy page's contact.** Done 20 October: privacy requests go to
+   PGENRO through the Contact Us form ("PGENRO — data privacy request"); run
+   inbox.sql again for it. A named Data Protection Officer can be added to
+   `public/privacy.html` under "Your rights, and whom to ask".
 
 ## B. Google sign-in, in testing — you, now
 

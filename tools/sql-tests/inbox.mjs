@@ -166,6 +166,10 @@ ok('…nor PGENRO', !(await inbox(PG)).some((m) => m.kind === 'contact'));
 ok('the public reads no inbox', ((await run(null, `select id from public.inbox_messages`, [], 'anon')).rows ?? []).length === 0);
 const toPg = await run(null, `select public.send_contact_message('pgenro', 'Ana', 'ana@example.com', null, null, 'Hello PGENRO')`, [], 'anon');
 ok('…or writes to PGENRO', toPg.error === null && (await inbox(PG)).some((m) => m.kind === 'contact'), toPg.error ?? '');
+const privacy = await run(null, `select public.send_contact_message($1, 'Maria', 'maria@example.com', null, null, 'Please delete my data.', 'privacy')`, [String(SCZ)], 'anon');
+ok('a data privacy request goes to PGENRO, whatever office was chosen, and says what it is',
+  privacy.error === null && (await inbox(PG)).some((m) => m.subject === 'Data privacy request from Maria')
+  && !(await inbox(SCZ_ADMIN)).some((m) => m.subject === 'Data privacy request from Maria'), privacy.error ?? '');
 for (const [name, args] of [
   ['an office that does not exist', `'999', 'Juan', 'juan@example.com', null, null, 'Hi'`],
   ['no name', `'pgenro', '', 'juan@example.com', null, null, 'Hi'`],

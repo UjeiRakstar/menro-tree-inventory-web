@@ -93,10 +93,11 @@ describe('writing to an office', () => {
     expect(screen.getByLabelText(/Message/)).toHaveValue('');
   });
 
-  it('offers PGENRO and all thirty cities and municipalities', () => {
+  it('offers PGENRO, all thirty cities and municipalities, and a data privacy request', () => {
     renderAbout();
     const options = within(screen.getByLabelText(/Send to/)).getAllByRole('option');
-    expect(options).toHaveLength(32);
+    expect(options).toHaveLength(33);
+    expect(options.at(-1)).toHaveTextContent('PGENRO — data privacy request');
     expect(options[1]).toHaveTextContent('PGENRO, Province of Laguna');
     expect(screen.getByRole('option', { name: 'City of Biñan — MENRO / CENRO' })).toBeInTheDocument();
   });
@@ -244,5 +245,23 @@ describe('AboutUs organisation logos', () => {
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
     }
+  });
+});
+
+describe('a data privacy request (20 October)', () => {
+  it('goes to PGENRO, marked as one, whatever the visitor writes', async () => {
+    supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
+    renderAbout();
+    const form = screen.getByRole('form', { name: 'Send a message' });
+    fireEvent.change(within(form).getByLabelText(/Send to/), { target: { value: 'privacy' } });
+    expect(form).toHaveTextContent('to have it deleted. PGENRO answers it.');
+    fireEvent.change(within(form).getByLabelText(/Full Name/), { target: { value: 'Maria' } });
+    fireEvent.change(within(form).getByLabelText(/Email Address/), { target: { value: 'maria@example.com' } });
+    fireEvent.change(within(form).getByLabelText(/Message/), { target: { value: 'Please delete my data.' } });
+    fireEvent.submit(form);
+    await waitFor(() =>
+      expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('send_contact_message', expect.objectContaining({ p_office: 'pgenro', p_topic: 'privacy' }))
+    );
+    expect(await within(form).findByRole('status')).toHaveTextContent('Sent to PGENRO, as a data privacy request.');
   });
 });
