@@ -173,7 +173,8 @@ describe('the tree inventory spreadsheet', () => {
     for (const row of [2, 5001]) {
       expect(trees.getCell(`${letter}${row}`).dataValidation).toEqual(expect.objectContaining({ type: 'list', formulae: ['Lists!$A$2:$A$3'] }));
     }
-  });
+    // ExcelJS writing and reading a whole workbook is slow when every test file runs at once.
+  }, 30000);
 
   it('reads a CSV, quotes and all', () => {
     expect(rowsOfCsv('Species,Remarks\r\n"Narra, old","said ""big"""\nMango,\n')).toEqual([

@@ -105,7 +105,7 @@ describe('App shell and routing', () => {
 
     // Following a link from the foot of a long page used to land on the foot
     // of the next one, with the charts above the fold.
-    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }));
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 })));
     vi.unstubAllGlobals();
   });
 

@@ -45,8 +45,36 @@ export const isMissingFunction = (error) =>
 /** Google sign-in not switched on in the Supabase dashboard. */
 export const isProviderOff = (error) => /provider is not enabled|unsupported provider/i.test(error?.message ?? '');
 
-/** Off to Google, and back to `path` — the Community page, or the map a tag was started from. */
+/**
+ * Which sign-in providers the project has switched on, from Supabase's public
+ * settings — { google: true, email: true, … } — or null when it cannot be
+ * told. supabase-js does not ask before it sends the browser to a provider, so
+ * a provider left off showed a bare JSON error page (found 20 October).
+ */
+export async function enabledProviders(client = supabase) {
+  const url = client?.supabaseUrl;
+  const key = client?.supabaseKey;
+  if (!url || !key || typeof fetch !== 'function') return null;
+  try {
+    const response = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key } });
+    if (!response.ok) return null;
+    const settings = await response.json();
+    return settings?.external ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Off to Google, and back to `path` — the Community page, or the map a tag
+ * was started from. Asks first whether Google is switched on: when it is not,
+ * the page says so instead of sending the visitor to Supabase's bare error.
+ */
 export async function signInWithGoogle(path = '/community') {
+  const providers = await enabledProviders();
+  if (providers && !providers.google) {
+    return { data: null, error: { message: 'Unsupported provider: provider is not enabled' } };
+  }
   const redirectTo = `${globalThis.location?.origin ?? ''}${path}`;
   return supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
 }
