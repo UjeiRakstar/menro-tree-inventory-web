@@ -126,7 +126,11 @@ can do everything. The RISE details on the public tree panel, more of them.
   carbon map; a tree-by-tree list in its Excel file. Still outside it: carbon
   lost to cutting, fuelwood and disturbance (the permits could feed the first,
   once they record volume), and the other sectors' emissions.
-- CDRA hatching for hazard levels.
+- CDRA hatching for hazard levels — **done 20 October:** on the map sheet,
+  flood and landslide levels are hatched (low sparse lines, medium denser,
+  high crosshatched) in their colours over a light tint, the legend to
+  match; "Solid colours" stays an option. The thematic reports' hazard maps
+  get it too.
 - Incentives for residents: after the leaderboard.
 - The inventory template is provisional (`src/lib/treeInventory.js`): Tree
   No., Common and Scientific name, Latitude, Longitude, Barangay, DBH, Total
@@ -166,9 +170,9 @@ can do everything. The RISE details on the public tree panel, more of them.
   - Verified in the field, an imported tree becomes an `inventory` tree, not
     a crowdsourced one, keeping the sheet's number, scientific name, DBH and
     heights where the officer recorded none of their own.
-  - **To decide:** unverified imported trees are not on the public map, and
-    the dashboards count only verified trees. Should the public see them,
-    grey, as "from the LGU's inventory, not yet verified"?
+  - Unverified imported trees on the public map — **decided and done 19
+    October:** grey, as not yet verified. The dashboards still count only
+    verified trees.
   - The nickname word list — **done 20 October:** PGENRO adds and removes
     its own words in Settings → Nicknames (the built-in ones stay), and tries
     a nickname against the list there (step 24).
@@ -218,9 +222,6 @@ can do everything. The RISE details on the public tree panel, more of them.
 
 ## Mine to fix — found in this sweep
 
-- **A trainee in the field app is not told.** The training wall works in the
-  app (tested), but the app shows no "training" banner the way the website
-  does.
 - **Two hover tooltips in the tree panel can still clip.** The ⓘ there now
   uses the shared, portalled `InfoHint`. The trait-badge and phenology
   tooltips in `TreeDetailPanel.jsx` are not ⓘ buttons and still use the old
@@ -388,10 +389,6 @@ real field app still syncs a tree — nothing in it should change for a real
 account.
 
 Still open:
-- **A MENRO can create a field officer in any municipality.** The Arborists
-  page lets them pick any of the thirty. The new officer then lands in that
-  LGU — out of sight of the MENRO who created them. The list should be their
-  own LGU only.
 - **Field officer accounts are still created from the browser.**
   `ManageArborists.jsx` calls `supabase.auth.signUp` to make another person's
   account. With email confirmation on, as it is, that works, but the MENRO
@@ -415,40 +412,27 @@ stayed online** after the area was deleted or its PDF replaced.
 
 ## Asked for on 14 October, not built yet
 
-- **Messages, and News and Events** (16 October, from the mockups). Messages:
-  the About page's contact form asks which city or municipality, and that
-  MENRO / CENRO reads it in Messages (PGENRO reads all) — reply opens the
-  office's email with the message quoted; delete and archive. News and
-  Events: not yet designed beyond the menu item.
 - **The field app's tree identification change** is committed (`1eb809e` on
   the field app's branch). `flutter test` there needs CMake installed (dartcv4
   builds OpenCV); on this PC it does not run.
 
-- **One standard format for every Excel download** (15 October). The MENRO
-  report, the PGENRO permit report and the inventory export each lay their
-  sheets out differently. Waiting on the official format to standardise on —
-  a template from PGENRO, or the DENR form it should follow.
-- **A hall for every LGU, pinned by PGENRO.** An LGU with no real office yet
-  has no hall, so its map's centre button shows the whole town, a training
-  account's included (trainees cannot pin the real hall, by design). The
-  database already lets PGENRO pin any LGU's hall (`set_lgu_hall` with an
-  LGU); there is no screen for it yet.
 
-- **No landslide layer.** Phase 4 is built; PGENRO's folder (Documents/Acads/
-  Tree Inventory Web App Tech Files) has soil, the DEM, NOAH flooding and
-  CLIRAM for all 30 LGUs, but no NOAH rain-induced landslide map. Its slot on
-  the Map layers page waits for one; areas say "Not assessed" until then.
+- **No landslide layer — but there may be one on your computer.**
+  `Documents/Landslide Laguna.geojson` (203 MB, 16 October) holds landslide
+  hazard polygons with an `LH` level of 1 to 3, the way NOAH's are, and the
+  Map layers page reads `LH`. If it is NOAH's rain-induced landslide map,
+  upload it from the PGENRO account (Map layers → Rain-induced landslide
+  hazard); until then areas say "Not assessed".
 - **Files in that folder not used, and why.** The elevation bands GeoJSON
   carries codes (-2 … 1001) with no key, so the DEM it came from is used
   instead. The 100-year flood shapefile is the same NOAH data as the GeoJSON.
   Laguna-BuiltUp.geojson (28 MB) could mark built-up ground on the map, or
   feed the land cover suggestion — not asked for yet.
-- **Phase 5: reports** — the GHG inventory table, and the City Biodiversity
-  Index. *Built:* the map sheet (Make map on the office map → /map-sheet): the
+- **Phase 5: reports** — done: the GHG inventory report (20 October), the City
+  Biodiversity Index in the biodiversity report, CDRA hatching. *Built:* the map sheet (Make map on the office map → /map-sheet): the
   CDRA layout with Santa Cruz's plate as the template, any survey layer, A4 or
-  A3, printed or saved as PDF at its stated scale, or as a PNG. Not yet: CDRA's
-  hatching for hazard levels (solid colours now), and hazard data other than
-  NOAH's — Santa Cruz's own CDRA landslide plate (UPLB) shows low
+  A3, printed or saved as PDF at its stated scale, or as a PNG. Not yet:
+  hazard data other than NOAH's — Santa Cruz's own CDRA landslide plate (UPLB) shows low
   susceptibility where NOAH maps none.
 - **CAPSTONE_SPECS.md is behind.** Written 10 October: it predates accounts and
   roles, the office map, training, RISE, the province board, saving areas, and
@@ -458,14 +442,6 @@ stayed online** after the area was deleted or its PDF replaced.
   permit by its tree's barangay, or by the point a walk-in permit was issued
   for. A walk-in permit with neither lands under "Not placed". Storing
   `lgu_psgc` on `permits` when one is issued would make that exact.
-- **The RISE fields on the public map.** The forester's Species (RISE) tab
-  saves family, local names, status, distribution, site needs, flowering and
-  fruiting months, propagation, uses and pests. The public tree panel still
-  shows only the description. Showing the rest is a design question: which of
-  them a resident wants.
-- **Google sign-in for the public, and a leaderboard** of who tagged the most
-  trees. Counts registered residents and their tags, for the City Biodiversity
-  Index later.
 
 ## Waiting on another system
 

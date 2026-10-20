@@ -1,5 +1,5 @@
 import { prepareElevation, prepareHazard, prepareSoil, readGeoJson } from './prepare.js';
-import { repaintMap, repaintPixels } from './palette.js';
+import { HAZARD_HATCH, levelMask, repaintMap, repaintPixels } from './palette.js';
 
 /**
  * The browser's half of the map layers: files in, files out.
@@ -78,6 +78,40 @@ export function repaintPicture(url, kind, legend) {
     );
   }
   return repainted.get(url);
+}
+
+const masked = new Map();
+
+/**
+ * A hazard picture (already in today's colours) split into one mask per
+ * level, for the sheet's CDRA hatching: { 1: url, 2: url, 3: url }. Made once
+ * per picture. Null when the browser cannot read the picture back.
+ */
+export function hazardMasks(url, kind) {
+  if (!url) return Promise.resolve(null);
+  const key = `${kind}|${url}`;
+  if (!masked.has(key)) {
+    masked.set(
+      key,
+      (async () => {
+        const blob = await (await fetch(url)).blob();
+        const bitmap = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+        const canvas = typeof OffscreenCanvas !== 'undefined'
+          ? new OffscreenCanvas(bitmap.width, bitmap.height)
+          : Object.assign(document.createElement('canvas'), { width: bitmap.width, height: bitmap.height });
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, 0, 0);
+        const image = context.getImageData(0, 0, bitmap.width, bitmap.height);
+        const masks = {};
+        for (const level of Object.keys(HAZARD_HATCH)) {
+          const data = levelMask(image.data, kind, Number(level));
+          masks[level] = URL.createObjectURL(await encodePng({ width: image.width, height: image.height, data }));
+        }
+        return masks;
+      })().catch(() => null)
+    );
+  }
+  return masked.get(key);
 }
 
 // ---- Preparing ----------------------------------------------------------------------
