@@ -1,4 +1,4 @@
-import { FileText, Loader2, Printer, RotateCcw, Sparkles } from 'lucide-react';
+import { FileSpreadsheet, FileText, Loader2, Printer, RotateCcw, Sparkles } from 'lucide-react';
 import { AttributeTable, Paper, PaperStack, SOURCES_NOTE, tablePages } from './Paper.jsx';
 import { chartFor } from './Charts.jsx';
 import { sectionPages } from './ReportView.jsx';
@@ -36,6 +36,7 @@ export default function ThemeReportView({
   onRewrite,
   onImprove,
   onDocx,
+  onXlsx = null,
   busy = '',
   note = null,
 }) {
@@ -85,6 +86,12 @@ export default function ThemeReportView({
           {busy === 'docx' ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <FileText size={15} aria-hidden="true" />}
           Word (.docx)
         </button>
+        {onXlsx && (
+          <button type="button" onClick={onXlsx} disabled={Boolean(busy)} className={`${button} text-green-800 ring-1 ring-green-300 hover:bg-green-50`}>
+            {busy === 'xlsx' ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <FileSpreadsheet size={15} aria-hidden="true" />}
+            Excel (.xlsx)
+          </button>
+        )}
         <button type="button" onClick={() => window.print()} disabled={Boolean(capturing)} className={`${button} text-green-800 ring-1 ring-green-300 hover:bg-green-50`}>
           <Printer size={15} aria-hidden="true" /> Print / PDF
         </button>

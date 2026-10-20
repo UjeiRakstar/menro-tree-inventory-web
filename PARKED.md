@@ -77,6 +77,9 @@ download and upload — its trees grey until verified with photos.
 app before proceeding to the mobile app"). The hagameter steps replaced by
 typing in what was measured with a real hagameter and tape (DBH, total and
 merchantable height); the trainee banner.
+- Done 20 October (field app, committed there): the trainee banner, violet
+  and on every screen, offline too; an imported tree's spreadsheet figures
+  on its card in Community Tags. Still parked: the hagameter steps.
 
 **Going live — parked 20 October** (no access yet to the IT team that uploads
 the site). Everything for it is in **GOING_LIVE.md**: the database and server
@@ -106,9 +109,24 @@ can do everything. The RISE details on the public tree panel, more of them.
 **Parked, to keep this manageable:**
 - The super admin role reaches every policy in the database; it is the last
   thing in Round F, after the rest of F is in.
-- The standard Excel format: waiting on yours.
-- CDRA hatching for hazard levels; the GHG inventory (needs the emissions
-  data from outside this system).
+- The standard Excel format — **done 20 October:** every download (the map
+  sheet's tables, both permit logs, the tree inventory, the GHG report) has
+  the LGU's letterhead and seal, a green heading row, totals and notes, A4
+  with page numbers (`src/lib/workbookLook.js`). The inventory template keeps
+  its own layout, being a form to fill in.
+- Carbon — **switched 20 October** to Chave et al. 2014 on diameter and total
+  height (`src/lib/treeCarbon.js`), everywhere carbon is shown. Timber
+  volume stays the DENR's. Parked: **wood density per species** — every tree
+  takes 0.57 g/cm³ (tropical Asian mean, Reyes et al. 1992) until the species
+  library has a field for it, which needs a new SQL step.
+- The GHG inventory report — **done 20 October** (map sheet → Report → GHG
+  inventory, `src/lib/reports/ghg.js`): the removals by the mapped tree
+  cover, as the CCC Community-level GHG Inventory Tool's Forestlands sheet
+  counts them, and by the tagged trees outside it, never a tree twice; the
+  carbon map; a tree-by-tree list in its Excel file. Still outside it: carbon
+  lost to cutting, fuelwood and disturbance (the permits could feed the first,
+  once they record volume), and the other sectors' emissions.
+- CDRA hatching for hazard levels.
 - Incentives for residents: after the leaderboard.
 - The inventory template is provisional (`src/lib/treeInventory.js`): Tree
   No., Common and Scientific name, Latitude, Longitude, Barangay, DBH, Total
@@ -133,8 +151,8 @@ can do everything. The RISE details on the public tree panel, more of them.
     explained, the LGU's barangays and the conditions as drop-downs. San
     Pedro's own sheet reads as it is: 1,428 trees come in; 864 have no
     coordinates and are listed, not guessed.
-  - Parked: the field app showing an imported tree's DBH and heights when
-    it is verified (they are in `pending_trees.details`).
+  - The field app showing an imported tree's DBH and heights when it is
+    verified — **done 20 October.**
 - A city's own inventory, at scale (San Pedro's, 19 October) — **ready:**
   - PGENRO brings an LGU's inventory in for it (Settings → Tree inventory →
     choose the LGU), so San Pedro's goes in before San Pedro has an account;
@@ -493,10 +511,11 @@ that can upload a layer.
 - **The growth rate.** Now 1.19 cm a year, borrowed (see the roadmap, Round A).
   Better still: a re-measurement of the same tree at two dates, or a
   per-species figure from PGENRO or ERDB.
-- **Merchantable height in the field app.** Four of the forestry and carbon
-  figures need it; the app does not ask for it. You have said this gets done
-  no matter what. Until it does, every one of those figures speaks for only the
-  trees that happen to have one.
+- **Merchantable height in the field app.** The timber volume needs it; the
+  app does not ask for it. You have said this gets done no matter what. Until
+  it does, the volume speaks for only the trees that happen to have one.
+  (Carbon no longer needs it: since 20 October it is worked out on the total
+  height.)
 - **The 30% family threshold.** Santamour's rule has three thresholds and the
   page checks two. The third needs a species-to-family list.
 

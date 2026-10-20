@@ -112,6 +112,13 @@ describe('tilesFor', () => {
 });
 
 describe('treeClassOf', () => {
+  it('bands a tree by the CO₂ it stores, for the GHG report (20 October)', () => {
+    expect(treeClassOf({ species: 'Kakawate', dbh: 8, total_height: 4 }, 'carbon')).toBe('under100');
+    expect(treeClassOf({ species: 'Narra', dbh: 37, total_height: 14 }, 'carbon')).toBe('to1000');
+    expect(treeClassOf({ species: 'Acacia', dbh: 50, total_height: 18 }, 'carbon')).toBe('over1000');
+    expect(treeClassOf({ species: 'Narra', dbh: 37 }, 'carbon')).toBe('unmeasured');
+  });
+
   it('reads origin as native or invasive, and use as fruit, timber or ornamental', () => {
     expect(treeClassOf({ biodiversity_status: 'Endemic' }, 'origin')).toBe('native');
     expect(treeClassOf({ species_type: 'Invasive' }, 'origin')).toBe('invasive');

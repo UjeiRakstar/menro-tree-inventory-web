@@ -94,6 +94,21 @@ export const PUBLIC_LAND_COVER = LAND_COVER_TYPES.filter((cover) => cover.public
 export const landCoverById = (id) => LAND_COVER_TYPES.find((cover) => cover.id === id) ?? null;
 
 /**
+ * Carbon as a share of a cover's biomass, as the Climate Change Commission's
+ * Community-level GHG Inventory Tool (31 July 2024, "Drop-down Lists", the
+ * Forestry table) gives it beside each rate. Every cover not named here has
+ * 0.45 in that table.
+ */
+const CARBON_CONTENT = Object.freeze({
+  'secondary-forest': 0.446,
+  brushlands: 0.454,
+  dipterocarps: 0.454,
+  'swietenia-makiling-racelis': 0.416,
+  'acacia-auriculiformis-necija-lasco2000': 0.466,
+});
+export const carbonContentOf = (coverId) => CARBON_CONTENT[coverId] ?? 0.45;
+
+/**
  * How much above-ground biomass an area adds in a year, in tonnes.
  *
  * Null rather than zero when the cover is unknown: an unclassified area has an

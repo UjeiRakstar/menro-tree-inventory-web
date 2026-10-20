@@ -1,3 +1,4 @@
+import { carbonDioxideKg } from './treeCarbon.js';
 import { officialName } from './psgc.js';
 
 /**
@@ -189,7 +190,8 @@ export const SURVEY_TITLES = Object.freeze({
 
 /**
  * How the trees are coloured on a sheet (17 October): one colour; by origin —
- * endemic or native against invasive; or by what they are grown for.
+ * endemic or native against invasive; by what they are grown for; or (20
+ * October, for the GHG report) by the CO₂ they store.
  */
 export const TREE_COLOURINGS = Object.freeze({
   one: { label: 'One colour', classes: [{ id: 'all', label: 'Tagged tree', fill: '#16a34a' }] },
@@ -212,6 +214,17 @@ export const TREE_COLOURINGS = Object.freeze({
       { id: 'unrecorded', label: 'Use not recorded', fill: '#94a3b8' },
     ],
   },
+  carbon: {
+    label: 'Carbon — CO₂ stored',
+    title: 'CARBON STORED IN THE TAGGED TREES MAP',
+    classes: [
+      { id: 'under100', label: 'Under 100 kg CO₂', fill: '#bbf7d0' },
+      { id: 'to500', label: '100–500 kg CO₂', fill: '#4ade80' },
+      { id: 'to1000', label: '500 kg – 1 t CO₂', fill: '#16a34a' },
+      { id: 'over1000', label: '1 t CO₂ and more', fill: '#14532d' },
+      { id: 'unmeasured', label: 'No diameter and height', fill: '#94a3b8' },
+    ],
+  },
 });
 
 /** Which class of a colouring a tree falls in. */
@@ -221,6 +234,11 @@ export function treeClassOf(tree, colouring) {
     const status = word(tree?.biodiversity_status) || word(tree?.species_type);
     if (status.includes('invasive')) return 'invasive';
     return status ? 'native' : 'unrecorded';
+  }
+  if (colouring === 'carbon') {
+    const kg = carbonDioxideKg(tree);
+    if (kg === null) return 'unmeasured';
+    return kg < 100 ? 'under100' : kg < 500 ? 'to500' : kg < 1000 ? 'to1000' : 'over1000';
   }
   if (colouring === 'use') {
     const use = word(tree?.tree_category);

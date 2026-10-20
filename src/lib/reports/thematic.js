@@ -1,6 +1,7 @@
 import { FLUP_ELEVATION_CLASSES, FLUP_SLOPE_CLASSES } from '../layers/terrain.js';
 import { listOf } from '../reportWriter.js';
 import { officialName } from '../psgc.js';
+import { buildGhgReport } from './ghg.js';
 
 /**
  * The thematic reports (Round C, 18 October): soil; hazards and climate;
@@ -34,6 +35,8 @@ export const REPORT_KINDS = Object.freeze([
   { id: 'hazards', label: 'Hazards and climate', title: 'HAZARD AND CLIMATE REPORT' },
   { id: 'terrain', label: 'Elevation and slope', title: 'ELEVATION AND SLOPE REPORT' },
   { id: 'biodiversity', label: 'Biodiversity', title: 'BIODIVERSITY REPORT' },
+  // 20 October: the trees and forest land's part of the LGU's GHG inventory (reports/ghg.js).
+  { id: 'ghg', label: 'GHG inventory', title: 'GREENHOUSE GAS INVENTORY REPORT' },
 ]);
 export const reportKindById = (id) => REPORT_KINDS.find((kind) => kind.id === id) ?? REPORT_KINDS[0];
 
@@ -52,6 +55,7 @@ export const REPORT_MAPS = Object.freeze({
     { key: 'origin', survey: null, treeColour: 'origin', caption: 'Tagged trees by origin — endemic or native, and invasive' },
     { key: 'use', survey: null, treeColour: 'use', caption: 'Tagged trees by use — fruit, timber and ornamental' },
   ],
+  ghg: [{ key: 'carbon', survey: null, treeColour: 'carbon', caption: 'Tagged trees by the CO₂ they store above ground' }],
 });
 
 const ha = (m2) => (Number(m2) || 0) / 10000;
@@ -666,6 +670,11 @@ function sourcesSection(kind) {
     hazards: 'Hazards: UP NOAH flood and rain-induced landslide susceptibility, measured on a grid of about 60 m. Population: PSA 2024 Census (PSGC 3Q 2026), or the office’s own figures. Climate: DOST-PAGASA CLIRAM.',
     terrain: 'Elevation: Copernicus DEM, on a grid of about 60 m; slope worked out from it cell by cell.',
     biodiversity: 'Trees: the Green Tag field inventory and verified community tags. Diversity indices as TB 2018-02 Attachment 1 gives them. Carbon: Chave et al. 2014 on diameter and total height, with Philippine rates.',
+    ghg:
+      'Method: the Climate Change Commission’s Community-level GHG Inventory Tool (31 July 2024), Forestlands sheet, with its growth rates ' +
+      '(Lasco et al. 1999; Racelis 2000; Lasco and Suson 1989) and root-to-shoot ratio of 0.37. Trees: the Green Tag field inventory and ' +
+      'verified community tags, by Chave et al. (2014) with the tropical Asian mean wood density (Reyes et al. 1992), carbon 45% of biomass ' +
+      '(Lasco & Pulhin 2000) and 1.19 cm of diameter growth a year (Schneider et al. 2013). Land cover: as the office mapped it.',
   };
   return {
     key: 'sources',
@@ -680,7 +689,8 @@ function sourcesSection(kind) {
  *
  *   place, places, measured, placeLabel, tables (the attribute tables by key),
  *   trees, climate, populationOf, protectedHa, placeAreaHa, communityTags,
- *   participation (community_counts() for the place: residents taking part)
+ *   participation (community_counts() for the place: residents taking part),
+ *   areas (the saved areas in scope, for the GHG report's mapped tree cover)
  */
 export function buildThemeReport(kind, ctx) {
   const where = officialName(ctx.place);
@@ -689,6 +699,8 @@ export function buildThemeReport(kind, ctx) {
   const byKey = ctx.tables ?? {};
   let tables;
   let sections;
+  // Tables for the Excel file only: too long to print (the GHG report's tree list).
+  let annex = [];
   if (kind === 'soil') {
     tables = [soilSeriesTable(common), soilByPlaceTable(common)];
     sections = soilSections({ where, short, tables });
@@ -699,6 +711,11 @@ export function buildThemeReport(kind, ctx) {
   } else if (kind === 'terrain') {
     tables = [elevationTable(common), slopeTable(common)];
     sections = terrainSections({ short, tables });
+  } else if (kind === 'ghg') {
+    const ghg = buildGhgReport({ trees: ctx.trees ?? [], areas: ctx.areas ?? [], places: common.places, placeLabel: common.placeLabel, short });
+    tables = ghg.tables;
+    sections = ghg.sections;
+    annex = ghg.annex;
   } else if (kind === 'biodiversity') {
     const trees = ctx.trees ?? [];
     tables = [
@@ -724,6 +741,7 @@ export function buildThemeReport(kind, ctx) {
     title: reportKindById(kind).title,
     maps: REPORT_MAPS[kind],
     tables,
+    annex,
     sections: [...sections, sourcesSection(kind)],
   };
 }

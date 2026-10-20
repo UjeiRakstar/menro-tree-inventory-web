@@ -546,6 +546,7 @@ export default function MapSheet() {
             placeAreaHa: places.reduce((t, p) => t + (p.areaHa || 0), 0),
             communityTags: tableTrees.filter((tree) => tree.source === 'crowdsource').length,
             participation,
+            areas: scopeAreas,
           }),
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -720,6 +721,21 @@ export default function MapSheet() {
       saveFile(blob, `${fileStem}_Report.docx`);
     } catch (failure) {
       setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
+    } finally {
+      setReportBusy('');
+    }
+  }
+
+  // A thematic report's tables as an Excel file, the GHG report's tree list with them.
+  async function downloadReportExcel() {
+    if (!themeReport) return;
+    setReportBusy('xlsx');
+    setReportNote(null);
+    try {
+      const blob = await tablesWorkbook([...themeReport.tables, ...(themeReport.annex ?? [])], { lgu, preparedBy: preparedText });
+      saveFile(blob, `${fileStem}_${reportKind}.xlsx`);
+    } catch (failure) {
+      setReportNote({ ok: false, text: `The Excel file could not be made: ${failure.message}` });
     } finally {
       setReportBusy('');
     }
@@ -1071,6 +1087,7 @@ export default function MapSheet() {
               }}
               onImprove={improveReport}
               onDocx={downloadDocx}
+              onXlsx={downloadReportExcel}
               busy={reportBusy}
               note={reportNote}
             />
