@@ -226,6 +226,10 @@ function Count({ value, metric, where, onOpen }) {
   );
 }
 
+// Each tile starts at a half, a third or a fifth of the row and grows into what
+// is left, so a short last row (four tiles under five) fills the width.
+const TILE_SIZE = 'grow basis-[calc(50%-4.1px)] sm:basis-[calc(33.333%-5.4px)] lg:basis-[calc(20%-6.5px)]';
+
 // Each group's look, so its tiles read as one set across a single row.
 const GROUP_STYLE = {
   action: 'border-t-red-500',
@@ -242,7 +246,7 @@ function Tile({ metric, value, note, onOpen, where = 'all of Laguna' }) {
       onClick={onOpen}
       aria-label={`${value} — ${metric.label}, ${where}`}
       title={metric.label}
-      className={`rounded-xl border border-t-4 border-slate-200 bg-white px-3 py-2 text-left transition enabled:hover:shadow-md disabled:cursor-default ${GROUP_STYLE[metric.group] ?? ''}`}
+      className={`${TILE_SIZE} rounded-xl border border-t-4 border-slate-200 bg-white px-3 py-2 text-left transition enabled:hover:shadow-md disabled:cursor-default ${GROUP_STYLE[metric.group] ?? ''}`}
     >
       <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
         <span className={`h-2 w-2 shrink-0 rounded-full ${tone.dot}`} aria-hidden="true" /> {metric.short}
@@ -294,7 +298,7 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
           </span>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="flex flex-wrap gap-2">
       {GROUPS.map(([group, title]) => (
         <section key={group} aria-label={title} className="contents">
             {BOARD_METRICS.filter((metric) => metric.group === group).map((metric) => (
@@ -308,7 +312,7 @@ function Overview({ trees, tags, areas, offices, lgus, onOpen, lgu = undefined, 
               />
             ))}
             {group === 'progress' && !one && (
-              <div className="rounded-xl border border-t-4 border-slate-200 border-t-green-600 bg-white px-3 py-2">
+              <div className={`${TILE_SIZE} rounded-xl border border-t-4 border-slate-200 border-t-green-600 bg-white px-3 py-2`}>
                 <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
                   <Building2 size={11} aria-hidden="true" /> Offices
                 </span>

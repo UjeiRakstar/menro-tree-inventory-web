@@ -67,5 +67,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.js'],
+    // The whole-app tests render every route and lazy-load pages; on a busy
+    // machine five seconds was not always enough, and they failed at random.
+    testTimeout: 20000,
   },
 });

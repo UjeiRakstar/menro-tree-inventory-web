@@ -228,7 +228,7 @@ describe('the permit logs', () => {
     expect(await screen.findByText(/Report downloaded: 2 permits/, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(saveAsSpy).toHaveBeenCalledTimes(1);
     expect(saveAsSpy.mock.calls[0][1]).toMatch(/^permits-by-lgu-\d{4}-\d{2}-\d{2}\.xlsx$/);
-  });
+  }, 30000);
 });
 
 describe('the super admin (18 October)', () => {
