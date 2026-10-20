@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, ChevronDown, FileSpreadsheet, Loader2, MapPin, RotateCcw, Search } from 'lucide-react';
-import { supabase } from '../../supabaseClient.js';
+import { ChevronDown, FileSpreadsheet, Loader2, MapPin, Search } from 'lucide-react';
 import { downloadPermitReport, lguOfPermit, treesCovered } from '../../lib/permitLogs.js';
 
 const formatDate = (value) =>
@@ -10,20 +9,18 @@ const formatDate = (value) =>
     : '—';
 
 /**
- * Every LGU's permit log, for PGENRO: grouped by LGU, read-only, with archive
- * and a report.
+ * Every LGU's permit log, for PGENRO: grouped by LGU, read-only, with a
+ * report.
  *
- * Read-only means nothing here changes a permit's details — those are the
- * MENRO/CENRO's record. Archiving only moves a log out of this list; it is
- * kept, can be shown again, and can be restored (permit_archive.sql).
+ * Read-only, wholly (decided 18 October): a permit is its MENRO / CENRO's
+ * record, and PGENRO sees each one and whom it was issued to without acting
+ * on it — no archive, no restore. A permit archived before that shows marked.
  */
 export default function ProvincePermits({ permits: initial, trees, lgus, labelOf }) {
-  const [permits, setPermits] = useState(initial);
+  const permits = initial;
   const [query, setQuery] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [busyId, setBusyId] = useState(null);
   const [reporting, setReporting] = useState(false);
   const [notice, setNotice] = useState('');
   const [problem, setProblem] = useState('');
@@ -43,13 +40,10 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
     };
   }, [context]);
 
-  const archivedCount = permits.filter((permit) => permit.archived_at).length;
-
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     const map = new Map();
     for (const permit of permits) {
-      if (permit.archived_at && !showArchived) continue;
       if (
         q &&
         ![permit.client_name, permit.reason, permit.species, permit.address]
@@ -64,33 +58,7 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
     return [...map.entries()]
       .map(([lgu, list]) => ({ lgu, label: labelOf(lgu), list }))
       .sort((a, b) => b.list.length - a.list.length || a.label.localeCompare(b.label));
-  }, [permits, query, showArchived, lguOf, labelOf]);
-
-  async function setArchived(permit, archived) {
-    setBusyId(permit.id);
-    setProblem('');
-    const { error } = await supabase.rpc('archive_permit', { p_id: String(permit.id), p_archived: archived });
-    setBusyId(null);
-    if (error) {
-      const missing = /could not find the function|does not exist/i.test(error.message ?? '');
-      setProblem(
-        missing
-          ? 'Archiving needs supabase/permit_archive.sql, which has not been run yet.'
-          : error.message
-      );
-      return;
-    }
-    setPermits((current) =>
-      current.map((row) =>
-        row.id === permit.id ? { ...row, archived_at: archived ? new Date().toISOString() : null } : row
-      )
-    );
-    setNotice(
-      archived
-        ? `Permit for ${permit.client_name || 'this client'} archived. Tick “Show archived” to see it again.`
-        : `Permit for ${permit.client_name || 'this client'} restored.`
-    );
-  }
+  }, [permits, query, lguOf, labelOf]);
 
   async function handleReport(event) {
     event.preventDefault();
@@ -135,8 +103,8 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
           Download Excel report
         </button>
         <p className="w-full text-xs text-slate-500">
-          A summary by LGU — permits and the trees they cover — and every permit in the period. Archived permits are
-          included and marked. Leave the dates empty for everything.
+          A summary by LGU — permits and the trees they cover — and every permit in the period. Leave the dates empty
+          for everything.
         </p>
       </form>
 
@@ -152,10 +120,6 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
             className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-          Show archived ({archivedCount})
-        </label>
       </div>
 
       {notice && (
@@ -220,16 +184,6 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
                             <MapPin size={12} aria-hidden="true" /> Tree
                           </Link>
                         )}
-                        <button
-                          type="button"
-                          disabled={busyId === permit.id}
-                          onClick={() => setArchived(permit, !permit.archived_at)}
-                          aria-label={`${permit.archived_at ? 'Restore' : 'Archive'} the permit for ${permit.client_name || 'this client'}`}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
-                        >
-                          {permit.archived_at ? <RotateCcw size={12} aria-hidden="true" /> : <Archive size={12} aria-hidden="true" />}
-                          {permit.archived_at ? 'Restore' : 'Archive'}
-                        </button>
                       </td>
                     </tr>
                   ))}

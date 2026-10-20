@@ -1,4 +1,4 @@
--- Green Tag: PGENRO archives a permit log.
+-- Green Tag: archiving a permit log.
 --
 -- Run once, whole, in the SQL editor, after accounts.sql. Safe to run again.
 -- Ends in ONE query whose rows say whether each part took.
@@ -10,6 +10,12 @@
 --
 -- Only these two columns change, and only through archive_permit(), so
 -- PGENRO's read-only view stays read-only: it cannot edit a permit's details.
+--
+-- Decided 18 October: a permit is its LGU's record. PGENRO sees each permit
+-- and whom it was issued to, and does nothing to it — not even archive it.
+-- archive_permit() is the super admin's alone (super_admin.sql gives it to
+-- them); until that file has run, nobody archives. Permits archived before
+-- stay archived, and show as such.
 
 alter table public.permits
   add column if not exists archived_at timestamptz,
@@ -20,9 +26,9 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   v_found boolean;
 begin
-  if not public.is_pgenro() then
-    raise exception 'Only PGENRO can archive a permit log.' using errcode = '42501';
-  end if;
+  -- The super admin's alone; super_admin.sql replaces this function with one
+  -- that lets them through.
+  raise exception 'A permit is its LGU''s record: it is read, not archived.' using errcode = '42501';
 
   update public.permits
   set archived_at = case when p_archived then now() end,
@@ -49,7 +55,7 @@ select 'permits can be archived' as check,
                where table_name = 'permits' and column_name = 'archived_at') as ok,
        '' as detail
 union all
-select 'only PGENRO can',
+select 'PGENRO reads permits and archives none',
        exists (select 1 from information_schema.routines where routine_name = 'archive_permit'),
        ''
 union all

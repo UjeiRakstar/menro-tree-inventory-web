@@ -271,6 +271,22 @@ const HALL_ICON = L.divIcon({
 });
 
 /**
+ * Another LGU's hall, on PGENRO's map (decided 18 October): the same building,
+ * smaller and lighter, so the province's own pin — the Capitol — stands out.
+ */
+const OTHER_HALL_ICON = L.divIcon({
+  className: 'hall-marker hall-marker--other',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+  html:
+    '<span style="display:flex;width:24px;height:24px;align-items:center;justify-content:center;' +
+    'border-radius:9999px;background:#4d7c0f;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)">' +
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M3 22h18"/><path d="M6 18v-7"/>' +
+    '<path d="M10 18v-7"/><path d="M14 18v-7"/><path d="M18 18v-7"/><path d="M12 2l8 5H4z"/></svg></span>',
+});
+
+/**
  * Moves the camera when, and only when, something asks it to.
  *
  * `target` is a municipality name, the string 'province', or null for "leave
@@ -972,7 +988,23 @@ export default function PublicMap() {
  * `profile` is the signed-in office's, on the LGU map: it decides whether a
  * drawn area can be saved, and what the office may do to a saved one.
  */
-export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall = false, onPinHall = null, profile = null }) {
+/**
+ *   hall        [lat, lng] the centre button flies to: the LGU's hall, or for
+ *               PGENRO the Provincial Capitol
+ *   hallName    what that place is called, when it is not the LGU's hall
+ *   otherHalls  [{ psgc, name, position }] — the halls the LGUs have pinned,
+ *               shown on PGENRO's map
+ */
+export function TreeMap({
+  mode = 'public',
+  fence = null,
+  hall = null,
+  hallName = null,
+  otherHalls = [],
+  canPinHall = false,
+  onPinHall = null,
+  profile = null,
+}) {
   const admin = mode === 'admin';
   const [trees, setTrees] = useState([]);
   // Crowdsourced tags a field officer has been sent to check: grey pins.
@@ -1548,7 +1580,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
   const sitePanelShowing = (Boolean(selectedSite) && !sitePanelCollapsed) || Boolean(areaEditor);
   const canSaveAreas = admin && [ROLES.PGENRO, ROLES.LGU_ADMIN].includes(roleOf(profile));
 
-  const hallLabel = fenceFeature?.properties.is_city ? 'City Hall' : 'Municipal Hall';
+  const hallLabel = hallName ?? (fenceFeature?.properties.is_city ? 'City Hall' : 'Municipal Hall');
 
   /**
    * Back to the office: its hall once pinned, otherwise its whole LGU, or the
@@ -2099,6 +2131,10 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
             eventHandlers={{ click: () => setHallCardOpen(true) }}
           />
         )}
+        {admin &&
+          otherHalls.map((other) => (
+            <Marker key={other.psgc} position={other.position} icon={OTHER_HALL_ICON} title={other.name} alt={other.name} />
+          ))}
         {pinningHall && <MapClick onClick={handleHallClick} />}
 
         {drawing && (
@@ -2549,7 +2585,7 @@ export function TreeMap({ mode = 'public', fence = null, hall = null, canPinHall
         >
           <p className="flex-1 text-xs leading-snug text-amber-900">
             <strong>Pin your {hallLabel}.</strong> The centre button flies there once it is pinned —
-            until then it shows the whole of {fenceLabel || 'your LGU'}.
+            until then it shows the whole of {fenceLabel || (hallName ? 'Laguna' : 'your LGU')}.
           </p>
           <button
             type="button"

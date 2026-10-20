@@ -8,6 +8,10 @@
 --
 -- One pin per LGU, not per officer: five admins of Santa Cruz work from one
 -- building.
+--
+-- Decided 18 October: the hall is the LGU's own to pin — PGENRO no longer
+-- moves it — and PGENRO pins the Provincial Capitol, where its own centre
+-- button flies. PGENRO sees every hall the LGUs have pinned.
 
 
 -- ===========================================================================
@@ -26,7 +30,7 @@ returns boolean language sql immutable as $$
   select p_lat between 13.95 and 14.55 and p_lng between 120.95 and 121.75;
 $$;
 
--- Pin (or move) the hall. An LGU admin pins their own; PGENRO any.
+-- Pin (or move) the hall: its own LGU's MENRO / CENRO only.
 create or replace function public.set_lgu_hall(
   p_lat double precision, p_lng double precision, p_lgu bigint default null
 ) returns void
@@ -34,8 +38,8 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_lgu bigint := coalesce(p_lgu, public.my_lgu());
 begin
-  if v_lgu is null or not (public.is_pgenro() or public.is_lgu_admin_of(v_lgu)) then
-    raise exception 'Only this LGU''s MENRO/CENRO, or PGENRO, can pin its hall.' using errcode = '42501';
+  if v_lgu is null or not public.is_lgu_admin_of(v_lgu) then
+    raise exception 'Only this LGU''s own MENRO / CENRO pins its hall.' using errcode = '42501';
   end if;
   if not public.in_laguna_box(p_lat, p_lng) then
     raise exception 'That pin is not in Laguna.' using errcode = '22023';
@@ -51,6 +55,45 @@ end $$;
 
 revoke all on function public.set_lgu_hall(double precision, double precision, bigint) from public;
 grant execute on function public.set_lgu_hall(double precision, double precision, bigint) to authenticated;
+
+
+-- ===========================================================================
+-- 1b. The Provincial Capitol, PGENRO's own pin
+-- ===========================================================================
+create table if not exists public.provincial_capitol (
+  id      boolean primary key default true check (id),
+  lat     double precision not null,
+  lng     double precision not null,
+  set_by  uuid,
+  set_at  timestamptz not null default now()
+);
+alter table public.provincial_capitol enable row level security;
+drop policy if exists "anyone reads the capitol" on public.provincial_capitol;
+create policy "anyone reads the capitol" on public.provincial_capitol
+  for select to anon, authenticated using (true);
+revoke insert, update, delete on public.provincial_capitol from anon, authenticated;
+grant select on public.provincial_capitol to anon, authenticated;
+
+create or replace function public.set_capitol(p_lat double precision, p_lng double precision)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  -- PGENRO's own, real account: a training account pins nothing real.
+  if not coalesce(public.is_pgenro(), false)
+     or exists (select 1 from public.profiles p
+                where p.id = auth.uid() and coalesce((to_jsonb(p) ->> 'is_training')::boolean, false)) then
+    raise exception 'Only PGENRO pins the Provincial Capitol.' using errcode = '42501';
+  end if;
+  if not public.in_laguna_box(p_lat, p_lng) then
+    raise exception 'That pin is not in Laguna.' using errcode = '22023';
+  end if;
+  insert into public.provincial_capitol (id, lat, lng, set_by, set_at)
+  values (true, p_lat, p_lng, auth.uid(), now())
+  on conflict (id) do update set lat = excluded.lat, lng = excluded.lng, set_by = excluded.set_by, set_at = excluded.set_at;
+  perform public.log_activity('capitol.pinned', 'province', 'capitol', null,
+    jsonb_build_object('lat', p_lat, 'lng', p_lng));
+end $$;
+revoke all on function public.set_capitol(double precision, double precision) from public;
+grant execute on function public.set_capitol(double precision, double precision) to authenticated;
 
 
 -- ===========================================================================
@@ -180,6 +223,14 @@ select 'activation knows the LGU by name',
                join information_schema.parameters p on p.specific_name = r.specific_name
                where r.routine_name = 'check_account_code' and p.parameter_name = 'lgu_name'),
        ''
+union all
+select 'each LGU pins its own hall; PGENRO, the capitol',
+       to_regclass('public.provincial_capitol') is not null
+       and position('is_pgenro' in pg_get_functiondef('public.set_lgu_hall(double precision, double precision, bigint)'::regprocedure)) = 0,
+       ''
+union all
+select 'READ: the Provincial Capitol', null,
+       coalesce((select round(lat::numeric, 5) || ', ' || round(lng::numeric, 5) from public.provincial_capitol), 'not pinned yet')
 union all
 select 'READ: LGUs with their hall pinned', null,
        coalesce((select string_agg(label, ', ' order by label) from public.lgus where hall_lat is not null), 'none yet');

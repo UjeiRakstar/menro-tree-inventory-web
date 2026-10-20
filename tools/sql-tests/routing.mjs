@@ -126,6 +126,21 @@ const nowhere = await as(MENRO, 'authenticated', () => fails(() => db.query(`sel
 check('…and not to somewhere outside Laguna', nowhere !== null, nowhere ?? 'MOVED');
 const field = await as(FIELD_SCZ, 'authenticated', () => fails(() => db.query(`select public.set_lgu_hall(14.28, 121.41)`)));
 check('a field officer pins no hall', field !== null);
+const pgOnHall = await as(ADMIN, 'authenticated', () => fails(() => db.query(`select public.set_lgu_hall(14.25, 121.40, ${SCZ})`)));
+check('PGENRO no longer moves an LGU’s hall: it is the LGU’s own (18 October)', pgOnHall !== null, pgOnHall ?? 'MOVED');
+const capitol = await as(ADMIN, 'authenticated', () => fails(() => db.query(`select public.set_capitol(14.2786, 121.4161)`)));
+const capitolRow = await one(`select lat, lng from public.provincial_capitol`);
+check('PGENRO pins the Provincial Capitol', capitol === null && capitolRow?.lat === 14.2786, capitol ?? JSON.stringify(capitolRow));
+await as(ADMIN, 'authenticated', () => db.query(`select public.set_capitol(14.2790, 121.4165)`));
+check('…and moves it, one pin only', (await one(`select count(*)::int n, max(lat) lat from public.provincial_capitol`)).n === 1);
+const menroCapitol = await as(MENRO, 'authenticated', () => fails(() => db.query(`select public.set_capitol(14.28, 121.41)`)));
+check('a MENRO does not pin the capitol', menroCapitol !== null);
+const farCapitol = await as(ADMIN, 'authenticated', () => fails(() => db.query(`select public.set_capitol(10.3, 123.9)`)));
+check('…nor anyone, outside Laguna', farCapitol !== null);
+const capitolSeen = await as(null, 'anon', () => one(`select lat from public.provincial_capitol`));
+check('everyone sees where the capitol is', capitolSeen?.lat === 14.279);
+const pgHalls = await as(ADMIN, 'authenticated', () => db.query(`select label from public.lgus where hall_lat is not null`));
+check('PGENRO sees every hall the LGUs pinned', pgHalls.rows.some((r) => r.label === 'Santa Cruz'), pgHalls.rows.map((r) => r.label).join(', '));
 
 // ---- Routing -------------------------------------------------------------------
 const old = (await db.query(`select species, lgu_psgc from public.pending_trees order by species`)).rows;

@@ -210,26 +210,12 @@ describe('the permit logs', () => {
     expect(screen.getByRole('table', { name: 'Permits — Pila' })).toHaveTextContent('Jose Reyes');
   });
 
-  it('archives a log, which leaves the list but is kept and can be shown again', async () => {
-    supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
+  it('reads every permit and acts on none: no archive, no restore (18 October)', async () => {
     await openPermits();
-    fireEvent.click(screen.getByRole('button', { name: 'Archive the permit for Jose Reyes' }));
-
-    await waitFor(() => expect(screen.queryByRole('table', { name: 'Permits — Pila' })).not.toBeInTheDocument());
-    expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('archive_permit', { p_id: 'p2', p_archived: true });
-
-    fireEvent.click(screen.getByRole('checkbox', { name: /Show archived \(1\)/ }));
-    expect(screen.getByRole('button', { name: 'Restore the permit for Jose Reyes' })).toBeInTheDocument();
-  });
-
-  it('says what to run when archiving is not in the database yet', async () => {
-    supabaseMock.supabase.rpc.mockResolvedValue({
-      data: null,
-      error: { message: 'Could not find the function public.archive_permit' },
-    });
-    await openPermits();
-    fireEvent.click(screen.getByRole('button', { name: 'Archive the permit for Jose Reyes' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('permit_archive.sql');
+    expect(screen.getByRole('table', { name: 'Permits — Pila' })).toHaveTextContent('Jose Reyes');
+    expect(screen.queryByRole('button', { name: /Archive|Restore/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /Show archived/ })).not.toBeInTheDocument();
+    expect(supabaseMock.supabase.rpc).not.toHaveBeenCalledWith('archive_permit', expect.anything());
   });
 
   it('downloads a report for the dates chosen', async () => {

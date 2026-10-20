@@ -1,4 +1,4 @@
-// accounts.sql → permit_archive.sql, and who may archive.
+// accounts.sql → permit_archive.sql, and who may archive: nobody, until the super admin.
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 const SQL = (f) => readFileSync(new URL(`../../supabase/${f}`, import.meta.url), 'utf8');
@@ -39,15 +39,12 @@ for (const run of ['runs', 'runs twice']) {
 }
 async function as(id, fn) { await db.exec(`select set_config('request.jwt.claim.sub', '${id}', false); set role authenticated;`); try { return await fn(); } finally { await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false);`); } }
 const P = '11111111-1111-1111-1111-111111111111';
+// Decided 18 October: a permit is its LGU's record; PGENRO reads it and
+// archives nothing. The super admin will (super_admin.sql).
 const e1 = await as(PG, async () => { try { await db.query(`select public.archive_permit($1)`, [P]); return null; } catch (e) { return e.message; } });
-const row = (await db.query(`select archived_at, archived_by from public.permits`)).rows[0];
-ok('PGENRO archives a permit', e1 === null && row.archived_at !== null && row.archived_by === PG, e1 ?? '');
-ok('…and it is logged', (await db.query(`select count(*)::int n from public.activity_log where action = 'permit.archived'`)).rows[0].n === 1);
-const e2 = await as(PG, async () => { try { await db.query(`select public.archive_permit($1, false)`, [P]); return null; } catch (e) { return e.message; } });
-ok('…and restores it', e2 === null && (await db.query(`select archived_at from public.permits`)).rows[0].archived_at === null);
+const row = (await db.query(`select archived_at from public.permits`)).rows[0];
+ok('PGENRO archives no permit', e1 !== null && row.archived_at === null, e1 ?? 'ARCHIVED');
 const e3 = await as(FO, async () => { try { await db.query(`select public.archive_permit($1)`, [P]); return null; } catch (e) { return e.message; } });
-ok('nobody else archives', e3 !== null, e3 ?? 'ARCHIVED');
-const e4 = await as(PG, async () => { try { await db.query(`select public.archive_permit('nope')`); return null; } catch (e) { return e.message; } });
-ok('an unknown permit is refused, not ignored', e4 !== null, e4 ?? '');
+ok('…nor anyone else, until there is a super admin', e3 !== null, e3 ?? 'ARCHIVED');
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

@@ -119,7 +119,7 @@ ok("Santa Cruz cannot change Kalayaan's permit", touched.error !== null || touch
 const moved = await attempt(SCZ_ADMIN, `update public.permits set lgu_psgc = ${KAL} where client_name = 'Brian'`);
 ok('a permit cannot be moved to another LGU', Number(await lguOf('Brian')) === SCZ, JSON.stringify(moved));
 const archived = await attempt(PG, `select public.archive_permit((select id::text from public.permits where client_name = 'Brian'))`);
-ok('PGENRO still archives', archived.error === null, archived.error ?? '');
+ok('PGENRO archives no permit: it reads them (18 October)', archived.error !== null, archived.error ?? 'ARCHIVED');
 
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

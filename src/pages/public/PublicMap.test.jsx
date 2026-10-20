@@ -1300,6 +1300,35 @@ describe('the office map, round three', () => {
     expect(screen.queryByRole('button', { name: 'Pin it now' })).not.toBeInTheDocument();
   });
 
+  it('flies PGENRO to the Provincial Capitol, and shows the halls the LGUs pinned', async () => {
+    const CAPITOL = [14.2786, 121.4161];
+    render(
+      <MemoryRouter>
+        <TreeMap
+          mode="admin"
+          hall={CAPITOL}
+          hallName="Provincial Capitol"
+          otherHalls={[{ psgc: 403405000, name: 'Calamba City City Hall', position: [14.2117, 121.1653] }]}
+        />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(markers().length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Centre the map on the Provincial Capitol' }));
+    expect(flyToSpy).toHaveBeenCalledWith(CAPITOL, 17, expect.any(Object));
+    expect(clusters().find((m) => m.dataset.label === 'Calamba City City Hall')).toBeTruthy();
+    expect(clusters().find((m) => m.dataset.label === 'Provincial Capitol')).toBeTruthy();
+  });
+
+  it('asks PGENRO to pin the Capitol when it is not pinned yet', async () => {
+    render(
+      <MemoryRouter>
+        <TreeMap mode="admin" hallName="Provincial Capitol" canPinHall onPinHall={vi.fn()} />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/Pin your Provincial Capitol./)).toBeInTheDocument();
+    expect(screen.getByText(/until then it shows the whole of Laguna/)).toBeInTheDocument();
+  });
+
   it('turns layers off and on, and lists the PGENRO ones as not uploaded yet', async () => {
     renderOfficeWith();
     await waitFor(() => expect(markers().length).toBeGreaterThan(0));
