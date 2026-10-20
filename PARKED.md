@@ -162,9 +162,12 @@ can do everything. The RISE details on the public tree panel, more of them.
 - Parked from that batch: a "!" on the resident's navbar name when a reply
   is waiting; a warning on the tag form when a tree is already tagged within
   a few metres.
-- News & Events, asked 19 October: archive a post (as well as edit and
-  delete), schedule when it is published, and a calendar of what is planned —
-  like Meta's Business Suite planner. Parked as its own piece of work.
+- News & Events, asked 19 October — **done 20 October:** publish now or
+  schedule a day and time; archive (off the home page, kept) and restore; a
+  month calendar of posts by the day each goes public (scheduled dashed,
+  published filled, archived greyed), a day's + starting a post for it. A
+  scheduled post's newsletter goes out once, when due: pg_cron every five
+  minutes where it is switched on, and the pages as they load.
 
 ## Before the account ticket touches anything
 
@@ -298,10 +301,15 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     `supabase/super_admin.sql`, with your PGENRO account's email on the
     marked line of section 4. Run super_admin.sql again whenever
     accounts.sql, permit_archive.sql or permits_fence.sql is run again.
+23. **News & Events, 20 October** — run `supabase/inbox.sql` again
+    (scheduled and archived posts). For scheduled posts to go out with nobody
+    on the site, switch on **pg_cron** (Database → Extensions) and then run
+    inbox.sql once more: it sets the five-minute job itself. Without it they
+    go out the next time anyone opens Green Tag.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 13 suites, 539 checks — the final check query on its
+allow and refuse — 13 suites, 553 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is

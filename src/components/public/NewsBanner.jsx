@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Megaphone } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
-import { whenAndWhere } from '../../lib/news.js';
+import { newsStatus, publishDueNews, publishTimeOf, whenAndWhere } from '../../lib/news.js';
 
 /** How long each photo of a post shows before the next fades in. */
 export const PHOTO_SECONDS = 5;
@@ -27,8 +27,18 @@ export default function NewsBanner({ limit = 6 }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase.from('news_posts').select('*').order('created_at', { ascending: false }).limit(limit);
-      if (!cancelled && !error && Array.isArray(data)) setPosts(data);
+      // Anything whose time has come goes out first (inbox.sql).
+      await publishDueNews();
+      const { data, error } = await supabase.from('news_posts').select('*').order('created_at', { ascending: false }).limit(limit * 4);
+      if (cancelled || error || !Array.isArray(data)) return;
+      // Published and not archived only: the database shows the public no
+      // other, but PGENRO's own session reads its scheduled and archived posts too.
+      setPosts(
+        data
+          .filter((post) => newsStatus(post) === 'published')
+          .sort((a, b) => String(publishTimeOf(b)).localeCompare(String(publishTimeOf(a))))
+          .slice(0, limit)
+      );
     })();
     return () => {
       cancelled = true;

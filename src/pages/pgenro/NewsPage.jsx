@@ -1,9 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ClipboardPaste, ImagePlus, Loader2, Megaphone, Pencil, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarDays, ClipboardPaste, ImagePlus, List, Loader2, Megaphone, Pencil, Trash2, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
-import { MAX_NEWS_PHOTOS, NEWS_BUCKET, newsProblems, photoPaths, uploadNewsPhotos, whenAndWhere } from '../../lib/news.js';
+import {
+  MAX_NEWS_PHOTOS,
+  NEWS_BUCKET,
+  newsProblems,
+  newsStatus,
+  photoPaths,
+  publishDueNews,
+  publishTimeOf,
+  publishedWhen,
+  toLocalInput,
+  uploadNewsPhotos,
+  whenAndWhere,
+} from '../../lib/news.js';
+import NewsCalendar from './NewsCalendar.jsx';
 
-const EMPTY = { title: '', event_date: '', venue: '', body: '' };
+const EMPTY = { title: '', event_date: '', venue: '', body: '', when: 'now', publish_at: '' };
+const FILTERS = [
+  ['all', 'All'],
+  ['scheduled', 'Scheduled'],
+  ['published', 'Published'],
+  ['archived', 'Archived'],
+];
+const STATUS_BADGE = {
+  scheduled: 'bg-white text-green-800 ring-1 ring-green-400 border-dashed',
+  published: 'bg-green-100 text-green-800',
+  archived: 'bg-slate-200 text-slate-600',
+};
+/** PostgREST's "no such column": inbox.sql not run again since scheduling came in. */
+const isMissingColumn = (error) =>
+  error?.code === '42703' || error?.code === 'PGRST204' || /column .* does not exist|Could not find the '/i.test(error?.message ?? '');
+const NEEDS_RERUN = 'Scheduling and archiving need supabase/inbox.sql to be run again.';
 const input = 'mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none';
 
 /** The images among pasted or dropped items, named so a pasted one has a name too. */
@@ -20,8 +48,10 @@ function imagesOf(items) {
 
 /**
  * PGENRO's News & Events. A post is sent to every MENRO / CENRO's inbox as a
- * newsletter the moment it is saved (supabase/inbox.sql), and shown on the
- * home page. A post can be edited after it is published — the home page shows
+ * newsletter when it is published (supabase/inbox.sql), and shown on the
+ * home page. It is published at once, or scheduled for a day and time; it can
+ * be archived — off the home page, kept here — and restored. The calendar
+ * lays the month's posts out by the day each goes public (19 October). A post can be edited after it is published — the home page shows
  * the change; the newsletter already sent is not sent again. Deleting it takes
  * it off the home page; the copies in the offices' inboxes are theirs to delete.
  *
@@ -39,12 +69,17 @@ export default function NewsPage() {
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState(null);
+  const [view, setView] = useState('list');
+  const [filter, setFilter] = useState('all');
+  const [month, setMonth] = useState(() => ({ year: new Date().getFullYear(), month: new Date().getMonth() }));
   const fileInput = useRef(null);
   const formRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Anything whose time has come goes out first.
+      await publishDueNews();
       const { data, error } = await supabase.from('news_posts').select('*').order('created_at', { ascending: false });
       if (cancelled) return;
       if (error) setOutcome({ ok: false, text: /does not exist|Could not find the table/i.test(error.message) ? 'News & Events needs supabase/inbox.sql, which has not been run yet.' : error.message });
@@ -81,16 +116,39 @@ export default function NewsPage() {
 
   const problems = newsProblems(form, photos);
   if (!problems.photos && kept.length + photos.length > MAX_NEWS_PHOTOS) problems.photos = `At most ${MAX_NEWS_PHOTOS} photos.`;
+  // A published post stays published; a new or scheduled one can be scheduled.
+  const canSchedule = !editing || newsStatus(editing) === 'scheduled';
+  if (canSchedule && form.when === 'schedule') {
+    const at = Date.parse(form.publish_at);
+    if (!Number.isFinite(at)) problems.publish_at = 'Choose the day and time it goes out.';
+    else if (at <= Date.now()) problems.publish_at = 'That time has passed: choose a later one, or publish it now.';
+  }
   const shown = tried ? problems : {};
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   function startEdit(item) {
     setEditing(item);
-    setForm({ title: item.title ?? '', event_date: item.event_date ?? '', venue: item.venue ?? '', body: item.body ?? '' });
+    const scheduled = newsStatus(item) === 'scheduled';
+    setForm({
+      title: item.title ?? '',
+      event_date: item.event_date ?? '',
+      venue: item.venue ?? '',
+      body: item.body ?? '',
+      when: scheduled ? 'schedule' : 'now',
+      publish_at: scheduled ? toLocalInput(item.publish_at) : '',
+    });
     setKept(Array.isArray(item.photos) ? item.photos : []);
     setPhotos([]);
     setTried(false);
     setOutcome(null);
+    formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** A new post scheduled for a day of the calendar, at eight in the morning. */
+  function startOn(day) {
+    stopEdit();
+    const at = new Date(`${day}T08:00`);
+    setForm({ ...EMPTY, when: at > new Date() ? 'schedule' : 'now', publish_at: at > new Date() ? `${day}T08:00` : '' });
     formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }
 
@@ -118,19 +176,35 @@ export default function NewsPage() {
         event_date: form.event_date || null,
         photos: [...kept, ...uploaded],
       };
+      // When it goes out: a time chosen, or now for a post still waiting.
+      const scheduling = canSchedule && form.when === 'schedule';
+      if (scheduling) row.publish_at = new Date(form.publish_at).toISOString();
+      else if (editing && newsStatus(editing) === 'scheduled') row.publish_at = new Date().toISOString();
       if (editing) {
         const { data, error } = await supabase.from('news_posts').update(row).eq('id', editing.id).select().single();
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(isMissingColumn(error) ? NEEDS_RERUN : error.message);
         // Photos taken off the post come off storage too, once the post no longer shows them.
         const dropped = photoPaths((editing.photos ?? []).filter((url) => !kept.includes(url)));
         if (dropped.length) await supabase.storage.from(NEWS_BUCKET).remove(dropped);
         setPosts((current) => current.map((p) => (p.id === editing.id ? { ...p, ...row, ...(data ?? {}) } : p)));
-        setOutcome({ ok: true, text: 'Saved. The home page shows the change; the newsletter already sent is not sent again.' });
+        setOutcome({
+          ok: true,
+          text: scheduling
+            ? `Saved. ${publishedWhen({ ...row })}.`
+            : newsStatus(editing) !== 'scheduled'
+              ? 'Saved. The home page shows the change; the newsletter already sent is not sent again.'
+              : 'Saved, and published: every MENRO / CENRO has it in their inbox, and it is on the home page.',
+        });
       } else {
         const { data, error } = await supabase.from('news_posts').insert(row).select().single();
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(isMissingColumn(error) ? NEEDS_RERUN : error.message);
         setPosts((current) => [data ?? { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }, ...(current ?? [])]);
-        setOutcome({ ok: true, text: 'Posted. Every MENRO / CENRO has it in their inbox, and it is on the home page.' });
+        setOutcome({
+          ok: true,
+          text: scheduling
+            ? `${publishedWhen({ ...row })}. It goes to every MENRO / CENRO and onto the home page then.`
+            : 'Posted. Every MENRO / CENRO has it in their inbox, and it is on the home page.',
+        });
       }
       setEditing(null);
       setForm(EMPTY);
@@ -143,6 +217,23 @@ export default function NewsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Off the home page and kept, or back on it. */
+  async function setArchived(item, archived) {
+    const archived_at = archived ? new Date().toISOString() : null;
+    const { error } = await supabase.from('news_posts').update({ archived_at }).eq('id', item.id);
+    if (error) {
+      setOutcome({ ok: false, text: isMissingColumn(error) ? NEEDS_RERUN : error.message });
+      return;
+    }
+    setPosts((current) => current.map((p) => (p.id === item.id ? { ...p, archived_at } : p)));
+    setOutcome({
+      ok: true,
+      text: archived
+        ? `"${item.title}" archived: off the home page, kept here.`
+        : `"${item.title}" restored${newsStatus({ ...item, archived_at: null }) === 'scheduled' ? ', still scheduled' : ' to the home page'}.`,
+    });
   }
 
   async function remove(item) {
@@ -159,13 +250,14 @@ export default function NewsPage() {
   }
 
   return (
-    <section className="mx-auto max-w-4xl space-y-6">
+    <section className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
           <Megaphone size={24} className="text-green-700" aria-hidden="true" /> News &amp; Events
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Each post goes to every MENRO / CENRO&apos;s inbox as a newsletter, and onto the home page.
+          Each post goes to every MENRO / CENRO&apos;s inbox as a newsletter, and onto the home page — now, or at the time you
+          schedule. Archive one to take it off the home page and keep it.
         </p>
       </div>
 
@@ -192,6 +284,35 @@ export default function NewsPage() {
             <input value={form.venue} onChange={set('venue')} className={input} />
           </label>
         </div>
+        {canSchedule ? (
+          <fieldset className="rounded-xl bg-slate-50 p-3">
+            <legend className="px-1 text-sm font-semibold text-slate-700">When it goes out</legend>
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="radio" name="when" checked={form.when === 'now'} onChange={() => setForm((c) => ({ ...c, when: 'now' }))} />
+                Now
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="when" checked={form.when === 'schedule'} onChange={() => setForm((c) => ({ ...c, when: 'schedule' }))} />
+                Schedule
+              </label>
+              {form.when === 'schedule' && (
+                <label className="flex items-center gap-2">
+                  <span className="sr-only">Goes out on</span>
+                  <input type="datetime-local" value={form.publish_at} onChange={set('publish_at')} min={toLocalInput(new Date())}
+                    aria-label="Goes out on" aria-invalid={Boolean(shown.publish_at)}
+                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+                </label>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              A scheduled post waits here, on the calendar, and goes to every office&apos;s inbox and onto the home page at its time.
+            </p>
+            {shown.publish_at && <span className="mt-1 block text-xs text-red-700">{shown.publish_at}</span>}
+          </fieldset>
+        ) : (
+          <p className="text-xs text-slate-500">{publishedWhen(editing)}. Its newsletter has gone out; changes show on the home page.</p>
+        )}
         <label className="block text-sm">
           <span className="font-semibold text-slate-700">Description</span>
           <textarea rows={5} value={form.body} onChange={set('body')} className={`${input} resize-y`} />
@@ -259,7 +380,7 @@ export default function NewsPage() {
           <button type="submit" disabled={saving}
             className="inline-flex items-center gap-1.5 rounded-xl bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:opacity-50">
             {saving && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
-            {editing ? 'Save the changes' : 'Post and send to the offices'}
+            {editing ? 'Save the changes' : form.when === 'schedule' ? 'Schedule the post' : 'Post and send to the offices'}
           </button>
           {editing && (
             <button type="button" onClick={stopEdit} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50">
@@ -272,6 +393,36 @@ export default function NewsPage() {
         )}
       </form>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="tablist" aria-label="View" className="flex rounded-xl bg-slate-100 p-1">
+          {[
+            ['list', 'List', List],
+            ['calendar', 'Calendar', CalendarDays],
+          ].map(([id, label, Icon]) => (
+            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${view === id ? 'bg-white text-green-800 shadow-sm' : 'text-slate-600'}`}>
+              <Icon size={15} aria-hidden="true" /> {label}
+            </button>
+          ))}
+        </div>
+        {view === 'list' && (
+          <div className="flex flex-wrap gap-1" aria-label="Show">
+            {FILTERS.map(([id, label]) => {
+              const n = (posts ?? []).filter((p) => id === 'all' || newsStatus(p) === id).length;
+              return (
+                <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${filter === id ? 'bg-green-700 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'}`}>
+                  {label} ({n})
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {view === 'calendar' ? (
+        <NewsCalendar posts={posts ?? []} month={month} onMonth={setMonth} onOpen={startEdit} onNew={startOn} />
+      ) : (
       <section aria-label="Posted" className="space-y-3">
         <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">Posted</h2>
         {posts === null ? (
@@ -280,12 +431,20 @@ export default function NewsPage() {
           <p className="text-sm text-slate-500">Nothing posted yet.</p>
         ) : (
           <ul className="space-y-3">
-            {posts.map((item) => (
-              <li key={item.id} className={`flex gap-4 rounded-2xl border bg-white p-4 ${editing?.id === item.id ? 'border-amber-300' : 'border-slate-200'}`}>
+            {[...posts]
+              .filter((item) => filter === 'all' || newsStatus(item) === filter)
+              .sort((a, b) => String(publishTimeOf(b)).localeCompare(String(publishTimeOf(a))))
+              .map((item) => {
+                const status = newsStatus(item);
+                return (
+              <li key={item.id} className={`flex gap-4 rounded-2xl border bg-white p-4 ${editing?.id === item.id ? 'border-amber-300' : 'border-slate-200'} ${status === 'archived' ? 'opacity-70' : ''}`}>
                 {item.photos?.[0] && <img src={item.photos[0]} alt="" className="h-20 w-28 shrink-0 rounded-lg object-cover" />}
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-900">{item.title}</p>
-                  {whenAndWhere(item) && <p className="text-xs text-slate-500">{whenAndWhere(item)}</p>}
+                  <p className="flex flex-wrap items-center gap-2 font-bold text-slate-900">
+                    {item.title}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_BADGE[status]}`}>{status}</span>
+                  </p>
+                  <p className="text-xs text-slate-500">{[publishedWhen(item), whenAndWhere(item) && `Event: ${whenAndWhere(item)}`].filter(Boolean).join(' · ')}</p>
                   {item.body && <p className="mt-1 line-clamp-2 text-sm text-slate-600">{item.body}</p>}
                   {item.photos?.length > 1 && <p className="mt-1 text-xs text-slate-400">{item.photos.length} photos</p>}
                 </div>
@@ -294,16 +453,23 @@ export default function NewsPage() {
                     className="rounded-lg p-2 text-slate-700 hover:bg-slate-100">
                     <Pencil size={16} aria-hidden="true" />
                   </button>
+                  <button type="button" onClick={() => setArchived(item, status !== 'archived')}
+                    aria-label={`${status === 'archived' ? 'Restore' : 'Archive'} ${item.title}`}
+                    className="rounded-lg p-2 text-slate-700 hover:bg-slate-100">
+                    {status === 'archived' ? <ArchiveRestore size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
+                  </button>
                   <button type="button" onClick={() => remove(item)} aria-label={`Delete ${item.title}`}
                     className="rounded-lg p-2 text-red-700 hover:bg-red-50">
                     <Trash2 size={16} aria-hidden="true" />
                   </button>
                 </div>
               </li>
-            ))}
+                );
+              })}
           </ul>
         )}
       </section>
+      )}
     </section>
   );
 }

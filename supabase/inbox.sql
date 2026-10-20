@@ -144,6 +144,20 @@ create table if not exists public.news_posts (
   updated_at  timestamptz not null default now()
 );
 
+-- Scheduled and archived posts (19 October): a post goes public — on the home
+-- page and to every office's inbox — at its publish_at, not before; an
+-- archived one leaves the home page and is kept. sent_at is when its
+-- newsletter went out. Posts made before this were sent when they were made.
+alter table public.news_posts
+  add column if not exists publish_at  timestamptz,
+  add column if not exists archived_at timestamptz,
+  add column if not exists sent_at     timestamptz;
+update public.news_posts set sent_at = created_at where publish_at is null and sent_at is null;
+update public.news_posts set publish_at = created_at where publish_at is null;
+alter table public.news_posts alter column publish_at set default now();
+alter table public.news_posts alter column publish_at set not null;
+create index if not exists news_posts_due_idx on public.news_posts (publish_at) where sent_at is null;
+
 alter table public.news_posts drop constraint if exists news_posts_title_check;
 alter table public.news_posts add constraint news_posts_title_check
   check (length(trim(title)) between 1 and 200 and jsonb_typeof(photos) = 'array');
@@ -154,9 +168,15 @@ begin
   if tg_op = 'INSERT' then
     new.created_by := auth.uid();
     new.created_at := now();
+    new.publish_at := coalesce(new.publish_at, now());
+    new.sent_at := null;
   else
     new.created_by := old.created_by;
     new.created_at := old.created_at;
+    -- When the newsletter went out is the database's to say, not the page's.
+    if current_user in ('authenticated', 'anon') then
+      new.sent_at := old.sent_at;
+    end if;
   end if;
   new.updated_at := now();
   return new;
@@ -168,9 +188,11 @@ create trigger stamp_news_post before insert or update on public.news_posts
 
 alter table public.news_posts enable row level security;
 
+-- The public reads what is published and not archived; PGENRO reads all of
+-- it, scheduled and archived too, through its own rule below.
 drop policy if exists "anyone reads the news" on public.news_posts;
 create policy "anyone reads the news" on public.news_posts
-  for select to anon, authenticated using (true);
+  for select to anon, authenticated using (publish_at <= now() and archived_at is null);
 
 drop policy if exists "pgenro posts the news" on public.news_posts;
 create policy "pgenro posts the news" on public.news_posts
@@ -181,26 +203,79 @@ create policy "pgenro posts the news" on public.news_posts
 grant select on public.news_posts to anon, authenticated;
 grant insert, update, delete on public.news_posts to authenticated;
 
+-- One post's newsletter to every office, once, when it is due. True when it
+-- went out now.
+create or replace function public.deliver_news_post(p_id uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  p public.news_posts%rowtype;
+begin
+  select * into p from public.news_posts
+  where id = p_id and sent_at is null and archived_at is null and publish_at <= now()
+  for update skip locked;
+  if not found then
+    return false;
+  end if;
+  perform public.notify_offices(
+    'news',
+    p.title,
+    concat_ws(E'\n\n',
+      nullif(trim(concat_ws(' · ',
+        case when p.event_date is not null then to_char(p.event_date, 'FMDD FMMonth YYYY') end,
+        nullif(p.venue, ''))), ''),
+      nullif(p.body, '')),
+    jsonb_build_object('kind', 'news', 'id', p.id),
+    p.id::text);
+  update public.news_posts set sent_at = now() where id = p.id;
+  return true;
+end $$;
+revoke all on function public.deliver_news_post(uuid) from public;
+
+-- Sent the moment a post is made or moved to now; a scheduled one waits.
 create or replace function public.send_news_to_offices()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  perform public.notify_offices(
-    'news',
-    new.title,
-    concat_ws(E'\n\n',
-      nullif(trim(concat_ws(' · ',
-        case when new.event_date is not null then to_char(new.event_date, 'FMDD FMMonth YYYY') end,
-        nullif(new.venue, ''))), ''),
-      nullif(new.body, '')),
-    jsonb_build_object('kind', 'news', 'id', new.id),
-    new.id::text);
+  perform public.deliver_news_post(new.id);
   return null;
 end $$;
 
 drop trigger if exists send_news_to_offices on public.news_posts;
 create trigger send_news_to_offices
-  after insert on public.news_posts
+  after insert or update of publish_at, archived_at on public.news_posts
   for each row execute function public.send_news_to_offices();
+
+-- Every post whose time has come. Safe to call any time, by anyone, as often
+-- as wanted: each newsletter goes out once. The pages call it as they load,
+-- and pg_cron every five minutes where it is switched on (below).
+create or replace function public.publish_due_news()
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_sent integer := 0;
+begin
+  for v_id in
+    select id from public.news_posts
+    where sent_at is null and archived_at is null and publish_at <= now()
+    order by publish_at
+  loop
+    if public.deliver_news_post(v_id) then
+      v_sent := v_sent + 1;
+    end if;
+  end loop;
+  return v_sent;
+end $$;
+revoke all on function public.publish_due_news() from public;
+grant execute on function public.publish_due_news() to anon, authenticated;
+
+-- Supabase's scheduler, when it is switched on (Database → Extensions →
+-- pg_cron): due posts go out within five minutes even with nobody on the site.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'green-tag-news';
+    perform cron.schedule('green-tag-news', '*/5 * * * *', 'select public.publish_due_news()');
+  end if;
+end $$;
 
 -- The photos: public to read, PGENRO's to add and remove.
 do $$
@@ -352,6 +427,17 @@ select 'News & Events',
        to_regclass('public.news_posts') is not null
        and exists (select 1 from information_schema.triggers where trigger_name = 'send_news_to_offices'),
        ''
+union all
+select 'News & Events can be scheduled and archived',
+       exists (select 1 from information_schema.columns where table_name = 'news_posts' and column_name = 'publish_at')
+       and exists (select 1 from information_schema.routines where routine_name = 'publish_due_news'),
+       ''
+union all
+select 'READ: scheduled posts sent by',
+       null,
+       case when exists (select 1 from pg_extension where extname = 'pg_cron')
+            then 'pg_cron, every 5 minutes, and the pages as they load'
+            else 'the pages as they load (switch on pg_cron to send them with nobody on the site)' end
 union all
 select 'species missing from RISE reach PGENRO',
        exists (select 1 from information_schema.triggers where trigger_name = 'notify_unknown_species'),

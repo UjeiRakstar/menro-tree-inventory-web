@@ -143,6 +143,22 @@ describe("PGENRO's News & Events on the home page", () => {
     await waitFor(() => expect(supabaseMock.writesTo('news_posts', 'select').length).toBeGreaterThan(1));
     expect(screen.queryByRole('region', { name: 'News and Events' })).not.toBeInTheDocument();
   });
+  it('shows only what is published — never a scheduled or archived post — and sends what is due first', async () => {
+    supabaseMock.setResponse('news_posts:select', {
+      data: [
+        { id: 'later', title: 'Arbor Day', photos: [], publish_at: new Date(Date.now() + 86400000).toISOString() },
+        { id: 'shelved', title: 'Old fair', photos: [], publish_at: '2026-01-01T00:00:00Z', archived_at: '2026-02-01T00:00:00Z' },
+        { id: 'now', title: 'Tree Planting Day', photos: [], publish_at: '2026-10-01T00:00:00Z' },
+      ],
+      error: null,
+    });
+    renderAbout();
+    const news = await screen.findByRole('region', { name: 'News and Events' });
+    expect(within(news).getByRole('heading', { name: 'Tree Planting Day' })).toBeInTheDocument();
+    expect(news).not.toHaveTextContent('Arbor Day');
+    expect(news).not.toHaveTextContent('Old fair');
+    expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('publish_due_news');
+  });
 });
 
 describe('a post with several photos', () => {

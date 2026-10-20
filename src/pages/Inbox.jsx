@@ -9,6 +9,7 @@ import { officialName } from '../lib/psgc.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 import { INBOX_FOLDERS, INBOX_KINDS, folderById, linkOf, receivedAt, replyMailto } from '../lib/inbox.js';
 import { MAX_REPLY_CHARACTERS, loadReplies, replyChannelOf, sendReply } from '../lib/replies.js';
+import { publishDueNews } from '../lib/news.js';
 
 const isMissingTable = (error) => /relation .*inbox_messages.* does not exist|Could not find the table/i.test(error?.message ?? '');
 
@@ -35,6 +36,8 @@ export default function Inbox() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Scheduled News & Events whose time has come reach the inbox first.
+      await publishDueNews();
       // The database shows an office its own inbox only.
       const { data, error: loadError } = await supabase
         .from('inbox_messages')

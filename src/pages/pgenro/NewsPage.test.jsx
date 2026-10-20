@@ -48,7 +48,7 @@ describe("PGENRO's News & Events", () => {
     expect(insert.payload.photos).toEqual([expect.stringMatching(/^https:\/\/storage\.test\/news-photos\/.+\.jpg$/)]);
     const posted = screen.getByRole('region', { name: 'Posted' });
     expect(within(posted).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      expect.stringMatching(/^Tree Planting Day8 November 2026 · Labuin/),
+      expect.stringMatching(/^Tree Planting DaypublishedPublished .*Event: 8 November 2026 · Labuin/),
       expect.stringMatching(/^Earth Hour/),
     ]);
   });
@@ -91,5 +91,83 @@ describe("PGENRO's News & Events", () => {
     expect(await screen.findByText('Give it a title.')).toBeInTheDocument();
     expect(supabaseMock.supabase.storage.upload).not.toHaveBeenCalled();
     expect(supabaseMock.writesTo('news_posts', 'insert')).toHaveLength(0);
+  });
+});
+
+describe('scheduling, archiving and the calendar (19 October)', () => {
+  const future = new Date(Date.now() + 3 * 86400000);
+  const two = (n) => String(n).padStart(2, '0');
+  const local = (d) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T08:00`;
+  const SCHEDULED = { id: 'later', title: 'Arbor Day', body: '', photos: [], created_at: '2026-10-19T00:00:00Z', publish_at: new Date(`${local(future)}`).toISOString() };
+  const SENT_OLD = { ...OLD, publish_at: OLD.created_at, sent_at: OLD.created_at };
+
+  it('schedules a post for a day and time, sending it to nobody yet', async () => {
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Title', 'Arbor Day');
+    fireEvent.click(within(form).getByRole('radio', { name: 'Schedule' }));
+    fireEvent.change(within(form).getByLabelText('Goes out on'), { target: { value: local(future) } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Schedule the post' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/^Scheduled for .*It goes to every MENRO \/ CENRO and onto the home page then\./);
+    const [insert] = supabaseMock.writesTo('news_posts', 'insert');
+    expect(Date.parse(insert.payload.publish_at)).toBe(new Date(local(future)).getTime());
+  });
+
+  it('will not schedule a time already past', async () => {
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Title', 'Too late');
+    fireEvent.click(within(form).getByRole('radio', { name: 'Schedule' }));
+    fireEvent.change(within(form).getByLabelText('Goes out on'), { target: { value: '2020-01-01T08:00' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Schedule the post' }));
+    expect(await screen.findByText(/That time has passed/)).toBeInTheDocument();
+    expect(supabaseMock.writesTo('news_posts', 'insert')).toHaveLength(0);
+  });
+
+  it('archives a post off the home page and restores it, and filters by where each stands', async () => {
+    supabaseMock.setResponse('news_posts:select', { data: [SENT_OLD, SCHEDULED], error: null });
+    render(<NewsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive Earth Hour' }));
+    await waitFor(() => expect(supabaseMock.writesTo('news_posts', 'update')).toHaveLength(1));
+    expect(supabaseMock.writesTo('news_posts', 'update')[0].payload).toEqual({ archived_at: expect.any(String) });
+    expect(await screen.findByRole('status')).toHaveTextContent('"Earth Hour" archived: off the home page, kept here.');
+    expect(screen.getByRole('button', { name: 'Archived (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Scheduled (1)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled (1)' }));
+    const posted = screen.getByRole('region', { name: 'Posted' });
+    expect(within(posted).getAllByRole('listitem')).toHaveLength(1);
+    expect(posted).toHaveTextContent('Arbor Day');
+    fireEvent.click(screen.getByRole('button', { name: 'Archived (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Earth Hour' }));
+    await waitFor(() => expect(supabaseMock.writesTo('news_posts', 'update')[1].payload).toEqual({ archived_at: null }));
+  });
+
+  it('keeps a published post published when it is edited', async () => {
+    supabaseMock.setResponse('news_posts:select', { data: [SENT_OLD], error: null });
+    render(<NewsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Earth Hour' }));
+    const form = screen.getByRole('form', { name: 'Edit the post' });
+    expect(within(form).queryByRole('radio', { name: 'Schedule' })).not.toBeInTheDocument();
+    expect(form).toHaveTextContent('Its newsletter has gone out');
+  });
+
+  it('lays the month out on a calendar, and starts a post from a day', async () => {
+    supabaseMock.setResponse('news_posts:select', { data: [SENT_OLD, SCHEDULED], error: null });
+    render(<NewsPage />);
+    await screen.findByRole('button', { name: 'Edit Earth Hour' });
+    fireEvent.click(screen.getByRole('tab', { name: /Calendar/ }));
+    const calendar = screen.getByRole('region', { name: 'Calendar' });
+    // Move to the scheduled post's month, wherever this test runs.
+    const months = (future.getFullYear() - new Date().getFullYear()) * 12 + future.getMonth() - new Date().getMonth();
+    for (let i = 0; i < months; i += 1) fireEvent.click(within(calendar).getByRole('button', { name: 'Next month' }));
+    fireEvent.click(within(calendar).getByRole('button', { name: 'Arbor Day' }));
+    expect(screen.getByRole('form', { name: 'Edit the post' })).toBeInTheDocument();
+    expect(within(screen.getByRole('form', { name: 'Edit the post' })).getByLabelText('Goes out on')).toHaveValue(local(future));
+
+    const day = local(future).slice(0, 10);
+    fireEvent.click(within(calendar).getByRole('button', { name: `New post for ${day}` }));
+    const form = screen.getByRole('form', { name: 'New post' });
+    expect(within(form).getByRole('radio', { name: 'Schedule' })).toBeChecked();
+    expect(within(form).getByLabelText('Goes out on')).toHaveValue(`${day}T08:00`);
   });
 });

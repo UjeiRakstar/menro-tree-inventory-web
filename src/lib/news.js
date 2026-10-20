@@ -55,3 +55,70 @@ export async function uploadNewsPhotos(files) {
 /** The storage paths of a post's photos, to remove them with the post. */
 export const photoPaths = (urls = []) =>
   urls.map((url) => String(url).split(`/${NEWS_BUCKET}/`)[1]).filter(Boolean);
+
+/**
+ * Where a post stands (inbox.sql, 19 October): 'archived', kept off the home
+ * page; 'scheduled', its time not come yet; or 'published'.
+ */
+export function newsStatus(post, now = Date.now()) {
+  if (post?.archived_at) return 'archived';
+  const at = Date.parse(post?.publish_at ?? '');
+  return Number.isFinite(at) && at > now ? 'scheduled' : 'published';
+}
+
+/** When a post goes, or went, public: the time to sort and to file it on the calendar by. */
+export const publishTimeOf = (post) => post?.publish_at ?? post?.created_at ?? null;
+
+const two = (n) => String(n).padStart(2, '0');
+
+/** A day in the browser's own time, as 'YYYY-MM-DD'. */
+export function dayKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
+}
+
+/** What a datetime-local input wants ('YYYY-MM-DDTHH:mm'), in the browser's own time. */
+export function toLocalInput(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${dayKey(date)}T${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+/** "Scheduled for 8 November 2026, 8:00 AM" or "Published 19 October 2026". */
+export function publishedWhen(post, now = Date.now()) {
+  const at = publishTimeOf(post);
+  if (!at) return '';
+  const date = new Date(at);
+  const day = `${date.getDate()} ${date.toLocaleDateString('en-PH', { month: 'long' })} ${date.getFullYear()}`;
+  const time = date.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+  return newsStatus(post, now) === 'scheduled' ? `Scheduled for ${day}, ${time}` : `Published ${day}`;
+}
+
+/**
+ * A month as weeks, Sunday first: [[{ key: 'YYYY-MM-DD', day, inMonth }]],
+ * the days of the months either side filling the first and last weeks.
+ */
+export function monthGrid(year, month) {
+  const first = new Date(year, month, 1);
+  const weeks = [];
+  for (let w = 0; w < 6; w += 1) {
+    const week = [];
+    for (let d = 0; d < 7; d += 1) {
+      const date = new Date(year, month, 1 - first.getDay() + w * 7 + d);
+      week.push({ key: dayKey(date), day: date.getDate(), inMonth: date.getMonth() === month });
+    }
+    if (w > 3 && !week.some((cell) => cell.inMonth)) break;
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+/** Sends every post whose time has come (publish_due_news() in inbox.sql). Safe on every page load. */
+export async function publishDueNews() {
+  try {
+    await supabase.rpc('publish_due_news');
+  } catch {
+    // Not in the database yet, or offline: the next page load tries again.
+  }
+}

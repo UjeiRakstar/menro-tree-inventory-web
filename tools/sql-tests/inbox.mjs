@@ -108,6 +108,42 @@ const officePost = await run(SCZ_ADMIN, `insert into public.news_posts (title) v
 ok('an office does not post News & Events', officePost.error !== null, officePost.error ?? 'POSTED');
 ok('the public reads the news', ((await run(null, `select title from public.news_posts`, [], 'anon')).rows ?? []).length === 1);
 
+// Scheduled and archived (19 October).
+const sentOf = async (title) => count(`select count(*) n from public.inbox_messages where kind = 'news' and subject = '${title}'`);
+const scheduled = await run(PG, `insert into public.news_posts (title, publish_at) values ('Arbor Day', now() + interval '3 days')`);
+ok('PGENRO schedules a post', scheduled.error === null, scheduled.error ?? '');
+ok('…which is sent to nobody yet', (await sentOf('Arbor Day')) === 0);
+ok('…nor shown to the public', !((await run(null, `select title from public.news_posts`, [], 'anon')).rows ?? []).some((r) => r.title === 'Arbor Day'));
+ok('…while PGENRO sees it, to plan', ((await run(PG, `select title from public.news_posts`)).rows ?? []).some((r) => r.title === 'Arbor Day'));
+ok('nothing is due yet', (await run(null, `select public.publish_due_news() n`, [], 'anon')).rows[0].n === 0);
+// Three days pass: the trigger is set aside so only publish_due_news() can send it.
+await db.exec(`alter table public.news_posts disable trigger send_news_to_offices;
+  update public.news_posts set publish_at = now() - interval '1 minute' where title = 'Arbor Day';
+  alter table public.news_posts enable trigger send_news_to_offices;`);
+ok('when its time comes it goes out — called by anyone, a page as it loads',
+  (await run(null, `select public.publish_due_news() n`, [], 'anon')).rows[0].n === 1 && (await sentOf('Arbor Day')) === lgus);
+ok('…once, however often it is called', (await run(null, `select public.publish_due_news() n`, [], 'anon')).rows[0].n === 0 && (await sentOf('Arbor Day')) === lgus);
+ok('…and the public sees it now', ((await run(null, `select title from public.news_posts`, [], 'anon')).rows ?? []).some((r) => r.title === 'Arbor Day'));
+
+await run(PG, `insert into public.news_posts (title, publish_at) values ('Moved up', now() + interval '1 day')`);
+await run(PG, `update public.news_posts set publish_at = now() where title = 'Moved up'`);
+ok('a scheduled post moved to now goes out at once', (await sentOf('Moved up')) === lgus);
+
+const archived = await run(PG, `update public.news_posts set archived_at = now() where title = 'Arbor Day'`);
+ok('PGENRO archives a post', archived.error === null);
+ok('…which leaves the home page', !((await run(null, `select title from public.news_posts`, [], 'anon')).rows ?? []).some((r) => r.title === 'Arbor Day'));
+ok('…and is kept, for PGENRO', ((await run(PG, `select title from public.news_posts where archived_at is not null`)).rows ?? []).length === 1);
+await run(PG, `insert into public.news_posts (title, publish_at) values ('Shelved', now() + interval '1 day')`);
+await run(PG, `update public.news_posts set archived_at = now() where title = 'Shelved'`);
+await db.exec(`alter table public.news_posts disable trigger send_news_to_offices;
+  update public.news_posts set publish_at = now() - interval '1 minute' where title = 'Shelved';
+  alter table public.news_posts enable trigger send_news_to_offices;`);
+await run(null, `select public.publish_due_news()`, [], 'anon');
+ok('an archived post is never sent, even when its time comes', (await sentOf('Shelved')) === 0);
+const faked = await run(PG, `update public.news_posts set sent_at = null where title = 'Moved up'`);
+ok('when a newsletter went out is not the page’s to change',
+  faked.error === null && (await count(`select count(*) n from public.news_posts where title = 'Moved up' and sent_at is not null`)) === 1);
+
 // The RISE check.
 await db.exec(`insert into public.trees (id, species, scientific_name, barangay, municipality) values ('t1', 'Narra', 'Pterocarpus indicus', 'Labuin', 'Santa Cruz')`);
 ok('a species in the library is no news', (await count(`select count(*) n from public.inbox_messages where kind = 'rise'`)) === 0);

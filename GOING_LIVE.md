@@ -14,7 +14,7 @@ Google dashboards) or **IT** (whoever uploads to the website).
 
 1. **The database is up to date.** Version 2 calls database parts that
    version 1 never needed. Run, in order, every step in PARKED.md's run order
-   not yet run (steps 13–22; run community.sql and closing_gaps.sql again,
+   not yet run (steps 13–23; run community.sql and closing_gaps.sql again,
    and super_admin.sql last).
    Then paste `supabase/health_check.sql` into the SQL editor: every row with
    a true/false must say **true**.

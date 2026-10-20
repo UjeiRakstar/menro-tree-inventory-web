@@ -62,3 +62,23 @@ describe('News & Events', () => {
     expect(photoPaths(['https://x.supabase.co/storage/v1/object/public/news-photos/abc.jpg'])).toEqual(['abc.jpg']);
   });
 });
+
+describe('scheduled News & Events (19 October)', () => {
+  it('says where a post stands', async () => {
+    const { newsStatus } = await import('./news.js');
+    const now = Date.parse('2026-10-20T00:00:00Z');
+    expect(newsStatus({ publish_at: '2026-10-21T00:00:00Z' }, now)).toBe('scheduled');
+    expect(newsStatus({ publish_at: '2026-10-19T00:00:00Z' }, now)).toBe('published');
+    expect(newsStatus({ created_at: '2026-10-01T00:00:00Z' }, now)).toBe('published');
+    expect(newsStatus({ publish_at: '2026-10-21T00:00:00Z', archived_at: '2026-10-20T00:00:00Z' }, now)).toBe('archived');
+  });
+
+  it('lays a month out in weeks, Sunday first', async () => {
+    const { monthGrid } = await import('./news.js');
+    const october = monthGrid(2026, 9);
+    // 1 October 2026 is a Thursday.
+    expect(october[0].map((cell) => cell.key)).toEqual(['2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']);
+    expect(october.flat().filter((cell) => cell.inMonth)).toHaveLength(31);
+    expect(october.at(-1).some((cell) => cell.key === '2026-10-31')).toBe(true);
+  });
+});
