@@ -153,6 +153,13 @@ export function accessFor(profile) {
 export const canUseWeb = (profile) => accessFor(profile).kind === 'web';
 
 /**
+ * The super admin (supabase/super_admin.sql, decided 18 October): one PGENRO
+ * account that can do everything, for every LGU. The flag is set in the SQL
+ * editor only; the database checks it again on every action.
+ */
+export const isSuperAdmin = (profile) => profile?.is_super_admin === true && canUseWeb(profile);
+
+/**
  * Whether a MENRO / CENRO account is yet to fill in its holder's details
  * (supabase/onboarding.sql). Only a real null: before that file has run there
  * is no onboarded_at at all, and nobody is stopped. A training account is the

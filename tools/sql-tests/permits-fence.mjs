@@ -121,5 +121,42 @@ ok('a permit cannot be moved to another LGU', Number(await lguOf('Brian')) === S
 const archived = await attempt(PG, `select public.archive_permit((select id::text from public.permits where client_name = 'Brian'))`);
 ok('PGENRO archives no permit: it reads them (18 October)', archived.error !== null, archived.error ?? 'ARCHIVED');
 
+// ---- super_admin.sql: one account that can do everything (18 October) ---------------
+const superSql = SQL('super_admin.sql');
+try {
+  const plain = await db.exec(superSql);
+  const rows = plain[plain.length - 1].rows;
+  ok('super_admin.sql runs, and flags nobody until an email is put in', rows.every((r) => r.ok !== false)
+    && rows.find((r) => r.check === 'READ: super admin')?.detail === 'nobody yet', rows.map((r) => `${r.check}=${r.ok} ${r.detail}`).join('; '));
+  await db.exec(superSql.replace('PUT-YOUR-PGENRO-ACCOUNT-EMAIL-HERE', 'pgenro@laguna.gov.ph'));
+  await db.exec(superSql.replace('PUT-YOUR-PGENRO-ACCOUNT-EMAIL-HERE', 'pgenro@laguna.gov.ph'));
+  ok('…flags the PGENRO account named, and runs twice', (await db.query(`select is_super_admin from public.profiles where id = $1`, [PG])).rows[0].is_super_admin === true);
+} catch (error) {
+  ok('super_admin.sql runs', false, error.message);
+}
+await db.exec(superSql.replace('PUT-YOUR-PGENRO-ACCOUNT-EMAIL-HERE', 'menro@scz.ph'));
+ok('…but never an LGU office account', (await db.query(`select is_super_admin from public.profiles where id = $1`, [SCZ_ADMIN])).rows[0].is_super_admin === false);
+
+const superArchive = await attempt(PG, `select public.archive_permit((select id::text from public.permits where client_name = 'Brian'))`);
+ok('the super admin archives a permit', superArchive.error === null, superArchive.error ?? '');
+const superRestore = await attempt(PG, `select public.archive_permit((select id::text from public.permits where client_name = 'Brian'), false)`);
+ok('…and restores it', superRestore.error === null);
+const superIssue = await attempt(PG, `insert into public.permits (tree_id, client_name) values ('scz', 'Issued by the super admin')`);
+ok('the super admin issues a permit for any LGU’s tree', superIssue.error === null && Number(await lguOf('Issued by the super admin')) === SCZ, superIssue.error ?? '');
+const superEdit = await attempt(PG, `update public.permits set contact_info = 'edited' where client_name = 'Walk-in'`);
+ok('…and changes any LGU’s permit', superEdit.error === null && superEdit.rows === 1, JSON.stringify(superEdit));
+const asAnyOffice = await as(PG, 'authenticated', async () => (await db.query(`select public.is_lgu_admin_of(${KAL}) ok`)).rows[0].ok);
+ok('…and acts as every LGU’s office', asAnyOffice === true);
+const kalStill = await as(KAL_ADMIN, 'authenticated', async () => (await db.query(`select public.is_lgu_admin_of(${SCZ}) ok`)).rows[0].ok);
+ok('an LGU office is still only its own', kalStill === false);
+const selfUnset = await attempt(PG, `update public.profiles set is_super_admin = false where id = '${PG}'`);
+ok('the flag cannot be changed from the app, even by the super admin', selfUnset.error !== null, selfUnset.error ?? 'CHANGED');
+const selfSet = await attempt(SCZ_ADMIN, `update public.profiles set is_super_admin = true where id = '${SCZ_ADMIN}'`);
+ok('…nor set by anyone else', selfSet.error !== null || selfSet.rows === 0, JSON.stringify(selfSet));
+await db.exec(`update public.profiles set status = 'locked' where id = '${PG}'`);
+const lockedArchive = await attempt(PG, `select public.archive_permit((select id::text from public.permits where client_name = 'Zaldy'))`);
+ok('a locked super admin is no super admin', lockedArchive.error !== null);
+await db.exec(`update public.profiles set status = 'active' where id = '${PG}'`);
+
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

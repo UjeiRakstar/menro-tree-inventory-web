@@ -999,6 +999,12 @@ describe('what an office can do to a tree', () => {
     expect(panel).toHaveTextContent('done by the MENRO / CENRO');
   });
 
+  it('lets the super admin dispatch and issue permits, for any LGU (18 October)', async () => {
+    const panel = await open(OFFICE_TREES[0], { ...PGENRO_ADMIN, is_super_admin: true });
+    expect(within(panel).getByRole('button', { name: 'Dispatch' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Issue permit' })).toBeInTheDocument();
+  });
+
   it('dispatches someone to a hazard nobody is on', async () => {
     const panel = await open(OFFICE_TREES[0]);
     expect(within(panel).getByText('Hazard — needs dispatching')).toBeInTheDocument();

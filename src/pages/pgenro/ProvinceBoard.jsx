@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Eye, Loader2 } from 'lucide-react';
 import { useBoardData } from '../../components/board/ActionSummary.jsx';
 import ProvincePermits from './ProvincePermits.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { isSuperAdmin } from '../../lib/roles.js';
 import PlantingRequests from '../../components/PlantingRequests.jsx';
 
 /**
@@ -12,6 +14,7 @@ import PlantingRequests from '../../components/PlantingRequests.jsx';
  * (17 October), with the figures it belongs beside.
  */
 export default function ProvinceBoard() {
+  const superAdmin = isSuperAdmin(useAuth().profile);
   // ?tab=requests opens the planting site requests (the header's menu links there).
   const [searchParams] = useSearchParams();
   const [tab, setTab] = useState(() => (searchParams.get('tab') === 'requests' ? 'requests' : 'permits'));
@@ -64,7 +67,7 @@ export default function ProvinceBoard() {
       ) : loadError ? (
         <p role="alert" className="text-sm text-red-700">{loadError}</p>
       ) : (
-        <ProvincePermits permits={data.permits} trees={data.trees} lgus={data.lgus} labelOf={labelOf} />
+        <ProvincePermits permits={data.permits} trees={data.trees} lgus={data.lgus} labelOf={labelOf} canArchive={superAdmin} />
       )}
     </section>
   );

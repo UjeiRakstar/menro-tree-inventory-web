@@ -124,6 +124,12 @@ describe('Header, for whoever is signed in', () => {
     expect(screen.getByText('CENRO Calamba City')).toBeInTheDocument();
   });
 
+  it('names the super admin as such', async () => {
+    supabaseMock.signInAs({ ...PGENRO_ADMIN, is_super_admin: true });
+    renderHeader();
+    expect(await screen.findByRole('button', { name: 'PGENRO Laguna · Super admin — account menu' })).toBeInTheDocument();
+  });
+
   it('gives PGENRO the Accounts page', async () => {
     supabaseMock.signInAs(PGENRO_ADMIN);
     renderHeader();

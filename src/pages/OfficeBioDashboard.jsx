@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { isPgenro } from '../lib/roles.js';
+import { isPgenro, isSuperAdmin } from '../lib/roles.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 import ActionSummary, { useBoardData } from '../components/board/ActionSummary.jsx';
 import { BioDashboardView } from './public/PublicDashboard.jsx';
@@ -25,6 +25,8 @@ import PendingTreesTable from '../components/admin/PendingTreesTable.jsx';
 export default function OfficeBioDashboard() {
   const { profile } = useAuth();
   const pgenro = isPgenro(profile);
+  // PGENRO reads the LGUs' tags; the super admin acts on them as their office would.
+  const actsOnTags = !pgenro || isSuperAdmin(profile);
   const [searchParams] = useSearchParams();
   const board = useBoardData();
   const [tab, setTab] = useState('dashboard');
@@ -76,7 +78,7 @@ export default function OfficeBioDashboard() {
             labelOf={board.labelOf}
             lgu={chosen ? chosen.psgc : undefined}
             barangay={barangay}
-            onDeleteTag={pgenro ? null : deleteTag}
+            onDeleteTag={actsOnTags ? deleteTag : null}
           />
         )}
       </div>
@@ -107,7 +109,7 @@ export default function OfficeBioDashboard() {
       </div>
       {tab === 'tags' ? (
         <div className="p-6">
-          <PendingTreesTable readOnly={pgenro} />
+          <PendingTreesTable readOnly={!actsOnTags} />
         </div>
       ) : (
         <BioDashboardView audience={pgenro ? 'pgenro' : 'office'} lockedLgu={ownLgu?.name ?? null} top={top} />

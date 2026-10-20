@@ -4,7 +4,7 @@ import { ChevronDown, FileText, Inbox as InboxIcon, Layers, LogOut, MapPinned, M
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
-import { ROLES, isPgenro, roleLabel, roleOf } from '../lib/roles.js';
+import { ROLES, isPgenro, isSuperAdmin, roleLabel, roleOf } from '../lib/roles.js';
 import { logoFor } from '../lib/lguLogos.js';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 import pgenroLogo from '../assets/lgu-thumbs/PGENRO_LGU_logo.png';
@@ -35,7 +35,7 @@ export function useOffice() {
   const { profile, lgu } = useAuth();
   if (isPgenro(profile)) {
     return {
-      name: 'PGENRO Laguna',
+      name: isSuperAdmin(profile) ? 'PGENRO Laguna · Super admin' : 'PGENRO Laguna',
       title: 'Tree Inventory System of PGENRO Laguna',
       seal: { src: pgenroLogo, alt: 'PGENRO Laguna' },
     };

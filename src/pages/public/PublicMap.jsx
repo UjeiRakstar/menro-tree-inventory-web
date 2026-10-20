@@ -36,7 +36,7 @@ import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
 import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
 import { boundsOfShape, shapeFromGeometry } from '../../lib/areaImport.js';
-import { ROLES, roleOf } from '../../lib/roles.js';
+import { ROLES, roleOf, isSuperAdmin } from '../../lib/roles.js';
 import { centroidOf } from '../../lib/areaGeometry.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
@@ -1888,7 +1888,7 @@ export function TreeMap({
         onDispatch={() => setDispatchTree(selectedTree)}
         onPermit={() => setPermitTree(selectedTree)}
         onDelete={selectedTree.__pending ? () => deletePendingTree(selectedTree) : undefined}
-        canAct={roleOf(profile) === ROLES.LGU_ADMIN}
+        canAct={roleOf(profile) === ROLES.LGU_ADMIN || isSuperAdmin(profile)}
       />
     ) : null;
 

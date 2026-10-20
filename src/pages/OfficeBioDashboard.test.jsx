@@ -186,3 +186,12 @@ describe('the BioDashboard of PGENRO', () => {
     expect(screen.queryByRole('button', { name: /Verify/ })).not.toBeInTheDocument();
   });
 });
+
+describe('the super admin (18 October)', () => {
+  it('verifies the LGUs’ tags as their office would, where PGENRO only reads', async () => {
+    show({ ...PGENRO, is_super_admin: true });
+    fireEvent.click(await screen.findByRole('tab', { name: /^Tags/ }));
+    expect(await screen.findByText('Duhat')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Verify/ })).toBeInTheDocument();
+  });
+});

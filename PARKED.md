@@ -85,10 +85,21 @@ Google Branding values for publishing on `greentag.laguna.gov.ph`. Still
 needed from you: the Data Protection Officer's contact for
 `public/privacy.html`.
 
-**Round F — PGENRO and the super admin.** Each LGU pins its own hall, PGENRO
+**Round F — PGENRO and the super admin. Done 20 October.** Each LGU pins its own hall, PGENRO
 the capitol, and PGENRO sees every hall pinned. PGENRO sees permits and whom
 they were issued to, and does nothing to them; a super admin account (yours)
 can do everything. The RISE details on the public tree panel, more of them.
+- Built: halls are each LGU's own (PGENRO no longer moves them); PGENRO pins
+  the Provincial Capitol, its centre button flies there, and its map shows
+  every hall pinned. PGENRO's permit page reads every LGU's log, with the
+  report, and archives nothing. The tree panel shows all the RISE details the
+  forester entered. The super admin: a flag on one PGENRO account, set in
+  the SQL editor only (super_admin.sql), acting as every LGU's office —
+  permits, dispatch, verifying and deleting tags, approvals — and alone
+  archiving permits.
+- Parked from Round F: the super admin moving an LGU's hall from the map,
+  and working inside one LGU's Settings and field team pages (the database
+  already allows it; the pages are still PGENRO's).
 
 **Parked, to keep this manageable:**
 - The super admin role reaches every policy in the database; it is the last
@@ -281,10 +292,16 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     secrets `BREVO_API_KEY` and `MAIL_FROM`; deploy
     `supabase/functions/send-reply/index.ts` as a new function named exactly
     `send-reply`. Until then the Inbox says so and opens the email app.
+22. **Round F, 20 October** — run `supabase/municipal_halls.sql` and
+    `supabase/permit_archive.sql` again (each LGU pins its own hall, PGENRO
+    the Provincial Capitol; PGENRO archives no permit). Then, LAST,
+    `supabase/super_admin.sql`, with your PGENRO account's email on the
+    marked line of section 4. Run super_admin.sql again whenever
+    accounts.sql, permit_archive.sql or permits_fence.sql is run again.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 13 suites, 523 checks — the final check query on its
+allow and refuse — 13 suites, 539 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is

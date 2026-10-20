@@ -229,3 +229,16 @@ describe('the permit logs', () => {
     expect(saveAsSpy.mock.calls[0][1]).toMatch(/^permits-by-lgu-\d{4}-\d{2}-\d{2}\.xlsx$/);
   });
 });
+
+describe('the super admin (18 October)', () => {
+  it('archives and restores a permit, which PGENRO cannot', async () => {
+    auth.profile = { ...PGENRO_ADMIN, is_super_admin: true };
+    supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
+    renderBoard();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Permit logs' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive the permit for Jose Reyes' }));
+    await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('archive_permit', { p_id: 'p2', p_archived: true }));
+    expect(await screen.findByRole('button', { name: 'Restore the permit for Jose Reyes' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Permits — Pila' })).toHaveTextContent('Archived');
+  });
+});

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, FileSpreadsheet, Loader2, MapPin, Search } from 'lucide-react';
+import { Archive, ChevronDown, FileSpreadsheet, Loader2, MapPin, RotateCcw, Search } from 'lucide-react';
+import { supabase } from '../../supabaseClient.js';
 import { downloadPermitReport, lguOfPermit, treesCovered } from '../../lib/permitLogs.js';
 
 const formatDate = (value) =>
@@ -15,9 +16,13 @@ const formatDate = (value) =>
  * Read-only, wholly (decided 18 October): a permit is its MENRO / CENRO's
  * record, and PGENRO sees each one and whom it was issued to without acting
  * on it — no archive, no restore. A permit archived before that shows marked.
+ *
+ * `canArchive`: the super admin, who alone archives and restores a permit
+ * (super_admin.sql). An archived permit stays in the list, marked.
  */
-export default function ProvincePermits({ permits: initial, trees, lgus, labelOf }) {
-  const permits = initial;
+export default function ProvincePermits({ permits: initial, trees, lgus, labelOf, canArchive = false }) {
+  const [permits, setPermits] = useState(initial);
+  const [busyId, setBusyId] = useState(null);
   const [query, setQuery] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -59,6 +64,21 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
       .map(([lgu, list]) => ({ lgu, label: labelOf(lgu), list }))
       .sort((a, b) => b.list.length - a.list.length || a.label.localeCompare(b.label));
   }, [permits, query, lguOf, labelOf]);
+
+  async function setArchived(permit, archived) {
+    setBusyId(permit.id);
+    setProblem('');
+    const { error } = await supabase.rpc('archive_permit', { p_id: String(permit.id), p_archived: archived });
+    setBusyId(null);
+    if (error) {
+      setProblem(error.message);
+      return;
+    }
+    setPermits((current) =>
+      current.map((row) => (row.id === permit.id ? { ...row, archived_at: archived ? new Date().toISOString() : null } : row))
+    );
+    setNotice(`Permit for ${permit.client_name || 'this client'} ${archived ? 'archived' : 'restored'}.`);
+  }
 
   async function handleReport(event) {
     event.preventDefault();
@@ -183,6 +203,18 @@ export default function ProvincePermits({ permits: initial, trees, lgus, labelOf
                           >
                             <MapPin size={12} aria-hidden="true" /> Tree
                           </Link>
+                        )}
+                        {canArchive && (
+                          <button
+                            type="button"
+                            disabled={busyId === permit.id}
+                            onClick={() => setArchived(permit, !permit.archived_at)}
+                            aria-label={`${permit.archived_at ? 'Restore' : 'Archive'} the permit for ${permit.client_name || 'this client'}`}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {permit.archived_at ? <RotateCcw size={12} aria-hidden="true" /> : <Archive size={12} aria-hidden="true" />}
+                            {permit.archived_at ? 'Restore' : 'Archive'}
+                          </button>
                         )}
                       </td>
                     </tr>
