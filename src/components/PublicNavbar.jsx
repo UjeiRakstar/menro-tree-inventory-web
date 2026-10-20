@@ -3,8 +3,8 @@ import { Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 import { useAuthIfAny } from '../context/AuthContext.jsx';
-import { displayNameOf } from '../lib/community.js';
 import { REPLIES_READ_EVENT, countUnreadReplies } from '../lib/replies.js';
+import AccountMenu, { whoIsSignedIn } from './public/AccountMenu.jsx';
 
 /**
  * The order a visitor meets the site in: who we are, then the thing they came
@@ -24,13 +24,12 @@ export default function PublicNavbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
-  // A resident signed in with Google is shown by name, and goes to the
-  // community page; the office sign-in is not theirs.
+  // Whoever is signed in — an office account or a resident with Google — is
+  // shown by their photo or initials, with a menu to their account and Log
+  // out (20 October). Nobody signed in: Log In / Sign Up.
   const auth = useAuthIfAny();
+  const who = whoIsSignedIn(auth);
   const resident = auth?.session && !auth.profile ? auth.resident : null;
-  const account = resident
-    ? { to: '/community', label: resident.consented_at ? displayNameOf(resident) : 'Finish joining' }
-    : { to: '/login', label: 'Log In / Sign Up' };
 
   // An office's reply waiting for the resident: a "!" on their name, as the
   // offices' own header marks what waits (replies.sql). Read again on every
@@ -133,15 +132,18 @@ export default function PublicNavbar() {
               arriving for the first time has no account yet and would otherwise
               have to guess that one is made behind a button marked Log In. */}
           <div className="relative hidden lg:flex items-center ml-6">
-            <Link
-              to={account.to}
-              className="max-w-[14rem] truncate whitespace-nowrap px-5 py-2 text-sm font-semibold text-white border border-white/70 rounded-lg
-                         hover:bg-white hover:text-green-800 transition-all duration-300
-                         hover:shadow-lg hover:shadow-white/10 active:scale-95"
-            >
-              {account.label}
-            </Link>
-            {replyMark}
+            {who ? (
+              <AccountMenu who={who} mark={replyMark} />
+            ) : (
+              <Link
+                to="/login"
+                className="whitespace-nowrap px-5 py-2 text-sm font-semibold text-white border border-white/70 rounded-lg
+                           hover:bg-white hover:text-green-800 transition-all duration-300
+                           hover:shadow-lg hover:shadow-white/10 active:scale-95"
+              >
+                Log In / Sign Up
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -158,7 +160,7 @@ export default function PublicNavbar() {
       {/* Mobile menu — slides down */}
       <div
         className={`lg:hidden overflow-hidden transition-all duration-300 ${
-          mobileOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          mobileOpen ? 'max-h-[32rem] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="border-t border-green-700/50 bg-green-800/95 backdrop-blur-md px-4 py-3 space-y-1">
@@ -177,14 +179,17 @@ export default function PublicNavbar() {
             </Link>
           ))}
           <div className="relative pt-2 border-t border-green-700/50">
-            <Link
-              to={account.to}
-              onClick={() => setMobileOpen(false)}
-              className="block px-4 py-2.5 rounded-lg text-base font-semibold text-white border border-white/60 text-center hover:bg-white hover:text-green-800 transition-all duration-200"
-            >
-              {account.label}
-            </Link>
-            {mobileOpen && replyMark}
+            {who ? (
+              <AccountMenu who={who} mark={mobileOpen ? replyMark : null} mobile onDone={() => setMobileOpen(false)} />
+            ) : (
+              <Link
+                to="/login"
+                onClick={() => setMobileOpen(false)}
+                className="block px-4 py-2.5 rounded-lg text-base font-semibold text-white border border-white/60 text-center hover:bg-white hover:text-green-800 transition-all duration-200"
+              >
+                Log In / Sign Up
+              </Link>
+            )}
           </div>
         </div>
       </div>

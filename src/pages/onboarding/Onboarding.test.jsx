@@ -136,8 +136,41 @@ describe('a resident signed in with Google', () => {
     expect(await screen.findByText('You have joined as', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
-  it('is shown by name in the public navbar', async () => {
+  it('is shown in the public navbar by an avatar, whose menu goes to the community and logs out', async () => {
     renderAt('/about');
-    expect((await screen.findAllByRole('link', { name: 'Ana Reyes' }, { timeout: 5000 }))[0]).toHaveAttribute('href', '/community');
+    const [avatar] = await screen.findAllByRole('button', { name: 'Account: Ana Reyes' }, { timeout: 5000 });
+    expect(screen.queryByRole('link', { name: 'Log In / Sign Up' })).not.toBeInTheDocument();
+    // No photo from Google here: her initials.
+    expect(avatar).toHaveTextContent('AR');
+    fireEvent.click(avatar);
+    const menu = screen.getByRole('menu', { name: 'Account' });
+    expect(within(menu).getByText('Resident')).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /My community page/ })).toHaveAttribute('href', '/community');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Log out/ }));
+    await waitFor(() => expect(supabaseMock.supabase.auth.signOut).toHaveBeenCalled());
+  });
+
+  it('shows the photo Google gives the session', async () => {
+    supabaseMock.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'resident-ana', email: 'ana@gmail.com', user_metadata: { avatar_url: 'https://lh3.example/ana.jpg' } } } },
+      error: null,
+    });
+    const { container } = renderAt('/about');
+    await screen.findAllByRole('button', { name: 'Account: Ana Reyes' }, { timeout: 5000 });
+    expect(container.querySelector('img[src="https://lh3.example/ana.jpg"]')).toBeTruthy();
+  });
+});
+
+describe('an office account on the public pages', () => {
+  it('is shown by its avatar too, with the way back to the dashboard', async () => {
+    supabaseMock.signInAs({ ...SANTA_CRUZ_ADMIN, full_name: 'Maria Santos', avatar_url: 'https://example.test/maria.png' }, SANTA_CRUZ);
+    const { container } = renderAt('/community');
+    const [avatar] = await screen.findAllByRole('button', { name: 'Account: Maria Santos' }, { timeout: 5000 });
+    expect(container.querySelector('img[src="https://example.test/maria.png"]')).toBeTruthy();
+    fireEvent.click(avatar);
+    const menu = screen.getByRole('menu', { name: 'Account' });
+    expect(within(menu).getByText('MENRO Santa Cruz')).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: /Go to the dashboard/ })).toHaveAttribute('href', '/biodiversity-dashboard');
+    expect(within(menu).getByRole('menuitem', { name: /Log out/ })).toBeInTheDocument();
   });
 });
