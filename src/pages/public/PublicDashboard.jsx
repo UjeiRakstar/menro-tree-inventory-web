@@ -973,12 +973,15 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
           </div>
         </div>
 
-        {/* Tree cover as the offices have mapped it — a real figure, but only
-            of what has been drawn, and the card says so. */}
+        {/* Tree cover as the offices have mapped it, and what is not here yet,
+            side by side when both are shown (20 October): one row, no empty
+            half beside the mapped card. */}
+        <div className={`mt-10 grid gap-x-3 gap-y-10 ${mappedCover.areas > 0 ? 'lg:grid-cols-2' : ''}`}>
+        {/* A real figure, but only of what has been drawn, and the card says so. */}
         {mappedCover.areas > 0 && (
-          <section aria-label="Mapped tree cover" className="mt-10">
+          <section aria-label="Mapped tree cover" className="flex flex-col">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">From the map</h2>
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="mt-3 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
                 Forest / Tree Cover Area — mapped
               </p>
@@ -1016,11 +1019,11 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
         {/* Asked for, and honestly not here yet. Shown small rather than
             omitted: the public looks for these, and a page that left them out
             would read as though nobody had thought of them. */}
-        <section aria-label="Figures not available yet" className="mt-10">
+        <section aria-label="Figures not available yet" className="flex flex-col">
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-600">
             Not available yet
           </h2>
-          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <ul className={`mt-3 grid flex-1 auto-rows-fr grid-cols-1 gap-3 ${mappedCover.areas > 0 ? '' : 'sm:grid-cols-2'}`}>
             {pendingMetrics.map((metric) => (
               <li
                 key={metric.key}
@@ -1043,10 +1046,11 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
               </li>
             ))}
           </ul>
-
-          {/* What the amber means, said once, on the page that uses it most. */}
-          <ProvisionalKey className="mt-4" />
         </section>
+        </div>
+
+        {/* What the amber means, said once, on the page that uses it most. */}
+        <ProvisionalKey className="mt-4" />
       </div>
 
       <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />

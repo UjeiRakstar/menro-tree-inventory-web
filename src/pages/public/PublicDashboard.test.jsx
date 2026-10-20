@@ -228,9 +228,10 @@ describe('PublicDashboard', () => {
       2
     );
 
-    // And a key, so the colour means something rather than being a mood.
-    expect(within(pending).getByText('Reading the figures')).toBeInTheDocument();
-    expect(within(pending).getByText(/except where it is marked/)).toBeInTheDocument();
+    // And a key, so the colour means something rather than being a mood —
+    // under the row, full width, since the mapped cover can sit beside it.
+    expect(screen.getByText('Reading the figures')).toBeInTheDocument();
+    expect(screen.getByText(/except where it is marked/)).toBeInTheDocument();
 
     // The coverage note is NOT amber: it moves every time a height is
     // recorded. Amber that covers live figures too stops meaning anything.
