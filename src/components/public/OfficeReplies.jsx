@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, MessageSquareReply } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
-import { loadMyReplies } from '../../lib/replies.js';
+import { REPLIES_READ_EVENT, loadMyReplies } from '../../lib/replies.js';
 
 const when = (value) => new Date(value).toLocaleDateString('en-PH', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -17,7 +17,9 @@ export default function OfficeReplies() {
     loadMyReplies().then(({ replies }) => {
       if (cancelled) return;
       setState({ loading: false, replies });
-      if (replies.some((reply) => !reply.read_at)) supabase.rpc('mark_my_replies_read');
+      if (replies.some((reply) => !reply.read_at)) {
+        Promise.resolve(supabase.rpc('mark_my_replies_read')).then(() => window.dispatchEvent(new Event(REPLIES_READ_EVENT)));
+      }
     });
     return () => {
       cancelled = true;

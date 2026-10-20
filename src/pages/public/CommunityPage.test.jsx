@@ -190,3 +190,35 @@ describe('replies from the offices', () => {
     await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('mark_my_replies_read'));
   });
 });
+
+describe('the "!" on a resident’s name', () => {
+  it('shows when an office’s reply waits, and clears once the replies are shown', async () => {
+    const { default: PublicNavbar } = await import('../../components/PublicNavbar.jsx');
+    signInResident({ ...ANA, consented_at: '2026-10-19T00:00:00Z' });
+    supabaseMock.setResponse('message_replies:select', (record) =>
+      record.filters.some(([column]) => column === 'read_at')
+        ? { data: [{ id: 'r1' }], error: null }
+        : { data: [{ id: 'r1', office_label: 'Santa Cruz MENRO / CENRO', body: 'Salamat!', original_body: 'Hi', created_at: '2026-10-19T03:00:00Z', read_at: null }], error: null }
+    );
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <PublicNavbar />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    expect((await screen.findAllByRole('status', { name: '1 reply from an office waiting' }))[0]).toHaveTextContent('!');
+    cleanup();
+
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <PublicNavbar />
+          <CommunityPage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    await screen.findByText('Salamat!');
+    await waitFor(() => expect(screen.queryByRole('status', { name: /reply from an office waiting/ })).not.toBeInTheDocument());
+  });
+});

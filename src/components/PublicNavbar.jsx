@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 import { useAuthIfAny } from '../context/AuthContext.jsx';
 import { displayNameOf } from '../lib/community.js';
+import { REPLIES_READ_EVENT, countUnreadReplies } from '../lib/replies.js';
 
 /**
  * The order a visitor meets the site in: who we are, then the thing they came
@@ -30,6 +31,41 @@ export default function PublicNavbar() {
   const account = resident
     ? { to: '/community', label: resident.consented_at ? displayNameOf(resident) : 'Finish joining' }
     : { to: '/login', label: 'Log In / Sign Up' };
+
+  // An office's reply waiting for the resident: a "!" on their name, as the
+  // offices' own header marks what waits (replies.sql). Read again on every
+  // page, so it clears once the Community page has shown it.
+  const [waiting, setWaiting] = useState(0);
+  const residentId = resident?.id ?? null;
+  useEffect(() => {
+    if (!residentId) {
+      setWaiting(0);
+      return undefined;
+    }
+    let cancelled = false;
+    countUnreadReplies().then((n) => {
+      if (!cancelled) setWaiting(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [residentId, location.pathname]);
+  useEffect(() => {
+    const cleared = () => setWaiting(0);
+    window.addEventListener(REPLIES_READ_EVENT, cleared);
+    return () => window.removeEventListener(REPLIES_READ_EVENT, cleared);
+  }, []);
+  const waitingLabel = waiting ? `${waiting} ${waiting === 1 ? 'reply' : 'replies'} from an office waiting` : '';
+  const replyMark = waiting ? (
+    <span
+      role="status"
+      aria-label={waitingLabel}
+      title={waitingLabel}
+      className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white ring-2 ring-green-800"
+    >
+      !
+    </span>
+  ) : null;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -96,7 +132,7 @@ export default function PublicNavbar() {
           {/* Desktop: Log In Button. It says sign up too, because an officer
               arriving for the first time has no account yet and would otherwise
               have to guess that one is made behind a button marked Log In. */}
-          <div className="hidden lg:flex items-center ml-6">
+          <div className="relative hidden lg:flex items-center ml-6">
             <Link
               to={account.to}
               className="max-w-[14rem] truncate whitespace-nowrap px-5 py-2 text-sm font-semibold text-white border border-white/70 rounded-lg
@@ -105,6 +141,7 @@ export default function PublicNavbar() {
             >
               {account.label}
             </Link>
+            {replyMark}
           </div>
 
           {/* Mobile menu button */}
@@ -139,7 +176,7 @@ export default function PublicNavbar() {
               {link.label}
             </Link>
           ))}
-          <div className="pt-2 border-t border-green-700/50">
+          <div className="relative pt-2 border-t border-green-700/50">
             <Link
               to={account.to}
               onClick={() => setMobileOpen(false)}
@@ -147,6 +184,7 @@ export default function PublicNavbar() {
             >
               {account.label}
             </Link>
+            {mobileOpen && replyMark}
           </div>
         </div>
       </div>

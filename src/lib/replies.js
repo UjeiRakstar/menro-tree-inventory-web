@@ -50,3 +50,12 @@ export async function loadMyReplies() {
   const { data, error } = await supabase.from('message_replies').select('*').order('created_at', { ascending: false });
   return { replies: Array.isArray(data) ? data : [], error };
 }
+
+/** How many replies wait unread for the signed-in resident; 0 when none, or when it cannot be told. */
+export async function countUnreadReplies() {
+  const { data, error } = await supabase.from('message_replies').select('id').is('read_at', null);
+  return error || !Array.isArray(data) ? 0 : data.length;
+}
+
+/** Said on the window once a resident's replies are marked read, so the navbar's "!" clears at once. */
+export const REPLIES_READ_EVENT = 'greentag:replies-read';

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { MapPin, Camera, Loader2, CheckCircle2, X } from 'lucide-react';
 import Confetti from 'react-confetti';
 import { supabase } from '../../supabaseClient.js';
@@ -7,6 +7,7 @@ import { barangayAt, loadBarangayIndex } from '../../lib/barangayLookup.js';
 import { barangaysOf, labelOf } from '../../lib/lguOptions.js';
 import { useAuthIfAny } from '../../context/AuthContext.jsx';
 import { displayNameOf, isProviderOff, signInWithGoogle, taggingAccess } from '../../lib/community.js';
+import { SAME_TREE_RADIUS_M, treesNear } from '../../lib/nearbyTrees.js';
 
 /** Postgres's "no such column", or PostgREST's cached form of it. */
 const isMissingColumn = (error) =>
@@ -110,7 +111,12 @@ function TagGate({ access, onClose }) {
   );
 }
 
-export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
+/**
+ *   nearbyTrees  the trees already on the map — verified, and tagged but not
+ *                yet verified — so a tree a few metres away is asked about
+ *                before it is tagged twice (19 October)
+ */
+export default function TaggingForm({ onClose, onSuccess, initialPosition, nearbyTrees = [] }) {
   const auth = useAuthIfAny();
   const [latitude, setLatitude] = useState(initialPosition ? initialPosition[0].toFixed(6) : '');
   const [longitude, setLongitude] = useState(initialPosition ? initialPosition[1].toFixed(6) : '');
@@ -207,8 +213,20 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
     );
   }
 
+  // A tree already tagged within a few metres: is this it?
+  const [differentTree, setDifferentTree] = useState(false);
+  const near = useMemo(
+    () => treesNear([parseFloat(latitude), parseFloat(longitude)], nearbyTrees),
+    [latitude, longitude, nearbyTrees]
+  );
+  useEffect(() => setDifferentTree(false), [latitude, longitude]);
+
   async function handleSubmit(e) {
     e.preventDefault();
+    if (near.length > 0 && !differentTree) {
+      setSubmitError('A tree is already tagged here. Tick that this is a different tree, or close this if it is the same one.');
+      return;
+    }
     if (!latitude || !longitude) {
       setSubmitError('GPS coordinates are required. Please enable location services.');
       return;
@@ -461,6 +479,28 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition }) {
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
               {submitError}
             </p>
+          )}
+
+          {near.length > 0 && (
+            <div role="alert" className="space-y-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
+              <p>
+                <strong>Already tagged here?</strong>{' '}
+                {near.length === 1 ? 'A tree is' : `${near.length} trees are`} on the map within {SAME_TREE_RADIUS_M} m of this spot:
+              </p>
+              <ul className="list-disc pl-5 text-xs">
+                {near.slice(0, 3).map(({ tree, metres }) => (
+                  <li key={tree.id}>
+                    {tree.species || 'Unidentified'}, {Math.round(metres)} m away
+                    {tree.__pending ? ' (tagged, not yet verified)' : ''}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs">If it is the same tree, there is no need to tag it again.</p>
+              <label className="flex items-center gap-2 text-xs font-semibold">
+                <input type="checkbox" checked={differentTree} onChange={(event) => setDifferentTree(event.target.checked)} />
+                This is a different tree
+              </label>
+            </div>
           )}
 
           <CountedFor />

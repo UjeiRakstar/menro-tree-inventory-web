@@ -134,3 +134,28 @@ describe('who may tag (decided 19 October: a sign-in, for the CBI)', () => {
     expect(screen.getByText(/Counted for/)).toHaveTextContent('Counted for Ana Reyes on the leaderboard once it is verified.');
   });
 });
+
+describe('a tree already tagged nearby (19 October)', () => {
+  const SAME_SPOT = { id: 'p-1', species: 'Narra', latitude: IN_LABUIN[0] + 0.00002, longitude: IN_LABUIN[1], __pending: true };
+
+  it('asks whether it is the same tree before sending, and sends once told it is not', async () => {
+    render(<TaggingForm initialPosition={IN_LABUIN} nearbyTrees={[SAME_SPOT]} onClose={() => {}} onSuccess={() => {}} />);
+    const warning = await screen.findByRole('alert');
+    expect(warning).toHaveTextContent('Already tagged here? A tree is on the map within 5 m of this spot');
+    expect(warning).toHaveTextContent('Narra, 2 m away (tagged, not yet verified)');
+    await waitFor(() => expect(barangaySelect()).toHaveValue('Labuin'));
+    submitWithSpecies();
+    expect(await screen.findByText(/Tick that this is a different tree/)).toBeInTheDocument();
+    expect(supabaseMock.writesTo('pending_trees', 'insert')).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'This is a different tree' }));
+    submitWithSpecies();
+    await waitFor(() => expect(supabaseMock.writesTo('pending_trees', 'insert')).toHaveLength(1));
+  });
+
+  it('asks nothing where no tree stands near', async () => {
+    render(<TaggingForm initialPosition={IN_LABUIN} nearbyTrees={[{ ...SAME_SPOT, latitude: IN_LABUIN[0] + 0.01 }]} onClose={() => {}} onSuccess={() => {}} />);
+    await waitFor(() => expect(barangaySelect()).toHaveValue('Labuin'));
+    expect(screen.queryByText(/Already tagged here/)).not.toBeInTheDocument();
+  });
+});

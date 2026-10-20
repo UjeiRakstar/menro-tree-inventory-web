@@ -2737,6 +2737,7 @@ export function TreeMap({
         <Suspense fallback={null}>
           <TaggingForm
             initialPosition={userTagPosition}
+            nearbyTrees={allTrees}
             onClose={closeTagging}
             onSuccess={closeTagging}
           />
