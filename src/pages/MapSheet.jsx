@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadWoodDensities, withWoodDensities } from '../lib/woodDensities.js';
+import { loadVerifiedPlans } from '../lib/lccap.js';
 import { Download, Loader2, Printer, X } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -521,6 +522,16 @@ export default function MapSheet() {
       cancelled = true;
     };
   }, [reportKind, lguPsgc]);
+  // The LGU's verified climate plan, for the CBI (lccap.sql).
+  const [climatePlans, setClimatePlans] = useState(null);
+  useEffect(() => {
+    if (reportKind !== 'biodiversity') return undefined;
+    let cancelled = false;
+    loadVerifiedPlans().then((rows) => !cancelled && setClimatePlans(rows));
+    return () => {
+      cancelled = true;
+    };
+  }, [reportKind]);
   // News & Events credited to the CBI, for the biodiversity report (21 October).
   const [newsPosts, setNewsPosts] = useState(null);
   useEffect(() => {
@@ -582,10 +593,11 @@ export default function MapSheet() {
             areas: scopeAreas,
             permits,
             newsPosts,
+            climatePlans,
           }),
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation, permits, newsPosts]
+    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation, permits, newsPosts, climatePlans]
   );
 
   // The office's edits, by report and section; a section not edited follows the figures.

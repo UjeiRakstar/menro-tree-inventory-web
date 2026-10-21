@@ -10,6 +10,7 @@ import BarangaySection from './BarangaySection.jsx';
 import TeamSection from './TeamSection.jsx';
 import DocumentsSection from './DocumentsSection.jsx';
 import ImportSection from './ImportSection.jsx';
+import ClimatePlanSection from './ClimatePlanSection.jsx';
 import TreeInventorySection from './TreeInventorySection.jsx';
 import AiSection from './AiSection.jsx';
 import NicknameWordsSection from './NicknameWordsSection.jsx';
@@ -65,6 +66,7 @@ export default function Settings() {
       <DocumentsSection key={office} office={office} pgenro={pgenro} />
       {(lguInfo || pgenro) && <TreeInventorySection key={office} lgu={lguInfo} pgenro={pgenro} />}
       <ImportSection key={office} lgu={lguInfo} />
+      {lguInfo && <ClimatePlanSection key={`plan-${lguInfo.psgc}`} lgu={lguInfo} />}
       {actingLgu ? (
         <p role="note" className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
           {actingLgu.label}&apos;s AI key is its office&apos;s own: only its MENRO / CENRO sets or removes it.

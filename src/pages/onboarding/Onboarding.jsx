@@ -8,13 +8,15 @@ import { officialName } from '../../lib/psgc.js';
 import { roleLabel } from '../../lib/roles.js';
 import BarangaySection from '../settings/BarangaySection.jsx';
 import TreeInventorySection from '../settings/TreeInventorySection.jsx';
+import ClimatePlanSection from '../settings/ClimatePlanSection.jsx';
 import { buttonClass, inputClass } from '../settings/Section.jsx';
 import greenTagLogo from '../../assets/GreenTag_Logo.png';
 import { LIMITS, shrinkImage } from '../../lib/shrinkImage.js';
 
 const PHOTO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
-export const STEPS = ['Your details', 'Barangay population', 'Tree inventory'];
+export const STEPS = ['Your details', 'Barangay population', 'Tree inventory', 'Climate plan'];
+const LAST_STEP = STEPS.length - 1;
 
 const DESIGNATIONS = [
   'MENRO',
@@ -42,9 +44,11 @@ export function detailProblems(form) {
  *   1. the holder's name, address, photo and designation — required;
  *   2. the barangays' population, PSA's 2024 count filled in — skippable;
  *   3. the office's existing tree inventory, in the standard spreadsheet —
- *      skippable.
+ *      skippable;
+ *   4. its climate change action plan, for PGENRO to check — skippable
+ *      (21 October; lccap.sql).
  *
- * Both skippable steps are in Settings for later. Finishing marks the account
+ * The skippable steps are all in Settings for later. Finishing marks the account
  * onboarded, and the dashboard opens.
  */
 export default function Onboarding() {
@@ -125,14 +129,14 @@ export default function Onboarding() {
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4">
       <button type="button" onClick={() => setStep(step - 1)} className={`${buttonClass} text-slate-600 hover:bg-slate-100`}>Back</button>
       <div className="flex gap-2">
-        <button type="button" disabled={Boolean(busy)} onClick={() => (step === 2 ? finish() : setStep(step + 1))}
+        <button type="button" disabled={Boolean(busy)} onClick={() => (step === LAST_STEP ? finish() : setStep(step + 1))}
           className={`${buttonClass} text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50`}>
           Skip for now
         </button>
-        <button type="button" disabled={Boolean(busy)} onClick={() => (step === 2 ? finish() : setStep(step + 1))}
+        <button type="button" disabled={Boolean(busy)} onClick={() => (step === LAST_STEP ? finish() : setStep(step + 1))}
           className={`${buttonClass} bg-green-700 text-white hover:bg-green-800`}>
           {busy === 'finish' && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
-          {step === 2 ? 'Finish and open the dashboard' : 'Next'}
+          {step === LAST_STEP ? 'Finish and open the dashboard' : 'Next'}
         </button>
       </div>
     </div>
@@ -146,14 +150,14 @@ export default function Onboarding() {
           <div className="flex-1">
             <p className="text-xs font-bold uppercase tracking-widest text-green-800">Green Tag</p>
             <h1 className="text-xl font-extrabold text-slate-900">Welcome to Green Tag, {roleLabel(profile?.role, { isCity: lguInfo?.isCity, short: true })}</h1>
-            <p className="text-sm text-slate-600">{officeName}: three steps, and the last two can wait.</p>
+            <p className="text-sm text-slate-600">{officeName}: four steps, and the last three can wait.</p>
           </div>
           <button type="button" onClick={() => supabase.auth.signOut()} className={`${buttonClass} text-slate-600 hover:bg-white`}>
             <LogOut size={15} aria-hidden="true" /> Sign out
           </button>
         </header>
 
-        <ol className="mt-6 grid grid-cols-3 gap-2" aria-label="Setting up the account">
+        <ol className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Setting up the account">
           {STEPS.map((label, i) => (
             <li key={label} aria-current={i === step ? 'step' : undefined}
               className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold sm:text-sm ${i === step ? 'bg-green-700 text-white' : i < step ? 'bg-green-100 text-green-900' : 'bg-white text-slate-500 ring-1 ring-slate-200'}`}>
@@ -233,6 +237,15 @@ export default function Onboarding() {
             <div className="space-y-4">
               {lguInfo ? <TreeInventorySection lgu={lguInfo} bare /> : <p className="text-sm text-slate-500">This account has no LGU.</p>}
               <p className="text-xs text-slate-500">You can bring in an inventory later, from Settings → Tree inventory.</p>
+              {problem && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
+              {nav}
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-4">
+              {lguInfo ? <ClimatePlanSection lgu={lguInfo} bare /> : <p className="text-sm text-slate-500">This account has no LGU.</p>}
+              <p className="text-xs text-slate-500">You can file it later, from Settings → Climate change action plan.</p>
               {problem && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
               {nav}
             </div>

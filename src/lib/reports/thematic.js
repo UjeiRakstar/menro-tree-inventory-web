@@ -3,6 +3,7 @@ import { listOf } from '../reportWriter.js';
 import { officialName } from '../psgc.js';
 import { buildGhgReport } from './ghg.js';
 import { CBI_CREDITS, cbiEventCounts } from '../news.js';
+import { planBadges, planKindLabel } from '../lccap.js';
 
 /**
  * The thematic reports (Round C, 18 October): soil; hazards and climate;
@@ -400,7 +401,7 @@ export function compositionTable(trees = []) {
  * Index, adopted by TB 2018-02), and what it cannot — said plainly, so no
  * reader takes a gap for a zero.
  */
-export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0, participation = null, events = null, year = new Date().getFullYear() }) {
+export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0, participation = null, events = null, climatePlan = null, year = new Date().getFullYear() }) {
   const coverHa = (landCover?.rows ?? []).filter((row) => row.treeCover).reduce((t, r) => t + r.areaHa, 0);
   const origin = compositionTable(trees).counts;
   const known = trees.length - origin.unrecorded;
@@ -454,6 +455,13 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
         from: 'News & Events, credited to the CBI',
       };
     }),
+    {
+      name: 'Policies and plans — climate change action plan',
+      value: climatePlan
+        ? `${planKindLabel(climatePlan.plan.plan_kind)} ${climatePlan.plan.term_start}–${climatePlan.plan.term_end}, verified by PGENRO${climatePlan.toCcc ? '; submitted to the Climate Change Commission' : ''}`
+        : 'None verified for this year',
+      from: 'The LGU’s plan, filed and checked in Green Tag',
+    },
     { name: 'Budget for biodiversity', value: 'Outside this system', from: 'The LGU’s own records' },
   ];
   return {
@@ -755,6 +763,7 @@ export function buildThemeReport(kind, ctx) {
         communityTags: ctx.communityTags ?? 0,
         participation: ctx.participation ?? null,
         events: ctx.newsPosts ? cbiEventCounts(ctx.newsPosts, { lgu: ctx.place?.psgc ?? null }) : null,
+        climatePlan: ctx.place && ctx.climatePlans ? planBadges(ctx.climatePlans, ctx.place.psgc) : null,
       }),
     ].filter(Boolean);
     sections = biodiversitySections({ short, tables, trees, communityTags: ctx.communityTags ?? 0 });

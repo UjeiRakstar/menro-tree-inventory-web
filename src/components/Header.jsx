@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, ShieldCheck, Sprout, Users } from 'lucide-react';
+import { ChevronDown, FileText, Inbox as InboxIcon, Layers, Leaf, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, ShieldCheck, Sprout, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -287,6 +287,12 @@ export default function Header() {
                   <NavLink to="/news" className={menuItem}>
                     <Megaphone size={16} aria-hidden="true" className="text-slate-500" />
                     News &amp; Events
+                  </NavLink>
+                )}
+                {pgenro && (
+                  <NavLink to="/climate-plans" className={menuItem}>
+                    <Leaf size={16} aria-hidden="true" className="text-slate-500" />
+                    Climate plans
                   </NavLink>
                 )}
                 {pgenro && (

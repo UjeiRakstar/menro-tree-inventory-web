@@ -212,5 +212,47 @@ for (const [what, values] of [
   ok(`${what} is refused`, Boolean(refused.error), refused.error ?? 'accepted');
 }
 
+// ---- lccap.sql: each LGU's climate plan, checked by PGENRO (21 October) -------------------
+await db.exec(`do $$ begin
+  if to_regprocedure('public.in_training()') is null then
+    execute 'create function public.in_training() returns boolean language sql stable as $f$ select false $f$';
+    execute 'grant execute on function public.in_training() to anon, authenticated';
+  end if;
+end $$;`);
+for (const label of ['runs', 'runs twice']) {
+  try {
+    const out = await db.exec(SQL('lccap.sql'));
+    const rows = out[out.length - 1].rows;
+    ok(`lccap.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok}`).join('; '));
+  } catch (error) {
+    ok(`lccap.sql ${label}`, false, error.message);
+  }
+}
+const FILE = `insert into public.lccap_submissions (lgu_psgc, plan_kind, term_start, term_end, plan_url, receipt_url, status)
+  values ($1, 'elccap', 2024, 2032, 'https://files.test/plan.pdf', $2, $3) returning id, status, submitted_by`;
+const filed = await run(SCZ_ADMIN, FILE, [SCZ, 'https://files.test/receipt.pdf', 'verified']);
+ok('an office files its own plan, waiting for PGENRO whatever it sent',
+  !filed.error && filed.rows[0].status === 'pending' && filed.rows[0].submitted_by === SCZ_ADMIN, filed.error ?? JSON.stringify(filed.rows));
+const planId = filed.rows?.[0]?.id;
+ok('…and PGENRO is told', (await inbox(PG)).some((m) => m.subject === 'Climate plan to check: Santa Cruz' && /with the CCC's Certificate of Receipt/.test(m.body)));
+ok('…not another LGU', Boolean((await run(KAL_ADMIN, FILE, [SCZ, null, 'pending'])).error));
+ok('…nor the term out of order', Boolean((await run(SCZ_ADMIN, `insert into public.lccap_submissions (lgu_psgc, term_start, term_end, plan_url) values ($1, 2030, 2024, 'x')`, [SCZ])).error));
+ok('the public does not see it before it is verified',
+  ((await run(null, `select id from public.lccap_submissions`, [], 'anon')).rows ?? []).length === 0);
+ok('another LGU does not see it', ((await run(KAL_ADMIN, `select id from public.lccap_submissions`)).rows ?? []).length === 0);
+ok('the office cannot verify its own', Boolean((await run(SCZ_ADMIN, `update public.lccap_submissions set status = 'verified' where id = $1`, [planId])).error)
+  || (await db.query(`select status from public.lccap_submissions where id = $1`, [planId])).rows[0].status === 'pending');
+ok('nor can it review one', Boolean((await run(SCZ_ADMIN, `select public.review_lccap($1, true)`, [planId])).error));
+ok('PGENRO cannot return one without saying why', Boolean((await run(PG, `select public.review_lccap($1, false, '')`, [planId])).error));
+const verified = await run(PG, `select public.review_lccap($1, true)`, [planId]);
+ok('PGENRO verifies it', !verified.error, verified.error ?? '');
+ok('…the office is told', (await inbox(SCZ_ADMIN)).some((m) => m.subject === 'Your climate plan is verified' && /ELCCAP for 2024–2032/.test(m.body)));
+ok('…and the public now sees it', ((await run(null, `select id from public.lccap_submissions`, [], 'anon')).rows ?? []).length === 1);
+const second = await run(SCZ_ADMIN, FILE, [SCZ, null, 'pending']);
+const returned = await run(PG, `select public.review_lccap($1, false, 'The plan pages are missing.')`, [second.rows?.[0]?.id]);
+ok('PGENRO returns one with a note, and the office is told why',
+  !returned.error && (await inbox(SCZ_ADMIN)).some((m) => m.subject === 'Your climate plan was returned' && /The plan pages are missing\./.test(m.body)), returned.error ?? '');
+ok('a checked plan cannot be withdrawn', ((await run(SCZ_ADMIN, `delete from public.lccap_submissions where id = $1 returning id`, [planId])).rows ?? []).length === 0);
+
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

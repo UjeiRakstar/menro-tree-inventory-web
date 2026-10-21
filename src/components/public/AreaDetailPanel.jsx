@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import LguPlanBadges from './LguPlanBadges.jsx';
+import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import { BarChart3, ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import { METRIC_PAIRS, formatFigure } from '../../lib/dashboardMetrics.js';
 import InfoHint from './InfoHint.jsx';
@@ -196,6 +198,12 @@ export default function AreaDetailPanel({
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-bold leading-tight text-green-800">{label}</h2>
             <p className="text-[11px] text-slate-500">{kind} · Biodiversity at a glance</p>
+            {/* A city or municipality's climate plan, once PGENRO has verified it. */}
+            {!placeKind && (
+              <div className="mt-1.5">
+                <LguPlanBadges lguPsgc={MUNICIPALITY_LIST.find((item) => item.name === municipality)?.psgc} />
+              </div>
+            )}
           </div>
           <button
             type="button"

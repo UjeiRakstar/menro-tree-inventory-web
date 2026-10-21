@@ -376,6 +376,15 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 28. **News & Events as events, 21 October** — run `supabase/inbox.sql`
     again: an event's last day, its kind, the LGU it is for and its credit to
     the CBI. Until then posts save as before, without those.
+29. **Climate plans, 21 October** — run `supabase/lccap.sql` (after
+    accounts.sql, training_sandbox.sql and inbox.sql). An LGU files its LCCAP
+    or eLCCAP — the plan, its years, the CCC's Certificate of Receipt if it has
+    it — in Settings or at its first sign-in; PGENRO checks it under Climate
+    plans (menu) and verifies or returns it with a note, each side told in its
+    Inbox. Verified: "LCCAP on file" (while its years run) and "Submitted to
+    the CCC" (with the receipt) on the BioDashboard and the map's city panel,
+    each opening its document, and a row in the CBI table. Until it runs, the
+    pages say so.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must

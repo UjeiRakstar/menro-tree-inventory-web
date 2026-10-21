@@ -69,6 +69,7 @@ import {
 } from '../../components/public/Provisional.jsx';
 import LguStrip from '../../components/public/LguStrip.jsx';
 import DataRequestModal from '../../components/public/DataRequestModal.jsx';
+import LguPlanBadges from '../../components/public/LguPlanBadges.jsx';
 import SpeciesSection from '../../components/public/SpeciesSection.jsx';
 import CoverageSection from '../../components/public/CoverageSection.jsx';
 import SizeSection from '../../components/public/SizeSection.jsx';
@@ -695,6 +696,11 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
             <h1 className="text-2xl font-bold leading-tight text-green-800 sm:text-3xl">
               {scopeLabel} Biodiversity Analytics
             </h1>
+            {selectedLgu && (
+              <div className="mt-1.5">
+                <LguPlanBadges lguPsgc={MUNICIPALITY_LIST.find((item) => item.name === selectedLgu)?.psgc} />
+              </div>
+            )}
 
             {/* Every figure below was true at some moment; this says which. */}
             <p className="mt-1 text-xs text-slate-500">

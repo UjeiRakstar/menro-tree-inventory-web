@@ -38,6 +38,7 @@ const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
 const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
 const Inbox = lazy(() => import('./pages/Inbox.jsx'));
 const NewsPage = lazy(() => import('./pages/pgenro/NewsPage.jsx'));
+const ClimatePlans = lazy(() => import('./pages/pgenro/ClimatePlans.jsx'));
 const ContactPage = lazy(() => import('./pages/public/ContactPage.jsx'));
 const CommunityPage = lazy(() => import('./pages/public/CommunityPage.jsx'));
 const Onboarding = lazy(() => import('./pages/onboarding/Onboarding.jsx'));
@@ -240,6 +241,7 @@ function AppRoutes() {
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
         <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
         <Route path="news" element={<PgenroOnly><NewsPage /></PgenroOnly>} />
+        <Route path="climate-plans" element={<PgenroOnly><ClimatePlans /></PgenroOnly>} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="map" element={<MenroMap />} />
         <Route path="settings" element={<Settings />} />

@@ -97,6 +97,9 @@ describe('a new office account’s first sign-in', () => {
     expect(await screen.findByRole('button', { name: /Barangays/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
     expect(await screen.findByRole('button', { name: /Download the template/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    // The climate plan, the fourth step (21 October): skippable too.
+    expect(await screen.findByRole('form', { name: 'File a climate plan' })).toBeInTheDocument();
 
     supabaseMock.signInAs({ ...done, onboarded_at: '2026-10-19T00:00:00Z' }, SANTA_CRUZ);
     fireEvent.click(screen.getByRole('button', { name: 'Finish and open the dashboard' }));
