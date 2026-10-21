@@ -236,6 +236,20 @@ check('an office uploads its logo into its own folder', (await logo(MENRO_SCZ, `
 check('…not into another’s', (await logo(MENRO_SCZ, `${CLB}/lgu.png`)) !== null);
 check('PGENRO into its own', (await logo(PGENRO, 'pgenro/office.png')) === null);
 
+// ---- super_admin.sql: the super admin works in an LGU's settings (21 October) ------------
+{
+  const out = await asEditor(SQL('super_admin.sql').replace('PUT-YOUR-PGENRO-ACCOUNT-EMAIL-HERE', 'pgenro@laguna.gov.ph'));
+  const rows = out[out.length - 1].rows;
+  check('super_admin.sql runs after office_settings.sql', rows.every((r) => r.ok !== false),
+    rows.map((r) => `${r.check}=${r.ok}${r.detail ? ' (' + r.detail + ')' : ''}`).join('; '));
+}
+check('the super admin keeps an LGU office’s profile', (await saveProfile(PGENRO, String(PILA), 'For Pila')) === null);
+check('…and its barangays’ figures, through the same rule',
+  (await as(PGENRO, 'authenticated', () => one(`select public.keeps_office($1) as ok`, [String(CLB)]))).ok === true);
+check('…and still its own PGENRO profile', (await saveProfile(PGENRO, 'pgenro', 'PENRO')) === null);
+check('an LGU office still keeps only its own', (await saveProfile(MENRO_CLB, String(SCZ), 'Hijack')) !== null);
+check('nobody keeps an office that is not one', (await as(PGENRO, 'authenticated', () => one(`select public.keeps_office('not-an-office') as ok`))).ok === false);
+
 const failed = results.filter((r) => !r.ok);
 console.log(`
 ${results.length - failed.length}/${results.length} passed`);

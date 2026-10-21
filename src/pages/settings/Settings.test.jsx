@@ -215,6 +215,42 @@ describe('Settings, for PGENRO', () => {
   });
 });
 
+describe('Settings, for the super admin (21 October)', () => {
+  const SUPER = { role: 'pgenro', status: 'active', is_super_admin: true };
+  afterEach(() => window.sessionStorage.clear());
+
+  it('works in one LGU as its office: its profile, its team, and not its AI key', async () => {
+    supabaseMock.setResponse('profiles:select', {
+      data: [
+        { id: 'f1', full_name: 'Rjay', email: 'rjay@gmail.com', role: 'field_officer', status: 'active', is_approved: true, lgu_psgc: 403426000 },
+        { id: 'f2', full_name: 'Pia', email: 'pia@gmail.com', role: 'field_officer', status: 'active', is_approved: true, lgu_psgc: 403422000 },
+      ],
+      error: null,
+    });
+    show(SUPER);
+    expect(section('PGENRO profile')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Working in'), { target: { value: '403422000' } });
+    expect(await screen.findByText(/as Pila's office does/)).toBeInTheDocument();
+    expect(screen.getByText('Municipality of Pila')).toBeInTheDocument();
+    expect(section('LGU profile')).toBeInTheDocument();
+    await waitFor(() => expect(supabaseMock.calls.some((c) => c.table === 'office_profiles' && c.filters.some(([, v]) => v === '403422000'))).toBe(true));
+    expect(screen.getByText(/Pila's AI key is its office's own/)).toBeInTheDocument();
+
+    open('Field team');
+    expect(await within(section('Field team')).findByText('Pia')).toBeInTheDocument();
+    expect(within(section('Field team')).queryByText('Rjay')).not.toBeInTheDocument();
+  });
+
+  it('is not offered to PGENRO, nor to an LGU office', async () => {
+    show(PGENRO);
+    expect(screen.queryByLabelText('Working in')).not.toBeInTheDocument();
+    cleanup();
+    show();
+    expect(screen.queryByLabelText('Working in')).not.toBeInTheDocument();
+  });
+});
+
 describe('Settings, before office_settings.sql is run', () => {
   it('says which file to run', async () => {
     supabaseMock.setResponse('office_profiles:select', { data: null, error: { code: '42P01', message: 'relation "office_profiles" does not exist' } });

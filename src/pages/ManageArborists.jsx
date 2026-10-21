@@ -4,16 +4,22 @@ import { Users, UserPlus, Trash2, UserCheck, Check, X, MapPin } from 'lucide-rea
 import { LGU_OPTIONS, barangaysOf, labelOf } from '../lib/lguOptions.js';
 import { useAuthIfAny } from '../context/AuthContext.jsx';
 import { ROLES, roleOf } from '../lib/roles.js';
+import { useActingLgu } from '../lib/actingLgu.js';
+import ActingLguPicker from '../components/ActingLguPicker.jsx';
 import { everyRow } from '../lib/everyRow.js';
 
 export default function ManageArborists() {
   // A MENRO / CENRO makes field officers for its own LGU only: an officer
   // placed elsewhere would land out of its sight (found 15 October).
   const auth = useAuthIfAny();
-  const ownLgu =
-    roleOf(auth?.profile) === ROLES.LGU_ADMIN
+  // The super admin working in one LGU (actingLgu.js) sees its field team as
+  // its office does, and adds officers to it.
+  const { lgu: actingLgu } = useActingLgu(auth?.profile);
+  const actingIn = actingLgu ? LGU_OPTIONS.find((lgu) => lgu.psgc === actingLgu.psgc) ?? null : null;
+  const ownLgu = actingIn ??
+    (roleOf(auth?.profile) === ROLES.LGU_ADMIN
       ? LGU_OPTIONS.find((lgu) => lgu.psgc === Number(auth.profile.lgu_psgc)) ?? null
-      : null;
+      : null);
   const [arborists, setArborists] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loadingArborists, setLoadingArborists] = useState(true);
@@ -35,6 +41,21 @@ export default function ManageArborists() {
   const [actioningId, setActioningId] = useState(null);
   const [decliningId, setDecliningId] = useState(null);
   const [declineReason, setDeclineReason] = useState('');
+
+  // Working in one LGU: its people only, and new officers placed in it.
+  const inScope = (row) => !actingIn || Number(row?.lgu_psgc) === actingIn.psgc || row?.municipality === actingIn.name;
+  const shownPending = pending.filter(inScope);
+  const shownProfiles = profiles.filter(inScope);
+  const scopeEmails = new Set(shownProfiles.map((p) => String(p.email ?? '').toLowerCase()));
+  const shownArborists = arborists.filter(
+    (row) => !actingIn || row?.municipality === actingIn.name || scopeEmails.has(String(row?.email ?? '').toLowerCase())
+  );
+  useEffect(() => {
+    if (actingIn) {
+      setMunicipality(actingIn.name);
+      setBarangay('');
+    }
+  }, [actingIn]);
 
   const PH_MOBILE_DIGITS = 11;
 
@@ -418,6 +439,8 @@ export default function ManageArborists() {
         </p>
       </header>
 
+      <ActingLguPicker profile={auth?.profile} what="its field team" />
+
       {errorMessage && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {errorMessage}
@@ -428,16 +451,16 @@ export default function ManageArborists() {
       <section
         aria-label="Pending Applications"
         className={`rounded-lg shadow-sm border overflow-hidden ${
-          pending.length > 0 ? 'bg-amber-50/40 border-amber-300' : 'bg-white border-slate-200'
+          shownPending.length > 0 ? 'bg-amber-50/40 border-amber-300' : 'bg-white border-slate-200'
         }`}
       >
         <div className="px-6 py-4 border-b border-slate-200 flex items-center gap-2">
-          <UserCheck size={18} className={pending.length > 0 ? 'text-amber-700' : 'text-slate-600'} />
+          <UserCheck size={18} className={shownPending.length > 0 ? 'text-amber-700' : 'text-slate-600'} />
           <h2 className="text-base font-semibold text-slate-900">Pending Applications</h2>
           <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-            pending.length > 0 ? 'bg-amber-200 text-amber-900 font-semibold' : 'bg-slate-100 text-slate-500'
+            shownPending.length > 0 ? 'bg-amber-200 text-amber-900 font-semibold' : 'bg-slate-100 text-slate-500'
           }`}>
-            {pending.length} waiting
+            {shownPending.length} waiting
           </span>
         </div>
 
@@ -445,15 +468,15 @@ export default function ManageArborists() {
           <div className="p-6 text-sm text-slate-600">Loading applications…</div>
         )}
 
-        {!loadingPending && pending.length === 0 && (
+        {!loadingPending && shownPending.length === 0 && (
           <div className="p-6 text-sm text-slate-500">
             No applications waiting. Arborists who register on the mobile app appear here for approval.
           </div>
         )}
 
-        {!loadingPending && pending.length > 0 && (
+        {!loadingPending && shownPending.length > 0 && (
           <ul className="divide-y divide-amber-200">
-            {pending.map((profile) => (
+            {shownPending.map((profile) => (
               <li key={profile.id} className="px-6 py-4">
                 <div className="flex items-start gap-4">
                   {profile.avatar_url ? (
@@ -708,7 +731,7 @@ export default function ManageArborists() {
           <Users size={18} className="text-green-700" />
           <h2 className="text-base font-semibold text-slate-900">Field Team Arborists</h2>
           <span className="ml-auto text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-            {arborists.length} records
+            {shownArborists.length} records
           </span>
         </div>
 
@@ -716,11 +739,11 @@ export default function ManageArborists() {
           <div className="p-6 text-sm text-slate-600">Loading arborists…</div>
         )}
 
-        {!loadingArborists && arborists.length === 0 && (
+        {!loadingArborists && shownArborists.length === 0 && (
           <div className="p-6 text-sm text-slate-500">No arborists found.</div>
         )}
 
-        {!loadingArborists && arborists.length > 0 && (
+        {!loadingArborists && shownArborists.length > 0 && (
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
@@ -734,7 +757,7 @@ export default function ManageArborists() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
-              {arborists.map((arborist) => {
+              {shownArborists.map((arborist) => {
                 const counts = taskCounts[arborist.email] || { assigned: 0, cancelled: 0 };
                 return (
                   <tr key={arborist.id}>
@@ -789,7 +812,7 @@ export default function ManageArborists() {
           <Users size={18} className="text-slate-600" />
           <h2 className="text-base font-semibold text-slate-900">Registered System Users</h2>
           <span className="ml-auto text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-            {profiles.length} users
+            {shownProfiles.length} users
           </span>
         </div>
 
@@ -797,11 +820,11 @@ export default function ManageArborists() {
           <div className="p-6 text-sm text-slate-600">Loading users…</div>
         )}
 
-        {!loadingProfiles && profiles.length === 0 && (
+        {!loadingProfiles && shownProfiles.length === 0 && (
           <div className="p-6 text-sm text-slate-500">No registered users found. Users appear here after signing up and confirming their email.</div>
         )}
 
-        {!loadingProfiles && profiles.length > 0 && (
+        {!loadingProfiles && shownProfiles.length > 0 && (
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
@@ -811,7 +834,7 @@ export default function ManageArborists() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
-              {profiles.map((profile) => (
+              {shownProfiles.map((profile) => (
                 <tr key={profile.id}>
                   <td className="px-4 py-3 text-sm font-medium text-slate-900">{profile.full_name || '—'}</td>
                   <td className="px-4 py-3 text-sm text-slate-700">{profile.email ?? '—'}</td>

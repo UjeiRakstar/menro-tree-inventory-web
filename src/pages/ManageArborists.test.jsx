@@ -25,7 +25,7 @@ vi.mock('../supabaseClient.js', async () => {
 });
 
 import { supabaseMock } from '../test/supabaseMock.js';
-import { SANTA_CRUZ, SANTA_CRUZ_ADMIN } from '../test/accounts.js';
+import { PGENRO_ADMIN, SANTA_CRUZ, SANTA_CRUZ_ADMIN } from '../test/accounts.js';
 import App from '../App.jsx';
 import ManageArborists from './ManageArborists.jsx';
 
@@ -351,5 +351,32 @@ describe('ManageArborists', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+});
+
+describe('the super admin working in one LGU (21 October)', () => {
+  afterEach(() => window.sessionStorage.clear());
+
+  it('lists that LGU’s field team only, and places new officers in it', async () => {
+    window.sessionStorage.setItem('green-tag:acting-lgu', '403422000');
+    supabaseMock.signInAs({ ...PGENRO_ADMIN, is_super_admin: true });
+    supabaseMock.setResponse('profiles:select', {
+      data: [
+        { id: 'p1', email: 'pia@gmail.com', full_name: 'Pia', role: 'field_officer', lgu_psgc: 403422000, municipality: 'Pila', is_approved: false },
+        { id: 'p2', email: 'rjay@gmail.com', full_name: 'Rjay', role: 'field_officer', lgu_psgc: 403426000, municipality: 'Santa Cruz', is_approved: false },
+      ],
+      error: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/arborists']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByLabelText('Working in')).toHaveValue('403422000');
+    // In the approval queue and in the users list.
+    expect((await screen.findAllByText('pia@gmail.com')).length).toBeGreaterThan(0);
+    // The create form is Pila's, as Pila's office has it.
+    expect(screen.getByLabelText(/Municipality \/ City/)).toHaveValue('Pila');
+    expect(screen.queryByText('rjay@gmail.com')).not.toBeInTheDocument();
   });
 });

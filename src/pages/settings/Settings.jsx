@@ -14,18 +14,26 @@ import TreeInventorySection from './TreeInventorySection.jsx';
 import AiSection from './AiSection.jsx';
 import NicknameWordsSection from './NicknameWordsSection.jsx';
 import PasswordSection from './PasswordSection.jsx';
+import ActingLguPicker from '../../components/ActingLguPicker.jsx';
+import { useActingLgu } from '../../lib/actingLgu.js';
 
 /**
  * Everything an office sets up, in one place, from the seal's menu: its
  * profile and logos, its barangays' figures, its field team, the documents
  * behind its designated areas, areas brought in from files, its own AI key,
  * and its password. PGENRO gets the same, for PGENRO, without barangays.
+ *
+ * The super admin can work in one LGU here (21 October): its profile,
+ * barangays, team, documents, inventory and imports, as that LGU's office sees
+ * them. Not its AI key, which only its own office sets, nor PGENRO's nickname
+ * words; the password is always the super admin's own.
  */
 export default function Settings() {
   const { profile, lgu } = useAuth();
-  const pgenro = isPgenro(profile);
-  const office = officeOf(profile);
-  const lguInfo = pgenro ? null : MUNICIPALITY_LIST.find((item) => item.psgc === Number(profile?.lgu_psgc)) ?? null;
+  const { lgu: actingLgu } = useActingLgu(profile);
+  const pgenro = isPgenro(profile) && !actingLgu;
+  const office = actingLgu ? String(actingLgu.psgc) : officeOf(profile);
+  const lguInfo = actingLgu ?? (isPgenro(profile) ? null : MUNICIPALITY_LIST.find((item) => item.psgc === Number(profile?.lgu_psgc)) ?? null);
   const officeLabel = pgenro
     ? 'PGENRO, Province of Laguna'
     : lguInfo
@@ -45,18 +53,25 @@ export default function Settings() {
         </h1>
         <p className="mt-1 text-sm text-slate-500">{officeLabel}</p>
       </div>
+      <ActingLguPicker profile={profile} what="its settings" />
       {training && (
         <p role="note" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
           This is a training account. The settings shown are the real office&apos;s, and a training account cannot change them.
         </p>
       )}
-      <ProfileSection office={office} pgenro={pgenro} officeLabel={officeLabel} builtInSeal={pgenro ? PROVINCE_LOGO : logoFor(lguInfo?.name)} />
-      {lguInfo && <BarangaySection lgu={lguInfo} />}
-      <TeamSection pgenro={pgenro} />
-      <DocumentsSection office={office} pgenro={pgenro} />
-      {(lguInfo || pgenro) && <TreeInventorySection lgu={lguInfo} pgenro={pgenro} />}
-      <ImportSection lgu={lguInfo} />
-      <AiSection office={office} pgenro={pgenro} />
+      <ProfileSection key={office} office={office} pgenro={pgenro} officeLabel={officeLabel} builtInSeal={pgenro ? PROVINCE_LOGO : logoFor(lguInfo?.name)} />
+      {lguInfo && <BarangaySection key={lguInfo.psgc} lgu={lguInfo} />}
+      <TeamSection pgenro={pgenro} lgu={actingLgu} />
+      <DocumentsSection key={office} office={office} pgenro={pgenro} />
+      {(lguInfo || pgenro) && <TreeInventorySection key={office} lgu={lguInfo} pgenro={pgenro} />}
+      <ImportSection key={office} lgu={lguInfo} />
+      {actingLgu ? (
+        <p role="note" className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
+          {actingLgu.label}&apos;s AI key is its office&apos;s own: only its MENRO / CENRO sets or removes it.
+        </p>
+      ) : (
+        <AiSection office={office} pgenro={pgenro} />
+      )}
       {pgenro && <NicknameWordsSection />}
       <PasswordSection />
     </section>

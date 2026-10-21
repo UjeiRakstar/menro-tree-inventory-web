@@ -102,9 +102,12 @@ can do everything. The RISE details on the public tree panel, more of them.
   archiving permits.
 - The super admin moving an LGU's hall from the map — **done 20 October:**
   on PGENRO's map, click a hall, Move pin, click inside that LGU.
-- Parked from Round F: the super admin working inside one LGU's Settings and
-  field team pages (the database already allows it; the pages are still
-  PGENRO's).
+- The super admin working inside one LGU's Settings and field team pages —
+  **done 21 October** (step 27): a "Working in" picker, the super admin's
+  only, shows either page as that LGU's office sees it. Its profile, logos,
+  barangay figures, documents, inventory and imports can be changed; its AI
+  key stays its own office's. (The database did not allow the settings until
+  step 27; PARKED.md said otherwise before.)
 
 **Parked, to keep this manageable:**
 - The super admin role reaches every policy in the database; it is the last
@@ -343,6 +346,11 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 26. **Wood density, 21 October** — run `supabase/species_wood_density.sql`
     (after species_rise.sql). Until it runs, the species form saves as before
     and every tree takes 0.57 g/cm³.
+27. **The super admin in an LGU's settings, 21 October** — run
+    `supabase/super_admin.sql` again. The email line can stay as the
+    placeholder: you are flagged already, and running it without an email
+    leaves the flag as it is. Run it again whenever office_settings.sql or
+    closing_gaps.sql is run again, as well as the files step 22 names.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must

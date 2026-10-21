@@ -16,7 +16,8 @@ const statusOf = (row) =>
  * Who is on the field team, and when each last signed in. Adding, approving,
  * locking and removing officers stays on the Field officers page.
  */
-export default function TeamSection({ pgenro }) {
+/** lgu: the LGU the super admin is working in, to list its officers only. */
+export default function TeamSection({ pgenro, lgu = null }) {
   const [rows, setRows] = useState(null);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function TeamSection({ pgenro }) {
       const lastSeen = new Map((Array.isArray(seen.data) ? seen.data : []).map((row) => [row.id, row.last_sign_in_at]));
       setRows(
         (Array.isArray(people.data) ? people.data : [])
+          .filter((row) => !lgu || Number(row.lgu_psgc) === lgu.psgc || row.municipality === lgu.name)
           .map((row) => ({ ...row, lastSignIn: lastSeen.get(row.id) ?? null }))
           .sort((a, b) => String(a.full_name ?? a.email).localeCompare(String(b.full_name ?? b.email)))
       );
@@ -37,7 +39,7 @@ export default function TeamSection({ pgenro }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [lgu]);
 
   return (
     <Section title="Field team" description={pgenro ? 'Every LGU’s field officers' : 'The field officers of this LGU'}>
