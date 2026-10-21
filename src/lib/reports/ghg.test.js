@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { geometryAreaM2 } from '../areaGeometry.js';
 import { biomassKg } from '../treeCarbon.js';
-import { buildGhgReport, inMappedCover, treeCoverAreas, treeGhg } from './ghg.js';
+import { buildGhgReport, cuttingLosses, inMappedCover, treeCoverAreas, treeGhg } from './ghg.js';
 import { buildThemeReport } from './thematic.js';
 
 // A square of open forest, about 1 km across, east of Santa Cruz's poblacion.
@@ -82,9 +82,11 @@ describe('the summary', () => {
     expect(summary.rows[0].co2YearT).toBeCloseTo(forest.totals.co2YearT, 9);
     expect(summary.rows[1].co2YearT).toBeCloseTo(outside, 9);
     expect(summary.totals.co2YearT).toBeCloseTo(forest.totals.co2YearT + outside, 9);
-    // Losses and other sectors are named, with no number.
-    expect(summary.rows[2]).toMatchObject({ co2YearT: null });
-    expect(summary.rows[3].from).toMatch(/Outside Green Tag/);
+    // No tree cut, so no loss; fuelwood and the other sectors are named, with no number.
+    const row = (start) => summary.rows.find((r) => r.name.startsWith(start));
+    expect(row('Losses: trees cut')).toMatchObject({ co2YearT: null, from: 'No tree recorded cut under a permit this year' });
+    expect(row('Losses: fuelwood')).toMatchObject({ co2YearT: null });
+    expect(row('Emissions').from).toMatch(/Outside Green Tag/);
   });
 
   it('says nothing is counted when nothing is measured or mapped', () => {
@@ -114,5 +116,35 @@ describe('as a thematic report', () => {
     expect(built.annex.map((table) => table.key)).toEqual(['ghg-tree-list']);
     expect(built.sections.at(-1).text).toMatch(/Community-level GHG Inventory Tool/);
     expect(built.sections.find((s) => s.key === 'ghg-total').text).toMatch(/remove about [\d.,]+ t of CO₂ a year/);
+  });
+});
+
+describe('trees cut under a permit (21 October)', () => {
+  const year = 2026;
+  const CUT = { id: 'cut', species: 'Gmelina', dbh: 50, total_height: 18, lat: 14.3, lng: 121.42, task_status: 'Cut' };
+  const PERMITS = [
+    { id: 'p1', tree_id: 'cut', created_at: '2026-03-01T00:00:00Z', status: 'Pending' },
+    { id: 'p2', tree_id: null, created_at: '2026-04-01T00:00:00Z', status: 'Cut', number_of_trees: 2 },
+    { id: 'p3', tree_id: null, created_at: '2025-04-01T00:00:00Z', status: 'Cut' },
+    { id: 'p4', tree_id: null, created_at: '2026-05-01T00:00:00Z', status: 'Pending' },
+  ];
+
+  it('counts the trees cut this year, and the CO₂ the measured ones held, with roots', () => {
+    const losses = cuttingLosses({ permits: PERMITS, trees: [CUT], year });
+    expect(losses).toMatchObject({ year, trees: 3, measured: 1 });
+    expect(losses.co2T).toBeCloseTo(treeGhg(CUT).co2Kg / 1000, 9);
+  });
+
+  it('takes the loss from the removals, and counts a cut tree in neither', () => {
+    const report = buildGhgReport({ trees: [...TREES, CUT], areas: [FOREST], places: PLACES, short: 'Santa Cruz', permits: PERMITS, year });
+    const summary = report.tables.find((table) => table.key === 'ghg-summary');
+    const row = (start) => summary.rows.find((r) => r.name.startsWith(start));
+    const lost = row('Losses: trees cut').co2YearT;
+    expect(row('Losses: trees cut').from).toBe('3 trees cut; the CO₂ the 1 measured held, with roots; 2 never measured, not counted');
+    expect(summary.totals.name).toBe('Net removals counted here');
+    expect(summary.totals.co2YearT).toBeCloseTo(summary.gains - lost, 9);
+    // The cut gmelina is not among the trees that remove CO₂.
+    expect(report.annex[0].rows.map((r) => r.species)).not.toContain('Gmelina');
+    expect(report.sections.find((s) => s.key === 'ghg-total').text).toMatch(/cut under a permit this year held about/);
   });
 });

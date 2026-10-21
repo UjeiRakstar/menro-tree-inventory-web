@@ -5,18 +5,14 @@ import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
 import { lguOfTree } from '../hooks/useAttention.js';
+import { annualCo2Kg } from '../lib/treeCarbon.js';
+import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
+
+const LGU_LABEL = new Map(MUNICIPALITY_LIST.map((item) => [item.psgc, item.label]));
 import { classifyPinColor } from '../lib/pinColor.js';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { X, Image, ArrowUpDown, MapPin, Download, Search } from 'lucide-react';
+import { X, Image, ArrowUpDown, MapPin, Download, Search, ChevronRight } from 'lucide-react';
 import { everyRow } from '../lib/everyRow.js';
-
-const BARANGAYS = [
-  'Alipit', 'Bagumbayan', 'Barangay I', 'Barangay II', 'Barangay III',
-  'Barangay IV', 'Barangay V', 'Bubukal', 'Calios', 'Duhat', 'Gatid',
-  'Jasaan', 'Labuin', 'Malinao', 'Oogong', 'Pagsawitan', 'Palasan',
-  'Patimbao', 'San Jose', 'San Juan', 'San Pablo Norte', 'San Pablo Sur',
-  'Santisima Cruz', 'Santo Angel Central', 'Santo Angel Norte', 'Santo Angel Sur',
-];
 
 const PIE_COLORS = ['#16a34a', '#dc2626', '#f97316', '#eab308', '#06b6d4'];
 
@@ -98,10 +94,42 @@ export default function BiodiversityHub() {
     { name: 'Ornamental Trees', value: ornamentalCount },
   ].filter(d => d.value > 0);
 
-  const barangayData = BARANGAYS.map(brgy => {
-    const count = trees.filter(t => (t.barangay || '') === brgy).length;
-    return { name: brgy, trees: count, sequestration: parseFloat((count * 62.47).toFixed(2)) };
-  }).filter(d => d.trees > 0);
+  // Each barangay the trees stand in, and the CO₂ they take up a year (Chave
+  // et al. 2014, treeCarbon.js). It used to be Santa Cruz's barangays for any
+  // office, at a flat 62.47 kg a tree.
+  const barangayData = [...trees.reduce((places, t) => {
+    const name = String(t.barangay ?? '').trim();
+    if (!name) return places;
+    const row = places.get(name) ?? { name, trees: 0, sequestration: 0 };
+    row.trees += 1;
+    row.sequestration += annualCo2Kg(t) ?? 0;
+    places.set(name, row);
+    return places;
+  }, new Map()).values()]
+    .map((row) => ({ ...row, sequestration: Math.round(row.sequestration * 10) / 10 }))
+    .sort((a, b) => b.trees - a.trees)
+    .slice(0, 30);
+
+  // The province sees every LGU's trees: grouped by the LGU each stands in.
+  const province = officeLgu === undefined;
+  const [openGroups, setOpenGroups] = useState(() => new Set());
+  const toggleGroup = (name) =>
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  const treesByLgu = useMemo(() => {
+    if (!province) return [];
+    const groups = new Map();
+    for (const tree of filteredTrees) {
+      const name = LGU_LABEL.get(Number(lguOfTree(tree))) ?? 'Not placed in an LGU';
+      if (!groups.has(name)) groups.set(name, { name, trees: [] });
+      groups.get(name).trees.push(tree);
+    }
+    return [...groups.values()].sort((a, b) => b.trees.length - a.trees.length || a.name.localeCompare(b.name));
+  }, [province, filteredTrees]);
 
   if (loading) {
     return (
@@ -111,6 +139,58 @@ export default function BiodiversityHub() {
       </section>
     );
   }
+
+
+  /** The trees as a table: the office's, or one city or municipality's. */
+  const renderTable = (rows) => (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Photo</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('tree_id')}>Tree ID</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('species')}>Species</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('dbh')}>DBH</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">MH</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">TH</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Coordinates</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Category</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Stem Quality</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('dateCaptured')}>Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {rows.map((tree) => {
+                    const photoUrl = tree.photo_url || tree.imageUrl;
+                    return (
+                      <tr key={tree.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTree(tree)}>
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          {photoUrl ? (
+                            <img src={photoUrl} alt={tree.species} onClick={() => setLightboxUrl(photoUrl)}
+                              className="w-9 h-9 object-cover rounded cursor-pointer hover:ring-2 hover:ring-green-500"
+                              onError={(e) => { e.target.style.display = 'none'; }} />
+                          ) : (
+                            <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center"><Image size={12} className="text-slate-400" /></div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-sm font-medium text-slate-900">{tree.tree_id || '—'}</td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{tree.species}</td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{tree.dbh}</td>
+                        <td className="px-3 py-2 text-sm text-slate-500">{tree.merchantable_height || tree.height_m || '—'}</td>
+                        <td className="px-3 py-2 text-sm text-slate-500">{tree.total_height || tree.heightClass || '—'}</td>
+                        <td className="px-3 py-2 text-xs text-slate-500">
+                          {tree.latitude && tree.longitude ? `${Number(tree.latitude).toFixed(4)}, ${Number(tree.longitude).toFixed(4)}` : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{tree.tree_category || '—'}</td>
+                        <td className="px-3 py-2 text-sm text-slate-700">{tree.stem_quality || '—'}</td>
+                        <td className="px-3 py-2 text-xs text-slate-500">{tree.dateCaptured ? new Date(tree.dateCaptured).toLocaleDateString() : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+  );
 
   return (
     <section className="space-y-6">
@@ -166,56 +246,32 @@ export default function BiodiversityHub() {
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
           </div>
 
-          {/* Inventory Table */}
-          <section className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Photo</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('tree_id')}>Tree ID</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('species')}>Species</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('dbh')}>DBH</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">MH</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">TH</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Coordinates</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Category</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Stem Quality</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('dateCaptured')}>Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {filteredTrees.map((tree) => {
-                    const photoUrl = tree.photo_url || tree.imageUrl;
-                    return (
-                      <tr key={tree.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTree(tree)}>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          {photoUrl ? (
-                            <img src={photoUrl} alt={tree.species} onClick={() => setLightboxUrl(photoUrl)}
-                              className="w-9 h-9 object-cover rounded cursor-pointer hover:ring-2 hover:ring-green-500"
-                              onError={(e) => { e.target.style.display = 'none'; }} />
-                          ) : (
-                            <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center"><Image size={12} className="text-slate-400" /></div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-sm font-medium text-slate-900">{tree.tree_id || '—'}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.species}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.dbh}</td>
-                        <td className="px-3 py-2 text-sm text-slate-500">{tree.merchantable_height || tree.height_m || '—'}</td>
-                        <td className="px-3 py-2 text-sm text-slate-500">{tree.total_height || tree.heightClass || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">
-                          {tree.latitude && tree.longitude ? `${Number(tree.latitude).toFixed(4)}, ${Number(tree.longitude).toFixed(4)}` : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.tree_category || '—'}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.stem_quality || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">{tree.dateCaptured ? new Date(tree.dateCaptured).toLocaleDateString() : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {/* Inventory Table: the province's by city or municipality (21 October). */}
+          {province ? (
+            <div className="space-y-2" aria-label="Trees by city and municipality">
+              {treesByLgu.map((group) => {
+                const isOpen = openGroups.has(group.name);
+                return (
+                  <section key={group.name} aria-label={group.name} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <button type="button" onClick={() => toggleGroup(group.name)} aria-expanded={isOpen}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
+                      <ChevronRight size={16} className={`text-slate-400 transition ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />
+                      <span className="flex-1 font-semibold text-slate-900">{group.name}</span>
+                      <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
+                        {group.trees.length.toLocaleString('en-US')} {group.trees.length === 1 ? 'tree' : 'trees'}
+                      </span>
+                    </button>
+                    {isOpen && <div className="border-t border-slate-200">{renderTable(group.trees)}</div>}
+                  </section>
+                );
+              })}
+              {treesByLgu.length === 0 && <p className="text-sm text-slate-500">No trees match.</p>}
             </div>
-          </section>
+          ) : (
+            <section className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+              {renderTable(filteredTrees)}
+            </section>
+          )}
         </>
       ) : (
         /* Analytics Tab */
@@ -248,7 +304,7 @@ export default function BiodiversityHub() {
 
           {/* Bar Chart */}
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">Sequestration Potential by Barangay</h3>
+            <h3 className="text-sm font-semibold text-slate-700 mb-4">CO₂ Taken Up a Year, by Barangay</h3>
             {barangayData.length > 0 ? (
               <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={barangayData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
@@ -258,7 +314,7 @@ export default function BiodiversityHub() {
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} label={{ value: 'Trees', angle: 90, position: 'insideRight' }} />
                   <Tooltip />
                   <Legend />
-                  <Bar yAxisId="left" dataKey="sequestration" fill="#16a34a" name="Sequestration (kg)" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="sequestration" fill="#16a34a" name="CO₂ taken up a year (kg)" radius={[4, 4, 0, 0]} />
                   <Bar yAxisId="right" dataKey="trees" fill="#06b6d4" name="Number of Trees" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

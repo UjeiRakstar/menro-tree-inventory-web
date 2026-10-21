@@ -330,7 +330,7 @@ export default function MapSheet() {
       const { data } = await everyRow(() =>
         supabase
           .from('trees')
-          .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, total_height, source')
+          .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, total_height, task_status, source')
       );
       // Each species' own wood density, for the carbon table and the GHG report.
       const densities = await loadWoodDensities(supabase);
@@ -521,6 +521,23 @@ export default function MapSheet() {
       cancelled = true;
     };
   }, [reportKind, lguPsgc]);
+  // The place's cutting permits, for the GHG report's losses (21 October).
+  const [permits, setPermits] = useState([]);
+  useEffect(() => {
+    if (reportKind !== 'ghg') return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data } = await everyRow(() =>
+        supabase.from('permits').select('id, tree_id, status, created_at, number_of_trees, lgu_psgc')
+      );
+      if (cancelled) return;
+      const rows = Array.isArray(data) ? data : [];
+      setPermits(lguPsgc ? rows.filter((permit) => Number(permit.lgu_psgc) === lguPsgc) : rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reportKind, lguPsgc]);
   const placeLabel = lgu ? 'Barangay' : 'City / municipality';
   const populationOf = useMemo(() => {
     if (lgu) {
@@ -550,10 +567,11 @@ export default function MapSheet() {
             communityTags: tableTrees.filter((tree) => tree.source === 'crowdsource').length,
             participation,
             areas: scopeAreas,
+            permits,
           }),
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation]
+    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation, permits]
   );
 
   // The office's edits, by report and section; a section not edited follows the figures.

@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabaseClient.js';
-import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download, FileBarChart } from 'lucide-react';
 import CertificatePrint from '../components/CertificatePrint.jsx';
+import PermitReport from '../components/PermitReport.jsx';
+import { groupPermits } from '../lib/permitReport.js';
 import { saveAs } from 'file-saver';
 import { useAuth } from '../context/AuthContext.jsx';
 import { inOfficeLgu } from '../lib/roles.js';
@@ -9,6 +11,11 @@ import { lguOfPermitRow } from '../lib/permitLogs.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 
 const PAGE_SIZE = 50;
+
+const LGU_BY_NAME = new Map(MUNICIPALITY_LIST.map((item) => [item.name.toLowerCase(), item.psgc]));
+const LGU_LABEL = new Map(MUNICIPALITY_LIST.map((item) => [item.psgc, item.label]));
+/** The label of the LGU a permit is in, or null when it is in none. */
+const lguLabelOf = (permit) => LGU_LABEL.get(lguOfPermitRow(permit, LGU_BY_NAME)) ?? null;
 
 /**
  *   lgu  the office's LGU code — only its permits are listed; undefined for
@@ -30,6 +37,11 @@ export default function PermitsLog({ lgu = undefined }) {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  // The province's permits by city or municipality (21 October), each opened
+  // when wanted; an office's own are one list, in pages.
+  const province = lgu === undefined;
+  const [openGroups, setOpenGroups] = useState(() => new Set());
+  const [reportOpen, setReportOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,8 +49,7 @@ export default function PermitsLog({ lgu = undefined }) {
       const { data, error } = await supabase.from('permits').select('*').order('created_at', { ascending: false });
       if (cancelled) return;
       if (error) { console.error(error.message); setLoading(false); return; }
-      const lguByName = new Map(MUNICIPALITY_LIST.map((item) => [item.name.toLowerCase(), item.psgc]));
-      setPermits((Array.isArray(data) ? data : []).filter((permit) => inOfficeLgu(lgu, lguOfPermitRow(permit, lguByName))));
+      setPermits((Array.isArray(data) ? data : []).filter((permit) => inOfficeLgu(lgu, lguOfPermitRow(permit, LGU_BY_NAME))));
       setLoading(false);
     }
     fetchPermits();
@@ -124,71 +135,17 @@ export default function PermitsLog({ lgu = undefined }) {
     saveAs(await workbookBlob(workbook), `Permit_Logs_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
-  return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Permit Logs</h1>
-          <p className="mt-1 text-slate-600 text-sm">All walk-in and system-generated cutting permits.</p>
-        </div>
-        <button
-          onClick={() => exportPermitsToExcel(permits)}
-          disabled={permits.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 transition disabled:opacity-50"
-        >
-          <Download size={14} />
-          Export to Excel
-        </button>
-      </div>
+  const byLgu = province ? groupPermits(filteredPermits, 'lgu', { lguOf: lguLabelOf }) : [];
+  const toggleGroup = (name) =>
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
 
-      {/* Search & Filter Bar */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, address, contact…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
-            />
-          </div>
-
-          {/* Barangay filter */}
-          {barangays.length > 2 && (
-            <select value={filterBarangay} onChange={(e) => setFilterBarangay(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20">
-              {barangays.map(b => <option key={b} value={b}>{b === 'All' ? 'All Addresses' : b}</option>)}
-            </select>
-          )}
-
-          {/* Date range */}
-          <div className="flex items-center gap-1.5">
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
-            <span className="text-slate-400 text-xs">to</span>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
-          </div>
-
-          <span className="text-xs text-slate-500">
-            {filteredPermits.length} result{filteredPermits.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Loading permits…</div>
-      )}
-
-      {!loading && filteredPermits.length === 0 && (
-        <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">No permits found.</div>
-      )}
-
-      {!loading && paginatedPermits.length > 0 && (
-        <section className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+  /** The permits as a table: the page's, or one city or municipality's. */
+  const renderTable = (rows) => (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
@@ -206,7 +163,7 @@ export default function PermitsLog({ lgu = undefined }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
-                {paginatedPermits.map((permit) => {
+                {rows.map((permit) => {
                   const urls = Array.isArray(permit.requirements_urls) ? permit.requirements_urls : [];
                   const status = permit.status || 'Pending';
                   return (
@@ -255,6 +212,121 @@ export default function PermitsLog({ lgu = undefined }) {
               </tbody>
             </table>
           </div>
+  );
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Permit Logs</h1>
+          <p className="mt-1 text-slate-600 text-sm">All walk-in and system-generated cutting permits.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setReportOpen(true)}
+            disabled={permits.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 transition disabled:opacity-50"
+          >
+            <FileBarChart size={14} />
+            Report
+          </button>
+          <button
+            onClick={() => exportPermitsToExcel(permits)}
+            disabled={permits.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-green-800 ring-1 ring-green-300 hover:bg-green-50 transition disabled:opacity-50"
+          >
+            <Download size={14} />
+            Export to Excel
+          </button>
+        </div>
+      </div>
+      <PermitReport
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        permits={permits}
+        lgu={officeLgu}
+        lguOf={lguLabelOf}
+        preparedBy={profile?.full_name || ''}
+      />
+
+      {/* Search & Filter Bar */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, address, contact…"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+            />
+          </div>
+
+          {/* Barangay filter */}
+          {barangays.length > 2 && (
+            <select value={filterBarangay} onChange={(e) => setFilterBarangay(e.target.value)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20">
+              {barangays.map(b => <option key={b} value={b}>{b === 'All' ? 'All Addresses' : b}</option>)}
+            </select>
+          )}
+
+          {/* Date range */}
+          <div className="flex items-center gap-1.5">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
+            <span className="text-slate-400 text-xs">to</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm text-slate-700 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
+          </div>
+
+          <span className="text-xs text-slate-500">
+            {filteredPermits.length} result{filteredPermits.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Loading permits…</div>
+      )}
+
+      {!loading && filteredPermits.length === 0 && (
+        <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">No permits found.</div>
+      )}
+
+      {!loading && province && byLgu.length > 0 && (
+        <div className="space-y-2" aria-label="Permits by city and municipality">
+          {byLgu.map((group) => {
+            const isOpen = openGroups.has(group.name);
+            return (
+              <section key={group.name} aria-label={group.name} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.name)}
+                  aria-expanded={isOpen}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                >
+                  <ChevronRight size={16} className={`text-slate-400 transition ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true" />
+                  <span className="flex-1 font-semibold text-slate-900">{group.name}</span>
+                  <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
+                    {group.permits.length} {group.permits.length === 1 ? 'permit' : 'permits'}
+                  </span>
+                  <span className="w-20 text-right text-xs text-slate-500">
+                    {group.trees} {group.trees === 1 ? 'tree' : 'trees'}
+                  </span>
+                </button>
+                {isOpen && <div className="border-t border-slate-200">{renderTable(group.permits)}</div>}
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      {!loading && !province && paginatedPermits.length > 0 && (
+        <section className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+          {renderTable(paginatedPermits)}
 
           {/* Pagination */}
           {totalPages > 1 && (

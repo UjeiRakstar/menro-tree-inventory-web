@@ -2,6 +2,7 @@ import { containsPoint } from '../lagunaBoundaries.js';
 import { carbonContentOf } from '../landCover.js';
 import { summariseMappedCover } from '../mappedCover.js';
 import { maiCoverOf, namriaClassById } from '../namriaCover.js';
+import { treesCovered } from '../permitLogs.js';
 import { listOf } from '../reportWriter.js';
 import {
   CARBON_FRACTION,
@@ -31,9 +32,12 @@ import {
  *                  that stand OUTSIDE the mapped tree cover; a tree inside an
  *                  area is already in that area's figure
  *
- * What it cannot count is said, not left out quietly: carbon lost to wood
- * removal, fuelwood and disturbance (the CCC tool's rows 17–42), and every
- * other sector's emissions, which come from outside Green Tag.
+ * Losses (21 October): the carbon held by trees cut under a permit this year
+ * — each measured tree's stored CO₂, roots included, released the year it is
+ * cut — so the bottom line is net. A cut tree no longer removes anything.
+ * What it cannot count is said, not left out quietly: fuelwood and
+ * disturbance (the CCC tool's rows 26–42), trees cut that were never
+ * measured, and every other sector's emissions, from outside Green Tag.
  *
  * The CCC tool's own sheet applies the root-to-shoot ratio on its first row
  * only (H5); rows 6 to 13 leave it out, though the column is filled in for
@@ -80,8 +84,39 @@ export function treeGhg(tree) {
 }
 
 /** Each tree with its figures, and whether its area already counts it. */
+/** A tree cut under a permit, or marked cut in the field. */
+export const isCut = (tree) => tree?.task_status === 'Cut';
+
 function assess(trees, coverAreas) {
-  return trees.map((tree) => ({ tree, ghg: treeGhg(tree), inCover: inMappedCover(tree, coverAreas) }));
+  return trees
+    .filter((tree) => !isCut(tree))
+    .map((tree) => ({ tree, ghg: treeGhg(tree), inCover: inMappedCover(tree, coverAreas) }));
+}
+
+/**
+ * The trees cut under a permit in a year: how many, how many were measured,
+ * and the CO₂ the measured ones held, roots included — lost that year.
+ *   permits   the place's permits
+ *   trees     every tree, cut ones included, to find a permit's tree by id
+ */
+export function cuttingLosses({ permits = [], trees = [], year = new Date().getFullYear() }) {
+  const byId = new Map(trees.map((tree) => [String(tree.id), tree]));
+  let count = 0;
+  let measured = 0;
+  let co2Kg = 0;
+  for (const permit of permits) {
+    const issued = permit?.created_at ? new Date(permit.created_at) : null;
+    if (!issued || issued.getFullYear() !== Number(year)) continue;
+    const tree = permit.tree_id ? byId.get(String(permit.tree_id)) : null;
+    if (permit.status !== 'Cut' && !isCut(tree)) continue;
+    count += treesCovered(permit);
+    const ghg = tree ? treeGhg(tree) : null;
+    if (ghg) {
+      measured += 1;
+      co2Kg += ghg.co2Kg;
+    }
+  }
+  return { year: Number(year), trees: count, measured, co2T: measured ? co2Kg / 1000 : count ? 0 : null };
 }
 
 /** The tagged trees by place: what they hold and what they remove in a year. */
@@ -173,11 +208,14 @@ export function ghgForestTable(coverAreas) {
 }
 
 /** The year's removals, and what is not counted: the CCC tool's "Net Carbon Uptake", as far as Green Tag can fill it. */
-export function ghgSummaryTable({ forest, assessed }) {
+export function ghgSummaryTable({ forest, assessed, cutting = null }) {
   const forestYear = forest.totals.co2YearT;
   const outside = assessed.filter((item) => item.ghg && !item.inCover);
   const treesYear = outside.length ? outside.reduce((total, item) => total + item.ghg.co2YearKg, 0) / 1000 : null;
   const counted = [forestYear, treesYear].filter((value) => value !== null);
+  const gains = counted.length ? counted.reduce((a, b) => a + b, 0) : null;
+  const lost = cutting?.co2T ?? null;
+  const unmeasured = cutting ? cutting.trees - cutting.measured : 0;
   return {
     key: 'ghg-summary',
     title: 'Removals and emissions: what this inventory counts',
@@ -193,10 +231,25 @@ export function ghgSummaryTable({ forest, assessed }) {
         co2YearT: treesYear,
         from: `${n(outside.length)} measured ${outside.length === 1 ? 'tree' : 'trees'}, by Chave et al. 2014 with roots`,
       },
-      { name: 'Losses: wood removal, fuelwood, disturbance', co2YearT: null, from: 'Not recorded in Green Tag: the CCC tool, Forestlands rows 17–42' },
+      {
+        name: `Losses: trees cut under a permit in ${cutting?.year ?? new Date().getFullYear()}`,
+        co2YearT: lost,
+        from: !cutting || cutting.trees === 0
+          ? 'No tree recorded cut under a permit this year'
+          : `${n(cutting.trees)} ${cutting.trees === 1 ? 'tree' : 'trees'} cut; the CO₂ the ${n(cutting.measured)} measured held, with roots` +
+            (unmeasured > 0 ? `; ${n(unmeasured)} never measured, not counted` : ''),
+      },
+      { name: 'Losses: fuelwood and disturbance', co2YearT: null, from: 'Not recorded in Green Tag: the CCC tool, Forestlands rows 26–42' },
       { name: 'Emissions: energy, transport, waste, agriculture and the rest', co2YearT: null, from: 'Outside Green Tag: the CCC tool’s other sheets' },
     ],
-    totals: { name: 'Removals counted here', co2YearT: counted.length ? counted.reduce((a, b) => a + b, 0) : null, from: 'Before losses and emissions' },
+    totals: {
+      name: lost ? 'Net removals counted here' : 'Removals counted here',
+      co2YearT: gains === null && lost === null ? null : (gains ?? 0) - (lost ?? 0),
+      from: lost ? 'Removals less the trees cut; before fuelwood, disturbance and emissions' : 'Before losses and emissions',
+    },
+    // For the narrative.
+    gains,
+    lost,
   };
 }
 
@@ -284,12 +337,14 @@ export function ghgSections({ short, trees: treeTable, forest, summary }) {
       key: 'ghg-total',
       heading: 'Removals, and what is not yet counted',
       text:
-        (st.co2YearT !== null
-          ? `Together, without counting a tree twice, the mapped cover and the tagged trees outside it remove about ${t(st.co2YearT)} t of CO₂ a year. `
+        (summary.gains !== null
+          ? `Together, without counting a tree twice, the mapped cover and the tagged trees outside it remove about ${t(summary.gains)} t of CO₂ a year. `
           : 'Nothing has been measured or mapped yet that this inventory can count. ') +
-        'That is a gain only. The net figure needs the carbon lost to wood removal, fuelwood gathering and disturbance — the permits for cutting ' +
-        'trees are where the first of these starts — and the inventory as a whole needs the other sectors’ emissions; both are entered in the ' +
-        'CCC tool from the LGU’s own records.',
+        (summary.lost
+          ? `The trees cut under a permit this year held about ${t(summary.lost)} t of CO₂, released as they were cut, which leaves a net removal of ${t(st.co2YearT)} t. `
+          : 'No tree has been recorded cut under a permit this year. ') +
+        'Carbon lost to fuelwood gathering and disturbance, and the other sectors’ emissions, are entered in the CCC tool from the LGU’s own ' +
+        'records.',
     },
     {
       key: 'ghg-relevance',
@@ -309,14 +364,15 @@ export function ghgSections({ short, trees: treeTable, forest, summary }) {
  *
  *   trees, areas, places, placeLabel, short — as the map sheet has them
  */
-export function buildGhgReport({ trees = [], areas = [], places = [], placeLabel = 'Barangay', short = 'Laguna' }) {
+export function buildGhgReport({ trees = [], areas = [], places = [], placeLabel = 'Barangay', short = 'Laguna', permits = [], year = new Date().getFullYear() }) {
   const coverAreas = treeCoverAreas(areas);
+  const cutting = cuttingLosses({ permits, trees, year });
   const assessed = assess(trees, coverAreas);
   const placeOf =
     placeLabel === 'Barangay' ? (tree) => tree.barangay : (tree) => places.find((place) => place.key === tree.municipality)?.name ?? null;
   const treeTable = ghgTreeTable({ assessed, places, placeOf, placeLabel });
   const forest = ghgForestTable(coverAreas);
-  const summary = ghgSummaryTable({ forest, assessed });
+  const summary = ghgSummaryTable({ forest, assessed, cutting });
   return {
     tables: [summary, forest, treeTable],
     annex: [ghgTreeList(assessed)],

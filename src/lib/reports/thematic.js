@@ -690,7 +690,8 @@ function sourcesSection(kind) {
  *   place, places, measured, placeLabel, tables (the attribute tables by key),
  *   trees, climate, populationOf, protectedHa, placeAreaHa, communityTags,
  *   participation (community_counts() for the place: residents taking part),
- *   areas (the saved areas in scope, for the GHG report's mapped tree cover)
+ *   areas (the saved areas in scope, for the GHG report's mapped tree cover),
+ *   permits (the place's cutting permits, for the GHG report's losses)
  */
 export function buildThemeReport(kind, ctx) {
   const where = officialName(ctx.place);
@@ -712,7 +713,14 @@ export function buildThemeReport(kind, ctx) {
     tables = [elevationTable(common), slopeTable(common)];
     sections = terrainSections({ short, tables });
   } else if (kind === 'ghg') {
-    const ghg = buildGhgReport({ trees: ctx.trees ?? [], areas: ctx.areas ?? [], places: common.places, placeLabel: common.placeLabel, short });
+    const ghg = buildGhgReport({
+      trees: ctx.trees ?? [],
+      areas: ctx.areas ?? [],
+      places: common.places,
+      placeLabel: common.placeLabel,
+      short,
+      permits: ctx.permits ?? [],
+    });
     tables = ghg.tables;
     sections = ghg.sections;
     annex = ghg.annex;

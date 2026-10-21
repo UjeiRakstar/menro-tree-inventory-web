@@ -127,9 +127,19 @@ can do everything. The RISE details on the public tree panel, more of them.
   inventory, `src/lib/reports/ghg.js`): the removals by the mapped tree
   cover, as the CCC Community-level GHG Inventory Tool's Forestlands sheet
   counts them, and by the tagged trees outside it, never a tree twice; the
-  carbon map; a tree-by-tree list in its Excel file. Still outside it: carbon
-  lost to cutting, fuelwood and disturbance (the permits could feed the first,
-  once they record volume), and the other sectors' emissions.
+  carbon map; a tree-by-tree list in its Excel file. **Carbon lost to cutting
+  — added 21 October:** the trees cut under a permit this year, the measured
+  ones' stored CO₂ (with roots) taken off, so the bottom line is net; a cut
+  tree no longer counts as removing CO₂. Still outside it: fuelwood,
+  disturbance, cut trees never measured, and the other sectors' emissions.
+- Permits — **done 21 October:** the province's permit logs, and its tree
+  inventory on the Biodiversity page, are grouped by city or municipality
+  with counts, each opened on a click (Print and the photos as before). A
+  Report button makes the permit report for a year, a quarter, a month or
+  dates, summed by city or municipality, species, status or month, in Excel
+  or printed (`src/lib/permitReport.js` is its template). The Biodiversity
+  page's analytics chart no longer shows Santa Cruz's barangays at 62.47 kg
+  a tree for every office.
 - CDRA hatching for hazard levels — **tried and dropped 20 October** (it did
   not look good on a real sheet). Instead, every hazard map, legend and chart
   uses **DHSUD's CDRA colours**: yellow low, purple moderate, red high (dark
@@ -453,10 +463,10 @@ stayed online** after the area was deleted or its PDF replaced.
   roles, the office map, training, RISE, the province board, saving areas, and
   clustering coming back. Yours to update, or to ask me to.
 
-- **A permit's LGU is worked out, not stored.** PGENRO's permit logs place a
-  permit by its tree's barangay, or by the point a walk-in permit was issued
-  for. A walk-in permit with neither lands under "Not placed". Storing
-  `lgu_psgc` on `permits` when one is issued would make that exact.
+- ~~A permit's LGU is worked out, not stored.~~ Stored since step 16
+  (`permits_fence.sql` stamps `lgu_psgc` on every permit). Only a walk-in
+  permit with neither a tree nor a point is "Not placed" (2 in the live data,
+  21 October).
 
 ## Waiting on another system
 
