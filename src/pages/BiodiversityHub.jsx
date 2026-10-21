@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import { loadWoodDensities, withWoodDensities } from '../lib/woodDensities.js';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -43,7 +44,8 @@ export default function BiodiversityHub() {
       const { data } = await everyRow(() => supabase.from('trees').select('*'));
       if (cancelled) return;
       // An office's own LGU only; PGENRO, the province.
-      setTrees((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(officeLgu, lguOfTree(tree))));
+      const densities = await loadWoodDensities(supabase);
+      setTrees(withWoodDensities((Array.isArray(data) ? data : []).filter((tree) => inOfficeLgu(officeLgu, lguOfTree(tree))), densities));
       setLoading(false);
     }
     fetch();

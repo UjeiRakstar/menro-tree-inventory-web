@@ -65,6 +65,7 @@ import {
 import { landCoverById } from '../../lib/landCover.js';
 import { MAP_SITES, siteById, siteTitle } from '../../lib/mapSites.js';
 import { PUBLIC_MAP_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js';
+import { loadWoodDensities, withWoodDensities } from '../../lib/woodDensities.js';
 /**
  * The tagging form carries a confetti animation for its success screen, which
  * is a quarter of a megabyte a visitor should not download for a button they
@@ -1126,7 +1127,10 @@ export function TreeMap({
         if (error) {
           setLoadError(error.message || 'The tree data could not be loaded.');
         } else {
-          setTrees(Array.isArray(data) ? data : []);
+          // Each species' own wood density, for the carbon in the panels.
+          const densities = await loadWoodDensities(supabase);
+          if (cancelled) return;
+          setTrees(withWoodDensities(Array.isArray(data) ? data : [], densities));
         }
 
         if (admin) {
@@ -2802,7 +2806,7 @@ export function TreeMap({
       )}
 
       {/* Asking for the data behind the place in focus */}
-      <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />
+      <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} place={selectedLgu} />
 
       {/* The office's two actions on a tree, from the Command Center */}
       {admin && dispatchTree && (

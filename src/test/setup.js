@@ -1,4 +1,10 @@
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
+
+// findBy… and waitFor wait up to five seconds, not one: with 1,200 tests at
+// once, a page that loads in a few steps could miss one second and fail at
+// random. A test that passes still finishes as soon as it can.
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * jsdom implements neither observer API, and the public pages use

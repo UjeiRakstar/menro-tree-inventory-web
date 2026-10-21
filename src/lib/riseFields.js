@@ -1,4 +1,5 @@
 import { emptySiteNeeds, filledSiteNeeds, siteNeedsForm, siteNeedsRow } from './siteNeeds.js';
+import { woodDensityForm, woodDensityRow } from './woodDensities.js';
 
 /**
  * What the forester records from a DENR-ERDB RISE publication.
@@ -108,6 +109,7 @@ export function formFromProfile(row) {
   for (const key of TEXT_KEYS) form[key] = typeof row[key] === 'string' ? row[key] : '';
   for (const key of MONTH_KEYS) form[key] = cleanMonths(row[key]);
   Object.assign(form, siteNeedsForm(row));
+  Object.assign(form, woodDensityForm(row));
   return form;
 }
 
@@ -120,6 +122,7 @@ export function profileFromForm(form, { autofilled = false } = {}) {
     row[key] = months.length > 0 ? months : null;
   }
   Object.assign(row, siteNeedsRow(form));
+  Object.assign(row, woodDensityRow(form));
   row.autofilled = Boolean(autofilled);
   return row;
 }

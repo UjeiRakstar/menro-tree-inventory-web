@@ -10,6 +10,7 @@ import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 import { INBOX_FOLDERS, INBOX_KINDS, folderById, linkOf, receivedAt, replyMailto } from '../lib/inbox.js';
 import { MAX_REPLY_CHARACTERS, loadReplies, replyChannelOf, sendReply } from '../lib/replies.js';
 import { publishDueNews } from '../lib/news.js';
+import DataRequests from '../components/pgenro/DataRequests.jsx';
 
 const isMissingTable = (error) => /relation .*inbox_messages.* does not exist|Could not find the table/i.test(error?.message ?? '');
 
@@ -180,6 +181,9 @@ export default function Inbox() {
           )}
         </div>
       </div>
+
+      {/* Who downloaded the inventory from the public pages (data_requests.sql). */}
+      {pgenro && <DataRequests />}
     </section>
   );
 }

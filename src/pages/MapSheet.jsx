@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { loadWoodDensities, withWoodDensities } from '../lib/woodDensities.js';
 import { Download, Loader2, Printer, X } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -331,9 +332,11 @@ export default function MapSheet() {
           .from('trees')
           .select('id, species, scientific_name, latitude, longitude, biodiversity_status, species_type, tree_category, dbh, merchantable_height, total_height, source')
       );
+      // Each species' own wood density, for the carbon table and the GHG report.
+      const densities = await loadWoodDensities(supabase);
       if (cancelled || !Array.isArray(data)) return;
       setTrees(
-        data
+        withWoodDensities(data, densities)
           .map((tree) => ({ ...tree, lat: Number(tree.latitude), lng: Number(tree.longitude) }))
           .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng) && containsPoint(place.geometry, [lat, lng]))
       );

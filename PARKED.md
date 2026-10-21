@@ -116,9 +116,10 @@ can do everything. The RISE details on the public tree panel, more of them.
   its own layout, being a form to fill in.
 - Carbon — **switched 20 October** to Chave et al. 2014 on diameter and total
   height (`src/lib/treeCarbon.js`), everywhere carbon is shown. Timber
-  volume stays the DENR's. Parked: **wood density per species** — every tree
-  takes 0.57 g/cm³ (tropical Asian mean, Reyes et al. 1992) until the species
-  library has a field for it, which needs a new SQL step.
+  volume stays the DENR's. **Wood density per species — done 21 October**
+  (step 26): the forester records a species' own, with its source, in the
+  Species (RISE) tab; its trees' carbon uses it everywhere, and every other
+  tree keeps 0.57 g/cm³ (tropical Asian mean, Reyes et al. 1992).
 - The GHG inventory report — **done 20 October** (map sheet → Report → GHG
   inventory, `src/lib/reports/ghg.js`): the removals by the mapped tree
   cover, as the CCC Community-level GHG Inventory Tool's Forestlands sheet
@@ -336,6 +337,12 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     again (the nickname words PGENRO adds to) and `supabase/inbox.sql` again
     (Contact Us's data privacy topic; one run covers step 23 too). Neither
     touches what super_admin.sql changes, so it need not be run again.
+25. **Data requests, 21 October** — run `supabase/data_requests.sql` (after
+    accounts.sql). Until it runs, the downloads still work but nobody's request
+    is kept, and PGENRO's Inbox says the list needs it.
+26. **Wood density, 21 October** — run `supabase/species_wood_density.sql`
+    (after species_rise.sql). Until it runs, the species form saves as before
+    and every tree takes 0.57 g/cm³.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
@@ -453,8 +460,11 @@ stayed online** after the area was deleted or its PDF replaced.
   that describes neither. A per-hectare figure needs a plot survey instead.
 - **The emissions feed.** Total Carbon Emission comes from outside this system
   (Greenhouse Gases Quantification Sheet, Climate Change Commission).
-- **Downloads.** The data request form collects who is asking and what for,
-  then says the downloads are not ready. The exports themselves are unbuilt.
+- **Downloads — done 21 October.** The data request form records who is asking
+  and what for (step 25), with their agreement, then downloads the tagged trees
+  of Laguna or one city or municipality: an Excel workbook in the standard look
+  (trees, a summary by place, species) and GeoJSON. PGENRO reads the requests
+  on its Inbox page. Only what the public map shows of a tree goes out.
 - **Species write-ups.** Mango has one; the rest do not. Query 5 of
   `supabase/data_checks.sql` is the PGENRO to-do list.
 - **A cloud-free satellite basemap.** You have a Copernicus API for a

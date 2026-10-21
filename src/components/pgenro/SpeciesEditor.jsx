@@ -3,6 +3,8 @@ import { ArrowLeft, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { MONTHS, RISE_FIELDS, filledKeys, profileFromForm } from '../../lib/riseFields.js';
 import { formKeysOf, siteNeedsProblems } from '../../lib/siteNeeds.js';
+import { DEFAULT_WOOD_DENSITY } from '../../lib/treeCarbon.js';
+import { woodDensityProblem } from '../../lib/woodDensities.js';
 import RiseAutofill from './RiseAutofill.jsx';
 import SiteNeedsFields from './SiteNeedsFields.jsx';
 
@@ -60,6 +62,7 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
   const nameClash = isNew && form.species.trim() && taken.has(form.species.trim().toLowerCase());
   const unchecked = fromPdf.size;
   const needProblems = siteNeedsProblems(form);
+  const densityProblem = woodDensityProblem(form);
 
   // markKey: the field whose mark this clears — a site need's range is two
   // inputs under one mark.
@@ -116,6 +119,10 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
       setError('Some of the site needs are not right — see the figures marked in red.');
       return;
     }
+    if (densityProblem) {
+      setError(`Wood density: ${densityProblem}`);
+      return;
+    }
     if (unchecked > 0 && !checked) {
       setError('Tick the box to say you have checked what was read from the PDF.');
       return;
@@ -132,7 +139,7 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
         saveError.code === 'PGRST204' || saveError.code === '42703' || /column .* does not exist/i.test(saveError.message ?? '');
       setError(
         missing
-          ? 'Some of these fields are not in the database yet. Run supabase/species_rise.sql and supabase/species_site_needs.sql in the SQL editor, then save again.'
+          ? 'Some of these fields are not in the database yet. Run supabase/species_rise.sql, supabase/species_site_needs.sql and supabase/species_wood_density.sql in the SQL editor, then save again.'
           : saveError.message
       );
       return;
@@ -233,6 +240,39 @@ export default function SpeciesEditor({ initial, isNew, knownSpecies = [], taken
         onConfirm={confirmField}
         problems={needProblems}
       />
+
+      {/* Wood density, for the carbon of this species' trees (21 October). */}
+      <fieldset className="rounded-xl border border-slate-200 p-4">
+        <legend className="px-1 text-sm font-semibold text-slate-800">Wood density, for carbon</legend>
+        <p className="text-xs text-slate-500">
+          Chave et al. (2014) works out a tree&apos;s carbon from its diameter, height and wood density. Without one here, this
+          species&apos; trees take {DEFAULT_WOOD_DENSITY} g/cm³, the tropical Asian mean (Reyes et al. 1992).
+        </p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-[10rem_1fr]">
+          <label className="block text-sm font-medium text-slate-700">
+            Wood density (g/cm³)
+            <input
+              value={form.wood_density ?? ''}
+              onChange={(e) => setField('wood_density', e.target.value)}
+              inputMode="decimal"
+              placeholder={String(DEFAULT_WOOD_DENSITY)}
+              className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 ${
+                densityProblem ? 'border-red-300' : 'border-slate-200'
+              }`}
+            />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Source
+            <input
+              value={form.wood_density_source ?? ''}
+              onChange={(e) => setField('wood_density_source', e.target.value)}
+              placeholder="e.g. Global Wood Density Database (Zanne et al. 2009), ERDB, a RISE issue"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20"
+            />
+          </label>
+        </div>
+        {densityProblem && <p className="mt-2 text-xs font-semibold text-red-700">{densityProblem}</p>}
+      </fieldset>
 
       <datalist id={knownListId}>
         {knownSpecies.map((name) => (

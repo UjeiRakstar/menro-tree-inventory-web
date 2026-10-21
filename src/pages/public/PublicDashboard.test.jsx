@@ -328,7 +328,7 @@ describe('PublicDashboard', () => {
     ]);
   });
 
-  it('asks who wants the data, and admits the download is not ready', async () => {
+  it('asks who wants the data, and will not release it without their agreement', async () => {
     renderDashboard();
 
     fireEvent.click(await screen.findByRole('button', { name: /Download Data/ }));
@@ -337,11 +337,12 @@ describe('PublicDashboard', () => {
     expect(within(dialog).getByLabelText(/First Name/)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/Email/)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/Purpose/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Trees of')).toHaveValue('');
 
     fireEvent.submit(within(dialog).getByRole('button', { name: 'Download' }).closest('form'));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/not available yet/i);
-    expect(supabaseMock.calls.every((c) => c.op === 'select')).toBe(true);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/agree to your details being kept/);
+    expect(supabaseMock.supabase.rpc).not.toHaveBeenCalledWith('log_data_request', expect.anything());
   });
 
   it('closes the request form on Escape', async () => {

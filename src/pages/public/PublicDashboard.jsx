@@ -53,6 +53,7 @@ import {
   needsBarangayIndex,
 } from '../../lib/barangayLookup.js';
 import { PUBLIC_DASHBOARD_COLUMNS, selectPublicTrees } from '../../lib/treeColumns.js';
+import { loadWoodDensities, withWoodDensities } from '../../lib/woodDensities.js';
 import { MIN_MERCHANTABLE_HEIGHT_M, VOLUME_COEFFICIENT, measuredCoverage } from '../../lib/treeVolume.js';
 import {
   ANNUAL_DBH_GROWTH_CM,
@@ -499,10 +500,14 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
     (async () => {
       setLoading(true);
       setLoadError('');
-      const { data, error } = await selectPublicTrees(supabase, PUBLIC_DASHBOARD_COLUMNS);
+      // Each species' own wood density, for the carbon, read alongside.
+      const [{ data, error }, densities] = await Promise.all([
+        selectPublicTrees(supabase, PUBLIC_DASHBOARD_COLUMNS),
+        loadWoodDensities(supabase),
+      ]);
       if (cancelled) return;
       if (error) setLoadError(error.message || 'The inventory could not be loaded.');
-      else setTrees(Array.isArray(data) ? data : []);
+      else setTrees(withWoodDensities(Array.isArray(data) ? data : [], densities));
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -1053,7 +1058,7 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
         <ProvisionalKey className="mt-4" />
       </div>
 
-      <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} />
+      <DataRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} place={selectedLgu} />
     </div>
   );
 }
