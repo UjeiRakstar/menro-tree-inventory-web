@@ -521,6 +521,19 @@ export default function MapSheet() {
       cancelled = true;
     };
   }, [reportKind, lguPsgc]);
+  // News & Events credited to the CBI, for the biodiversity report (21 October).
+  const [newsPosts, setNewsPosts] = useState(null);
+  useEffect(() => {
+    if (reportKind !== 'biodiversity') return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.from('news_posts').select('*');
+      if (!cancelled) setNewsPosts(error || !Array.isArray(data) ? null : data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reportKind]);
   // The place's cutting permits, for the GHG report's losses (21 October).
   const [permits, setPermits] = useState([]);
   useEffect(() => {
@@ -568,10 +581,11 @@ export default function MapSheet() {
             participation,
             areas: scopeAreas,
             permits,
+            newsPosts,
           }),
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation, permits]
+    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation, permits, newsPosts]
   );
 
   // The office's edits, by report and section; a section not edited follows the figures.

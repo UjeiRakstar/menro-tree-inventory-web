@@ -2,6 +2,7 @@ import { FLUP_ELEVATION_CLASSES, FLUP_SLOPE_CLASSES } from '../layers/terrain.js
 import { listOf } from '../reportWriter.js';
 import { officialName } from '../psgc.js';
 import { buildGhgReport } from './ghg.js';
+import { CBI_CREDITS, cbiEventCounts } from '../news.js';
 
 /**
  * The thematic reports (Round C, 18 October): soil; hazards and climate;
@@ -399,7 +400,7 @@ export function compositionTable(trees = []) {
  * Index, adopted by TB 2018-02), and what it cannot — said plainly, so no
  * reader takes a gap for a zero.
  */
-export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0, participation = null }) {
+export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0, participation = null, events = null, year = new Date().getFullYear() }) {
   const coverHa = (landCover?.rows ?? []).filter((row) => row.treeCover).reduce((t, r) => t + r.areaHa, 0);
   const origin = compositionTable(trees).counts;
   const known = trees.length - origin.unrecorded;
@@ -439,7 +440,21 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
         ? 'Green Tag residents’ accounts, counted where they tagged (community_counts)'
         : 'The public map’s tagging, confirmed in the field',
     },
-    { name: 'Budget, projects, policies, partnerships, outreach', value: 'Outside this system', from: 'The LGU’s own records' },
+    // Projects, policies, partnerships and outreach: the events PGENRO posted
+    // in News & Events for the place, credited to the CBI (21 October).
+    ...CBI_CREDITS.map((credit) => {
+      const held = events?.[credit.id] ?? [];
+      return {
+        name: credit.indicator,
+        value: !events
+          ? 'Not counted yet'
+          : held.length
+            ? `${n(held.length)} in ${year}: ${listOf(held.slice(0, 3).map((post) => post.title))}${held.length > 3 ? ', and more' : ''}`
+            : `None posted for ${year}`,
+        from: 'News & Events, credited to the CBI',
+      };
+    }),
+    { name: 'Budget for biodiversity', value: 'Outside this system', from: 'The LGU’s own records' },
   ];
   return {
     key: 'cbi',
@@ -691,7 +706,8 @@ function sourcesSection(kind) {
  *   trees, climate, populationOf, protectedHa, placeAreaHa, communityTags,
  *   participation (community_counts() for the place: residents taking part),
  *   areas (the saved areas in scope, for the GHG report's mapped tree cover),
- *   permits (the place's cutting permits, for the GHG report's losses)
+ *   permits (the place's cutting permits, for the GHG report's losses),
+ *   newsPosts (News & Events, for the CBI's projects, policies, partnerships and outreach)
  */
 export function buildThemeReport(kind, ctx) {
   const where = officialName(ctx.place);
@@ -738,6 +754,7 @@ export function buildThemeReport(kind, ctx) {
         carbon: byKey.carbon?.totals ?? null,
         communityTags: ctx.communityTags ?? 0,
         participation: ctx.participation ?? null,
+        events: ctx.newsPosts ? cbiEventCounts(ctx.newsPosts, { lgu: ctx.place?.psgc ?? null }) : null,
       }),
     ].filter(Boolean);
     sections = biodiversitySections({ short, tables, trees, communityTags: ctx.communityTags ?? 0 });

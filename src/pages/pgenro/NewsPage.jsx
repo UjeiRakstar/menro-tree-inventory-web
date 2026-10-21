@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArchiveRestore, CalendarDays, ClipboardPaste, ImagePlus, List, Loader2, Megaphone, Pencil, Trash2, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
+  CBI_CREDITS,
+  EVENT_KINDS,
   MAX_NEWS_PHOTOS,
   NEWS_BUCKET,
   newsProblems,
@@ -15,8 +17,18 @@ import {
   whenAndWhere,
 } from '../../lib/news.js';
 import NewsCalendar from './NewsCalendar.jsx';
+import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 
-const EMPTY = { title: '', event_date: '', venue: '', body: '', when: 'now', publish_at: '' };
+// The event (21 October): a first day, then a last day or "one day only"; its
+// kind; the LGU it is for (blank: all of Laguna); and its credit to the CBI.
+const EMPTY = {
+  title: '', event_date: '', event_end_date: '', one_day: true, event_kind: '', lgu_psgc: '', cbi_credit: '',
+  venue: '', body: '', when: 'now', publish_at: '',
+};
+/** The form's dates as the post keeps them: a one-day event has no last day. */
+const eventDates = (form) => ({ ...form, event_end_date: form.one_day ? '' : form.event_end_date });
+/** PostgREST's "no such column": inbox.sql has not been run again since 21 October. */
+const needsEventColumns = (message) => /event_end_date|event_kind|cbi_credit|lgu_psgc/.test(message ?? '');
 const FILTERS = [
   ['all', 'All'],
   ['scheduled', 'Scheduled'],
@@ -114,7 +126,7 @@ export default function NewsPage() {
   const previews = useMemo(() => photos.map((file) => ({ file, url: URL.createObjectURL(file) })), [photos]);
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
 
-  const problems = newsProblems(form, photos);
+  const problems = newsProblems(eventDates(form), photos);
   if (!problems.photos && kept.length + photos.length > MAX_NEWS_PHOTOS) problems.photos = `At most ${MAX_NEWS_PHOTOS} photos.`;
   // A published post stays published; a new or scheduled one can be scheduled.
   const canSchedule = !editing || newsStatus(editing) === 'scheduled';
@@ -132,6 +144,11 @@ export default function NewsPage() {
     setForm({
       title: item.title ?? '',
       event_date: item.event_date ?? '',
+      event_end_date: item.event_end_date ?? '',
+      one_day: !item.event_end_date || item.event_end_date === item.event_date,
+      event_kind: item.event_kind ?? '',
+      lgu_psgc: item.lgu_psgc ? String(item.lgu_psgc) : '',
+      cbi_credit: item.cbi_credit ?? '',
       venue: item.venue ?? '',
       body: item.body ?? '',
       when: scheduled ? 'schedule' : 'now',
@@ -174,6 +191,16 @@ export default function NewsPage() {
         body: form.body.trim(),
         venue: form.venue.trim() || null,
         event_date: form.event_date || null,
+        // Sent when filled, or to clear what a post had: a post without them
+        // still saves before inbox.sql is run again (step 28).
+        ...Object.fromEntries(
+          Object.entries({
+            event_end_date: (!form.one_day && form.event_end_date) || null,
+            event_kind: form.event_kind || null,
+            lgu_psgc: form.lgu_psgc ? Number(form.lgu_psgc) : null,
+            cbi_credit: form.cbi_credit || null,
+          }).filter(([key, value]) => value !== null || (editing && key in editing))
+        ),
         photos: [...kept, ...uploaded],
       };
       // When it goes out: a time chosen, or now for a post still waiting.
@@ -213,7 +240,12 @@ export default function NewsPage() {
       setTried(false);
     } catch (failure) {
       if (uploaded.length) await supabase.storage.from(NEWS_BUCKET).remove(photoPaths(uploaded));
-      setOutcome({ ok: false, text: `${editing ? 'Not saved' : 'Not posted'}: ${failure.message}` });
+      setOutcome({
+        ok: false,
+        text: needsEventColumns(failure.message)
+          ? 'The event’s days, kind and CBI credit need supabase/inbox.sql to be run again (step 28).'
+          : `${editing ? 'Not saved' : 'Not posted'}: ${failure.message}`,
+      });
     } finally {
       setSaving(false);
     }
@@ -276,14 +308,65 @@ export default function NewsPage() {
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
-            <span className="font-semibold text-slate-700">Date</span>
-            <input type="date" value={form.event_date} onChange={set('event_date')} className={input} />
+            <span className="font-semibold text-slate-700">Kind of event</span>
+            <select
+              value={form.event_kind}
+              onChange={(event) => {
+                const kind = EVENT_KINDS.find((k) => k.id === event.target.value);
+                // A tree planting is usually one day; a training may run longer.
+                setForm((current) => ({ ...current, event_kind: event.target.value, one_day: kind ? kind.oneDay : current.one_day }));
+              }}
+              className={input}
+            >
+              <option value="">Not an event (news)</option>
+              {EVENT_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
+            </select>
           </label>
+          <label className="block text-sm">
+            <span className="font-semibold text-slate-700">Held for</span>
+            <select value={form.lgu_psgc} onChange={set('lgu_psgc')} className={input}>
+              <option value="">All of Laguna</option>
+              {MUNICIPALITY_LIST.map((lgu) => <option key={lgu.psgc} value={lgu.psgc}>{lgu.label}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="font-semibold text-slate-700">{form.one_day ? 'Date' : 'First day'}</span>
+            <input type="date" value={form.event_date} onChange={set('event_date')} className={input} aria-invalid={Boolean(shown.event_date)} />
+            {shown.event_date && <span className="mt-1 block text-xs text-red-700">{shown.event_date}</span>}
+          </label>
+          <div className="text-sm">
+            <label className="flex items-center gap-2 font-semibold text-slate-700">
+              <input type="checkbox" checked={form.one_day} onChange={(event) => setForm((current) => ({ ...current, one_day: event.target.checked }))} />
+              One day only (the whole day)
+            </label>
+            {!form.one_day && (
+              <label className="mt-1 block">
+                <input type="date" value={form.event_end_date} min={form.event_date || undefined} onChange={set('event_end_date')}
+                  aria-label="Last day" aria-invalid={Boolean(shown.event_end_date)} className={input} />
+                <span className="mt-0.5 block text-xs text-slate-500">Last day</span>
+                {shown.event_end_date && <span className="mt-1 block text-xs text-red-700">{shown.event_end_date}</span>}
+              </label>
+            )}
+          </div>
           <label className="block text-sm">
             <span className="font-semibold text-slate-700">Venue</span>
             <input value={form.venue} onChange={set('venue')} className={input} />
           </label>
+          <label className="block text-sm">
+            <span className="font-semibold text-slate-700">Counts toward the CBI as</span>
+            <select value={form.cbi_credit} onChange={set('cbi_credit')} className={input}>
+              <option value="">Not for the CBI</option>
+              {CBI_CREDITS.map((credit) => <option key={credit.id} value={credit.id}>{credit.label}</option>)}
+            </select>
+          </label>
         </div>
+        {form.cbi_credit && (
+          <p className="text-xs text-slate-500">
+            City Biodiversity Index, governance and management:{' '}
+            {CBI_CREDITS.find((credit) => credit.id === form.cbi_credit)?.indicator.toLowerCase()} — counted in the biodiversity report of{' '}
+            {form.lgu_psgc ? MUNICIPALITY_LIST.find((lgu) => String(lgu.psgc) === form.lgu_psgc)?.label : 'Laguna'} for the event&apos;s year.
+          </p>
+        )}
         {canSchedule ? (
           <fieldset className="rounded-xl bg-slate-50 p-3">
             <legend className="px-1 text-sm font-semibold text-slate-700">When it goes out</legend>

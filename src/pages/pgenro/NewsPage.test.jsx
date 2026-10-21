@@ -171,3 +171,57 @@ describe('scheduling, archiving and the calendar (19 October)', () => {
     expect(within(form).getByLabelText('Goes out on')).toHaveValue(`${day}T08:00`);
   });
 });
+
+describe('an event’s days, kind and CBI credit (21 October)', () => {
+  it('runs over several days, for one LGU, and counts toward its CBI', async () => {
+    render(<NewsPage />);
+    // The posts already made are in the list before anything is posted.
+    await screen.findByText('Earth Hour');
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Title', 'City Biodiversity Index Training');
+    fill(form, 'Kind of event', 'training');
+    // A training may run longer: one day only is off, and the last day is asked for.
+    expect(within(form).getByLabelText(/One day only/)).not.toBeChecked();
+    fill(form, 'First day', '2026-11-23');
+    fill(form, 'Last day', '2026-11-25');
+    fill(form, 'Held for', '403426000');
+    fill(form, 'Counts toward the CBI as', 'outreach');
+    expect(within(form).getByText(/outreach and public awareness events held a year — counted in the biodiversity report of Santa Cruz/)).toBeInTheDocument();
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Every MENRO / CENRO has it');
+    const [insert] = supabaseMock.writesTo('news_posts', 'insert');
+    expect(insert.payload).toMatchObject({
+      event_date: '2026-11-23', event_end_date: '2026-11-25', event_kind: 'training', lgu_psgc: 403426000, cbi_credit: 'outreach',
+    });
+    expect(screen.getByRole('region', { name: 'Posted' })).toHaveTextContent(/23–25 November 2026/);
+  });
+
+  it('is one whole day for a tree planting, and sends nothing it does not need', async () => {
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Title', 'Tree Planting Day');
+    fill(form, 'Kind of event', 'tree-planting');
+    expect(within(form).getByLabelText(/One day only/)).toBeChecked();
+    expect(within(form).queryByLabelText('Last day')).not.toBeInTheDocument();
+    fill(form, 'Date', '2026-11-08');
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
+    await screen.findByRole('status');
+    const [insert] = supabaseMock.writesTo('news_posts', 'insert');
+    expect(insert.payload).toMatchObject({ event_kind: 'tree-planting', event_date: '2026-11-08' });
+    expect(insert.payload).not.toHaveProperty('event_end_date');
+    expect(insert.payload).not.toHaveProperty('cbi_credit');
+  });
+
+  it('will not have a last day before the first', async () => {
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Title', 'Forum');
+    fill(form, 'Kind of event', 'forum');
+    fill(form, 'First day', '2026-11-25');
+    fill(form, 'Last day', '2026-11-23');
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
+    expect(await within(form).findByText('The last day cannot be before the first.')).toBeInTheDocument();
+    expect(supabaseMock.writesTo('news_posts', 'insert')).toHaveLength(0);
+  });
+});

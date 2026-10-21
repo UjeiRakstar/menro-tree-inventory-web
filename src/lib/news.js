@@ -12,23 +12,82 @@ export const MAX_NEWS_PHOTOS = 5;
 export const MAX_NEWS_PHOTO_BYTES = MAX_ORIGINAL_BYTES;
 const PHOTO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
+/**
+ * What kind of event a post is about (21 October). A tree planting, a seminar
+ * or an orientation is usually one whole day; a training, a forum or a
+ * conference may run longer — the form starts them that way.
+ */
+export const EVENT_KINDS = Object.freeze([
+  { id: 'training', label: 'Training', oneDay: false },
+  { id: 'forum', label: 'Forum', oneDay: false },
+  { id: 'conference', label: 'Conference', oneDay: false },
+  { id: 'seminar', label: 'Seminar', oneDay: true },
+  { id: 'orientation', label: 'Orientation', oneDay: true },
+  { id: 'tree-planting', label: 'Tree planting', oneDay: true },
+  { id: 'clean-up', label: 'Clean-up drive', oneDay: true },
+  { id: 'other', label: 'Other', oneDay: true },
+]);
+export const eventKindLabel = (id) => EVENT_KINDS.find((kind) => kind.id === id)?.label ?? '';
+
+/**
+ * What an event counts as toward the City Biodiversity Index — the Singapore
+ * Index's governance and management indicators, as TB 2018-02 adopts them.
+ */
+export const CBI_CREDITS = Object.freeze([
+  { id: 'outreach', label: 'Outreach or public awareness event', indicator: 'Outreach and public awareness events held a year' },
+  { id: 'partnership', label: 'Partnership', indicator: 'Agencies, companies, NGOs, academic and international organisations partnered with' },
+  { id: 'project', label: 'Project or programme', indicator: 'Biodiversity projects and programmes carried out a year' },
+  { id: 'policy', label: 'Policy or plan', indicator: 'Policies, rules and plans for biodiversity' },
+]);
+
+/**
+ * How many events of each CBI credit a place held in a year: its own, and the
+ * province-wide ones when the place is Laguna.
+ *   lgu    the place's PSGC code, or null for Laguna
+ */
+export function cbiEventCounts(posts, { lgu = null, year = new Date().getFullYear() } = {}) {
+  const counts = Object.fromEntries(CBI_CREDITS.map((credit) => [credit.id, []]));
+  for (const post of Array.isArray(posts) ? posts : []) {
+    if (!post?.cbi_credit || !counts[post.cbi_credit] || !post.event_date) continue;
+    if (Number(String(post.event_date).slice(0, 4)) !== Number(year)) continue;
+    if (lgu !== null && Number(post.lgu_psgc) !== Number(lgu)) continue;
+    counts[post.cbi_credit].push(post);
+  }
+  return counts;
+}
+
 /** What is wrong with a post before it is saved; empty when it can be. */
 export function newsProblems(post, photos = []) {
   const problems = {};
   if (!String(post.title ?? '').trim()) problems.title = 'Give it a title.';
   else if (String(post.title).trim().length > 200) problems.title = 'Keep the title under 200 characters.';
+  if (post.event_end_date && !post.event_date) problems.event_date = 'Give the first day too.';
+  else if (post.event_end_date && post.event_end_date < post.event_date) problems.event_end_date = 'The last day cannot be before the first.';
   if (photos.length > MAX_NEWS_PHOTOS) problems.photos = `At most ${MAX_NEWS_PHOTOS} photos.`;
   const bad = photos.find((file) => !PHOTO_TYPES.includes(file.type) || file.size > MAX_NEWS_PHOTO_BYTES);
   if (bad) problems.photos = `${bad.name}: photos must be PNG, JPEG or WebP, under 25 MB.`;
   return problems;
 }
 
-/** "8 November 2026 · Labuin" — the line under a post's title. */
+/**
+ * "8 November 2026 · Labuin", "23–25 November 2026 · Capitol", or "30
+ * November – 2 December 2026" — the line under a post's title.
+ */
 export function whenAndWhere(post) {
-  // Day first, as the newsletter the database writes says it (inbox.sql).
-  const day = post.event_date ? new Date(`${post.event_date}T00:00:00`) : null;
-  const date = day ? `${day.getDate()} ${day.toLocaleDateString('en-PH', { month: 'long' })} ${day.getFullYear()}` : '';
-  return [date, post.venue].filter(Boolean).join(' · ');
+  return [eventDays(post), post.venue].filter(Boolean).join(' · ');
+}
+
+/** An event's day, or its first and last, day first as the newsletter has it (inbox.sql). */
+export function eventDays(post) {
+  if (!post?.event_date) return '';
+  const first = new Date(`${post.event_date}T00:00:00`);
+  const month = (date) => date.toLocaleDateString('en-PH', { month: 'long' });
+  const whole = (date) => `${date.getDate()} ${month(date)} ${date.getFullYear()}`;
+  if (!post.event_end_date || post.event_end_date === post.event_date) return whole(first);
+  const last = new Date(`${post.event_end_date}T00:00:00`);
+  if (first.getFullYear() !== last.getFullYear()) return `${whole(first)} – ${whole(last)}`;
+  if (first.getMonth() !== last.getMonth()) return `${first.getDate()} ${month(first)} – ${whole(last)}`;
+  return `${first.getDate()}–${whole(last)}`;
 }
 
 /** The photos into the public bucket, each under a name nobody can guess; their URLs. */

@@ -158,6 +158,23 @@ alter table public.news_posts alter column publish_at set default now();
 alter table public.news_posts alter column publish_at set not null;
 create index if not exists news_posts_due_idx on public.news_posts (publish_at) where sent_at is null;
 
+-- The event itself (21 October): its last day (null for a one-day event), its
+-- kind, the LGU it is held for (null: all of Laguna), and what it counts as
+-- toward the City Biodiversity Index's governance indicators — a public
+-- awareness event, a partnership, a project or a policy.
+alter table public.news_posts
+  add column if not exists event_end_date date,
+  add column if not exists event_kind     text,
+  add column if not exists lgu_psgc       bigint,
+  add column if not exists cbi_credit     text;
+
+alter table public.news_posts drop constraint if exists news_posts_event_check;
+alter table public.news_posts add constraint news_posts_event_check check (
+  (event_end_date is null or (event_date is not null and event_end_date >= event_date))
+  and (event_kind is null or event_kind in ('training', 'forum', 'conference', 'seminar', 'orientation', 'tree-planting', 'clean-up', 'other'))
+  and (cbi_credit is null or cbi_credit in ('outreach', 'partnership', 'project', 'policy'))
+);
+
 alter table public.news_posts drop constraint if exists news_posts_title_check;
 alter table public.news_posts add constraint news_posts_title_check
   check (length(trim(title)) between 1 and 200 and jsonb_typeof(photos) = 'array');
@@ -221,7 +238,11 @@ begin
     p.title,
     concat_ws(E'\n\n',
       nullif(trim(concat_ws(' · ',
-        case when p.event_date is not null then to_char(p.event_date, 'FMDD FMMonth YYYY') end,
+        case
+          when p.event_date is null then null
+          when p.event_end_date is null or p.event_end_date = p.event_date then to_char(p.event_date, 'FMDD FMMonth YYYY')
+          else to_char(p.event_date, 'FMDD FMMonth YYYY') || ' to ' || to_char(p.event_end_date, 'FMDD FMMonth YYYY')
+        end,
         nullif(p.venue, ''))), ''),
       nullif(p.body, '')),
     jsonb_build_object('kind', 'news', 'id', p.id),
@@ -434,6 +455,11 @@ union all
 select 'News & Events',
        to_regclass('public.news_posts') is not null
        and exists (select 1 from information_schema.triggers where trigger_name = 'send_news_to_offices'),
+       ''
+union all
+select 'an event has its days, its kind and its CBI credit',
+       exists (select 1 from information_schema.columns where table_name = 'news_posts' and column_name = 'cbi_credit')
+       and exists (select 1 from pg_constraint where conname = 'news_posts_event_check'),
        ''
 union all
 select 'News & Events can be scheduled and archived',

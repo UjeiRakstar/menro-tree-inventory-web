@@ -211,6 +211,18 @@ can do everything. The RISE details on the public tree panel, more of them.
   published filled, archived greyed), a day's + starting a post for it. A
   scheduled post's newsletter goes out once, when due: pg_cron every five
   minutes where it is switched on, and the pages as they load.
+  **21 October** (step 28): an event has a first and last day, or "one day
+  only"; a kind (training, forum, conference, seminar, orientation, tree
+  planting, clean-up); the LGU it is for; and what it counts as toward the
+  CBI — outreach, a partnership, a project or a policy. The biodiversity
+  report's CBI table counts them for the place and year (the budget stays
+  outside the system).
+- **The Copernicus satellite base map** — PGENRO has a Copernicus Data Space
+  configuration ("Forest Cover Map": true colour, NDVI and more; 30,000
+  requests a month on the free tier). Usable for the office map and map
+  sheet, not the public map (each map tile is one request). Before wiring it
+  in: set the configuration's map bounds to Laguna, so its instance ID is no
+  use elsewhere; then PGENRO enters the ID on the Map layers page.
 
 ## Before the account ticket touches anything
 
@@ -361,6 +373,9 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     placeholder: you are flagged already, and running it without an email
     leaves the flag as it is. Run it again whenever office_settings.sql or
     closing_gaps.sql is run again, as well as the files step 22 names.
+28. **News & Events as events, 21 October** — run `supabase/inbox.sql`
+    again: an event's last day, its kind, the LGU it is for and its credit to
+    the CBI. Until then posts save as before, without those.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must

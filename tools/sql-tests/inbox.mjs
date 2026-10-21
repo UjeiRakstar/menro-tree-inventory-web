@@ -197,5 +197,20 @@ ok("an office cannot delete another's messages", theirs.error === null && theirs
 const mine = await run(SCZ_ADMIN, `delete from public.inbox_messages where kind = 'contact'`);
 ok('…only its own', mine.error === null && mine.affected === 1, JSON.stringify(mine));
 
+// An event's days, kind, LGU and CBI credit (21 October).
+const training = await run(PG, `insert into public.news_posts (title, venue, event_date, event_end_date, event_kind, lgu_psgc, cbi_credit)
+  values ('CBI Training', 'Capitol', '2026-11-23', '2026-11-25', 'training', ${SCZ}, 'outreach')`);
+ok('an event over several days, for one LGU, credited to the CBI', training.error === null, training.error ?? '');
+const trainingNews = (await inbox(SCZ_ADMIN)).find((m) => m.kind === 'news' && m.subject === 'CBI Training');
+ok('…its newsletter says its first and last day', /^23 November 2026 to 25 November 2026 · Capitol/.test(trainingNews?.body ?? ''), JSON.stringify(trainingNews?.body));
+for (const [what, values] of [
+  ['an end before its start', `'2026-11-25', '2026-11-23', 'training', 'outreach'`],
+  ['a kind not on the list', `'2026-11-25', null, 'party', 'outreach'`],
+  ['a CBI credit not on the list', `'2026-11-25', null, 'forum', 'budget'`],
+]) {
+  const refused = await run(PG, `insert into public.news_posts (title, event_date, event_end_date, event_kind, cbi_credit) values ('Bad', ${values})`);
+  ok(`${what} is refused`, Boolean(refused.error), refused.error ?? 'accepted');
+}
+
 console.log(`${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
