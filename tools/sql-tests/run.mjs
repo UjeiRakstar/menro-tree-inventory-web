@@ -33,6 +33,7 @@ const SUITES = [
   ['residents, the leaderboard and office set-up', 'community.mjs'],
   ['replies to the public', 'replies.mjs'],
   ['data requests', 'data-requests.mjs'],
+  ['the satellite snapshots', 'satellite.mjs'],
 ];
 
 let failed = 0;

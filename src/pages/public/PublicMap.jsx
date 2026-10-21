@@ -29,7 +29,7 @@ import {
   municipalityAt,
   municipalityNamed,
 } from '../../lib/lagunaBoundaries.js';
-import { basemapById } from '../../lib/basemaps.js';
+import { BASEMAPS } from '../../lib/basemaps.js';
 import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../lib/adminPins.js';
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
@@ -41,6 +41,7 @@ import { centroidOf } from '../../lib/areaGeometry.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
 import { useMapLayers } from '../../hooks/useMapLayers.js';
+import { useSatelliteBasemap } from '../../hooks/useSatellite.js';
 import { useMeasuredSample } from '../../hooks/useMeasuredSample.js';
 import { measureArea } from '../../lib/layers/facts.js';
 import AreaActions from '../../components/map/AreaActions.jsx';
@@ -1060,6 +1061,10 @@ export function TreeMap({
   const savedAreas = useMapAreas({ withProposals: admin });
   // PGENRO's survey layers, drawn when switched on in the Layers panel.
   const mapLayers = useMapLayers();
+  // The cloud-free Sentinel-2 snapshot PGENRO keeps, beside Esri's, once there is one.
+  const satellite = useSatelliteBasemap();
+  const basemaps = useMemo(() => (satellite ? [...BASEMAPS, satellite] : BASEMAPS), [satellite]);
+  const basemap = basemaps.find((b) => b.id === basemapId) ?? basemaps[0];
   // What is drawn over the base map, and which corner panel is open.
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   // The one survey layer laid over the map, if any: 'soil', 'elevation', …
@@ -1576,9 +1581,8 @@ export function TreeMap({
   }, [fence, savedAreas.features]);
 
   const tileHandlers = useMemo(() => {
-    const basemap = basemapById(basemapId);
     return basemap.fallbackToParent ? { tileerror: parentTileOnError(basemap.url) } : undefined;
-  }, [basemapId]);
+  }, [basemap]);
 
   const sitesKey = useMemo(
     () => sites.features.map((f) => `${f.properties.id}@${f.properties.version ?? ''}`).join('|'),
@@ -2082,11 +2086,12 @@ export function TreeMap({
         <TileLayer
           // Keyed so a change of basemap swaps the layer rather than leaving
           // the old tiles under the new attribution.
-          key={basemapId}
-          url={basemapById(basemapId).url}
-          attribution={basemapById(basemapId).attribution}
+          key={basemap.id}
+          url={basemap.url}
+          attribution={basemap.attribution}
           maxZoom={MAX_MAP_ZOOM}
-          maxNativeZoom={MAX_NATIVE_ZOOM}
+          maxNativeZoom={basemap.maxNativeZoom ?? MAX_NATIVE_ZOOM}
+          minNativeZoom={basemap.minNativeZoom}
           // Where Esri has no imagery this deep, the level above, enlarged.
           eventHandlers={tileHandlers}
         />
@@ -2113,7 +2118,7 @@ export function TreeMap({
         {layers.barangays && (fence || selectedLgu) && (
           <BarangayLayer
             municipality={fence || selectedLgu}
-            color={basemapId === 'satellite' ? '#ffffff' : '#475569'}
+            color={basemap.imagery ? '#ffffff' : '#475569'}
             onSelect={selectBarangay}
           />
         )}
@@ -2125,7 +2130,7 @@ export function TreeMap({
             selected={selectedLgu}
             onSelect={handleSelectLgu}
             outlinesOnly={admin}
-            outlineColor={basemapId === 'satellite' ? '#ffffff' : '#334155'}
+            outlineColor={basemap.imagery ? '#ffffff' : '#334155'}
           />
         )}
 
@@ -2496,9 +2501,10 @@ export function TreeMap({
             onChange={chooseSurvey}
             available={mapLayers.layers}
             basemap={basemapId}
+            basemaps={basemaps}
             {...pickerProps('survey')}
           />
-          <BasemapPicker current={basemapId} onChange={setBasemapId} {...pickerProps('basemap')} />
+          <BasemapPicker current={basemapId} onChange={setBasemapId} basemaps={basemaps} {...pickerProps('basemap')} />
         </div>
       )}
 
@@ -2510,9 +2516,10 @@ export function TreeMap({
             onChange={setSurvey}
             available={mapLayers.layers}
             basemap={basemapId}
+            basemaps={basemaps}
             {...pickerProps('survey')}
           />
-          <BasemapPicker current={basemapId} onChange={setBasemapId} {...pickerProps('basemap')} />
+          <BasemapPicker current={basemapId} onChange={setBasemapId} basemaps={basemaps} {...pickerProps('basemap')} />
         </div>
       )}
 

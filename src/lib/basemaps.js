@@ -5,8 +5,8 @@
  * where their tiles come from. Both stop drawing new detail at zoom 19; past
  * that the map scales the last real tile (see MAX_NATIVE_ZOOM in the map).
  *
- * The cloud-free Copernicus mosaic joins this list once the PGENRO account is
- * set up with its key — see PARKED.md.
+ * The cloud-free Sentinel-2 snapshot PGENRO keeps joins this list on the maps
+ * once there is one (src/lib/satellite.js, src/hooks/useSatellite.js).
  */
 export const BASEMAPS = [
   {
@@ -26,6 +26,7 @@ export const BASEMAPS = [
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?blankTile=false',
     attribution: '&copy; Esri',
     fallbackToParent: true,
+    imagery: true,
   },
 ];
 

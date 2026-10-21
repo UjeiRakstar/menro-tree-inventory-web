@@ -49,8 +49,8 @@ function PlaceTile({ basemap, centre }) {
   );
 }
 
-export function BasemapPicker({ current, onChange, centre, open, onOpenChange }) {
-  const options = BASEMAPS.map((basemap) => ({
+export function BasemapPicker({ current, onChange, centre, open, onOpenChange, basemaps = BASEMAPS }) {
+  const options = basemaps.map((basemap) => ({
     id: basemap.id,
     label: basemap.label,
     thumb: <PlaceTile basemap={basemap} centre={centre} />,
@@ -92,8 +92,8 @@ export function SurveyKey({ kind, meta, className = '' }) {
  * uploaded are shown, greyed, saying so. Its colour key is in the map's
  * legend, not here: this row closes the moment a layer is chosen.
  */
-export function SurveyPicker({ current, onChange, available = {}, basemap, centre, open, onOpenChange }) {
-  const base = BASEMAPS.find((b) => b.id === basemap) ?? BASEMAPS[0];
+export function SurveyPicker({ current, onChange, available = {}, basemap, basemaps = BASEMAPS, centre, open, onOpenChange }) {
+  const base = basemaps.find((b) => b.id === basemap) ?? basemaps[0];
   const options = [
     {
       id: null,

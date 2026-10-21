@@ -274,6 +274,7 @@ export function sourcesOf({ survey, trees, sites, basemap }) {
   if (basemap === 'light') sources.push('Esri World Light Gray');
   if (basemap === 'street') sources.push('© OpenStreetMap contributors');
   if (basemap === 'satellite') sources.push('Esri World Imagery');
+  if (basemap === 'sentinel') sources.push('Copernicus Sentinel-2');
   return sources.join(', ');
 }
 
@@ -285,6 +286,16 @@ export const SHEET_BASEMAPS = Object.freeze([
   { id: 'satellite', label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 18 },
   { id: 'none', label: 'None', url: null, maxZoom: 0 },
 ]);
+
+/**
+ * The sheet's base maps, with PGENRO's cloud-free Sentinel-2 snapshot after
+ * Esri's satellite once there is one (src/lib/satellite.js).
+ */
+export function sheetBasemapsWith(satellite) {
+  if (!satellite) return SHEET_BASEMAPS;
+  const sentinel = { id: 'sentinel', label: satellite.sheetLabel, url: satellite.url, maxZoom: satellite.maxNativeZoom };
+  return Object.freeze([...SHEET_BASEMAPS.slice(0, -1), sentinel, SHEET_BASEMAPS.at(-1)]);
+}
 
 /**
  * The tiles that cover the frame, each placed in mm: fine enough for print

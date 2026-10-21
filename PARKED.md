@@ -217,12 +217,18 @@ can do everything. The RISE details on the public tree panel, more of them.
   CBI — outreach, a partnership, a project or a policy. The biodiversity
   report's CBI table counts them for the place and year (the budget stays
   outside the system).
-- **The Copernicus satellite base map** — PGENRO has a Copernicus Data Space
-  configuration ("Forest Cover Map": true colour, NDVI and more; 30,000
-  requests a month on the free tier). Usable for the office map and map
-  sheet, not the public map (each map tile is one request). Before wiring it
-  in: set the configuration's map bounds to Laguna, so its instance ID is no
-  use elsewhere; then PGENRO enters the ID on the Map layers page.
+- **The Copernicus satellite base map — done 21 October** (step 30). PGENRO
+  takes a snapshot every week or twice a month on the Map layers page:
+  Sentinel-2 over Laguna, cloud-free from the last sixty days' clear looks,
+  zoom 14 (about 9 m a pixel, Sentinel-2's own 10 m) fetched one tile at a
+  time, zooms 9–13 made from it in the browser. 588 tiles, about 15 MB, in the
+  public 'satellite-tiles' bucket; the live one and the one before are kept.
+  The public map, the office map and the map sheet read the stored tiles, so
+  viewing costs no Copernicus requests: a snapshot is about 406, so weekly is
+  about 1,750 of the month's 30,000. The instance ID is kept in the database
+  for PGENRO alone, never in the code. Not automatic: PGENRO presses the
+  button when the page says one is due. (An Edge Function on a schedule could
+  take it instead; ask if wanted.)
 
 ## Before the account ticket touches anything
 
@@ -385,10 +391,16 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     the CCC" (with the receipt) on the BioDashboard and the map's city panel,
     each opening its document, and a row in the CBI table. Until it runs, the
     pages say so.
+30. **The satellite base map, 21 October** — run `supabase/satellite.sql`
+    (after accounts.sql). Then, on Map layers, paste the Copernicus
+    configuration's instance ID, choose every week or twice a month, and press
+    Take a new snapshot: about 406 Copernicus requests and a few minutes, with
+    the tab open. It goes on every map as "Sentinel-2", beside Esri's
+    satellite, and on the map sheet. A stopped one carries on where it stopped.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 13 suites, 553 checks — the final check query on its
+allow and refuse — 15 suites, 630 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is
@@ -509,9 +521,7 @@ stayed online** after the area was deleted or its PDF replaced.
   on its Inbox page. Only what the public map shows of a tree goes out.
 - **Species write-ups.** Mango has one; the rest do not. Query 5 of
   `supabase/data_checks.sql` is the PGENRO to-do list.
-- **A cloud-free satellite basemap.** You have a Copernicus API for a
-  cloudless mosaic, to sit beside Esri as the satellite option. After the
-  PGENRO account is set up.
+- **A cloud-free satellite basemap — done 21 October** (step 30).
 
 ### Waiting on the PGENRO account
 

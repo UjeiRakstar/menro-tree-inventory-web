@@ -7,6 +7,7 @@ import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isPgenro, ROLES, roleOf } from '../lib/roles.js';
 import { useMapLayers } from '../hooks/useMapLayers.js';
+import { useSatelliteBasemap } from '../hooks/useSatellite.js';
 import { useMapAreas } from '../hooks/useMapAreas.js';
 import { useOfficeProfile } from '../hooks/useOfficeProfile.js';
 import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityAt, municipalityNamed } from '../lib/lagunaBoundaries.js';
@@ -37,7 +38,7 @@ import ThemeReportView from './sheet/ThemeReportView.jsx';
 import { everyRow } from '../lib/everyRow.js';
 import {
   PAPERS,
-  SHEET_BASEMAPS,
+  sheetBasemapsWith,
   SURVEY_TITLES,
   TREE_COLOURINGS,
   defaultTitle,
@@ -257,7 +258,9 @@ export default function MapSheet() {
   const treeColour = TREE_COLOURINGS[params.get('treeColour')] ? params.get('treeColour') : 'one';
   const colouring = TREE_COLOURINGS[treeColour];
   const paper = PAPERS[params.get('paper')] ?? PAPERS.a4;
-  const basemap = SHEET_BASEMAPS.find((b) => b.id === params.get('basemap')) ?? SHEET_BASEMAPS[0];
+  const satellite = useSatelliteBasemap();
+  const sheetBasemaps = useMemo(() => sheetBasemapsWith(satellite), [satellite]);
+  const basemap = sheetBasemaps.find((b) => b.id === params.get('basemap')) ?? sheetBasemaps[0];
   const [title, setTitle] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
   // A layer named in the link but not uploaded is not on the sheet, nor in its title.
@@ -1229,7 +1232,7 @@ export default function MapSheet() {
         <label className={label}>
           Base map
           <select value={basemap.id} onChange={(e) => set('basemap', e.target.value)} className={control}>
-            {SHEET_BASEMAPS.map((b) => (
+            {sheetBasemaps.map((b) => (
               <option key={b.id} value={b.id}>{b.label}</option>
             ))}
           </select>

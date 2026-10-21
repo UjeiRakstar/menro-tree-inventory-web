@@ -6,6 +6,7 @@ import { LAYER_KINDS, prepareInBackground, publishLayer } from '../../lib/layers
 import { refreshAllAreaFacts } from '../../lib/layers/facts.js';
 import { readClimateFiles } from '../../lib/layers/climateFiles.js';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
+import SatelliteCard from './SatelliteCard.jsx';
 
 const when = (value) =>
   value ? new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
@@ -397,6 +398,7 @@ export default function MapLayersPage() {
             <LayerCard key={kind.id} kind={kind} live={layers[kind.id]} layers={layers} onPublished={reload} />
           ))}
           <ClimateCard climateByLgu={climateByLgu} onSaved={reload} />
+          <SatelliteCard />
         </>
       )}
     </div>
