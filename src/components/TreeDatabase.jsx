@@ -19,10 +19,11 @@ const paragraphsOf = (text) =>
  * comes on the list when a tree of it is tagged in the LGU — the same moment
  * it comes on the map — and only then.
  *
- *   trees    the LGU's tagged trees
+ *   trees    the LGU's tagged trees — or, on the public page, Laguna's
  *   place    its name, for the headings
+ *   bare     the page has its own title (the public Tree Database)
  */
-export default function TreeDatabase({ trees, place = 'this LGU' }) {
+export default function TreeDatabase({ trees, place = 'this LGU', bare = false }) {
   const [profiles, setProfiles] = useState(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
@@ -55,16 +56,18 @@ export default function TreeDatabase({ trees, place = 'this LGU' }) {
     <section aria-label="Tree Database" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-            <BookOpen size={18} className="text-green-700" aria-hidden="true" /> Tree Database
-          </h2>
+          {!bare && (
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <BookOpen size={18} className="text-green-700" aria-hidden="true" /> Tree Database
+            </h2>
+          )}
           <p className="mt-0.5 text-sm text-slate-600">
             {species.length} {species.length === 1 ? 'species' : 'species'} tagged in {place}; {written} with a write-up
             from the RISE publications of DENR-ERDB.
           </p>
         </div>
         <p className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs text-slate-600">
-          <Lock size={12} aria-hidden="true" /> Kept by PGENRO — read-only here
+          <Lock size={12} aria-hidden="true" /> {bare ? 'Kept by PGENRO Laguna' : 'Kept by PGENRO — read-only here'}
         </p>
       </div>
       {failed && (

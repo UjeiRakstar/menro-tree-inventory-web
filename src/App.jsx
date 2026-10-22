@@ -37,6 +37,7 @@ const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
 const Inbox = lazy(() => import('./pages/Inbox.jsx'));
 const NewsPage = lazy(() => import('./pages/pgenro/NewsPage.jsx'));
 const ContactPage = lazy(() => import('./pages/public/ContactPage.jsx'));
+const TreeDatabasePage = lazy(() => import('./pages/public/TreeDatabasePage.jsx'));
 const CommunityPage = lazy(() => import('./pages/public/CommunityPage.jsx'));
 const Onboarding = lazy(() => import('./pages/onboarding/Onboarding.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
@@ -239,6 +240,7 @@ function AppRoutes() {
         <Route path="/biodiversity" element={<PublicDashboard />} />
         <Route path="/public-map" element={<PublicMap />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/tree-database" element={<TreeDatabasePage />} />
         <Route path="/community" element={<CommunityPage />} />
       </Route>
 

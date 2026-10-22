@@ -16,6 +16,7 @@ const navLinks = [
   { to: '/about', label: 'About Us' },
   { to: '/public-map', label: 'Map' },
   { to: '/biodiversity', label: 'BioDashboard' },
+  { to: '/tree-database', label: 'Tree Database' },
   { to: '/community', label: 'Community' },
   { to: '/contact', label: 'Contact Us' },
 ];
@@ -105,14 +106,15 @@ export default function PublicNavbar() {
           <div className="flex-1" />
 
           {/* Desktop: Nav Links — evenly spaced */}
-          <div className="hidden lg:flex items-center gap-2">
+          {/* Six links and the account need 1280px: below that, the menu button (22 October). */}
+          <div className="hidden xl:flex items-center gap-2">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.to;
               return (
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`relative px-5 py-2 text-sm font-semibold uppercase tracking-wider transition-all duration-200 rounded-md ${
+                  className={`relative whitespace-nowrap px-5 py-2 text-sm font-semibold uppercase tracking-wider transition-all duration-200 rounded-md ${
                     isActive
                       ? 'text-white bg-green-600/40'
                       : 'text-green-100/90 hover:text-white hover:bg-white/10'
@@ -131,7 +133,7 @@ export default function PublicNavbar() {
           {/* Desktop: Log In Button. It says sign up too, because an officer
               arriving for the first time has no account yet and would otherwise
               have to guess that one is made behind a button marked Log In. */}
-          <div className="relative hidden lg:flex items-center ml-6">
+          <div className="relative hidden xl:flex items-center ml-6">
             {who ? (
               <AccountMenu who={who} mark={replyMark} />
             ) : (
@@ -149,7 +151,7 @@ export default function PublicNavbar() {
           {/* Mobile menu button */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="lg:hidden p-2 rounded-md text-green-100 hover:text-white hover:bg-green-700 ml-3 transition-colors"
+            className="xl:hidden p-2 rounded-md text-green-100 hover:text-white hover:bg-green-700 ml-3 transition-colors"
             aria-label="Toggle navigation menu"
           >
             {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -159,7 +161,7 @@ export default function PublicNavbar() {
 
       {/* Mobile menu — slides down */}
       <div
-        className={`lg:hidden overflow-hidden transition-all duration-300 ${
+        className={`xl:hidden overflow-hidden transition-all duration-300 ${
           mobileOpen ? 'max-h-[32rem] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >

@@ -24,3 +24,10 @@ describe('the species an LGU has tagged', () => {
     expect(speciesInInventory([{ species: '' }, { species: 'Unknown' }, { species: null }], PROFILES)).toEqual([]);
   });
 });
+
+describe('a scientific name the record does not know', () => {
+  it('is left blank rather than shown as "Unknown"', () => {
+    const [coconut] = speciesInInventory([{ species: 'Coconut', scientific_name: 'Unknown' }], []);
+    expect(coconut.scientific).toBe('');
+  });
+});

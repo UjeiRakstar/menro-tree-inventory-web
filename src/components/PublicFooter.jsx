@@ -62,6 +62,9 @@ export default function PublicFooter() {
               <li>
                 <Link to="/public-map" className="hover:text-white hover:underline transition-all">Map</Link>
               </li>
+              <li>
+                <Link to="/tree-database" className="hover:text-white hover:underline transition-all">Tree Database</Link>
+              </li>
             </ul>
           </div>
 

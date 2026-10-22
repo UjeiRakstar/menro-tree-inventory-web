@@ -30,7 +30,8 @@ export function speciesInInventory(trees = [], profiles = []) {
     if (UNNAMED.has(name.toLowerCase())) continue;
     const entry = species.get(name.toLowerCase()) ?? { name, scientific: '', count: 0, profile: null };
     entry.count += 1;
-    if (!entry.scientific && clean(tree.scientific_name)) entry.scientific = clean(tree.scientific_name);
+    // 'Unknown' and the like are no scientific name.
+    if (!entry.scientific && !UNNAMED.has(key(tree.scientific_name))) entry.scientific = clean(tree.scientific_name);
     species.set(name.toLowerCase(), entry);
   }
 
