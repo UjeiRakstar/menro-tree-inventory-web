@@ -314,3 +314,20 @@ describe('a MENRO / CENRO’s own events (22 October)', () => {
     expect(supabaseMock.writesTo('news_posts', 'insert')[0].payload).toMatchObject({ lgu_psgc: 403426000, event_kind: 'other' });
   });
 });
+
+describe('an office’s event, passed on by PGENRO (22 October)', () => {
+  it('is marked as the office’s, and goes to every other office on a click, once', async () => {
+    supabaseMock.setResponse('news_posts:select', {
+      data: [{ ...OLD, id: 'scz', title: 'Santa Cruz Clean-up', office_post: true, lgu_psgc: 403426000, publish_at: '2026-10-01T00:00:00Z', forwarded_at: null }],
+      error: null,
+    });
+    supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<NewsPage />);
+    expect(await screen.findByText('From Santa Cruz')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Pass on to every office/ }));
+    await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('forward_news_post', { p_id: 'scz' }));
+    expect(await screen.findByText(/Passed on to every office/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Pass on to every office/ })).not.toBeInTheDocument();
+  });
+});

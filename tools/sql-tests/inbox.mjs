@@ -243,6 +243,26 @@ const editsPgenro = await run(SCZ_ADMIN, `update public.news_posts set venue = '
 ok('…but not PGENRO’s, even for its LGU', Boolean(editsPgenro.error) || editsPgenro.rows.length === 0);
 const otherOffice = await run(KAL_ADMIN, `delete from public.news_posts where title = 'Santa Cruz Clean-up' returning id`);
 ok('…nor another office another’s', Boolean(otherOffice.error) || otherOffice.rows.length === 0);
+// PGENRO passes an office's event on to every other office (22 October).
+const own = (await db.query(`select id, office_post from public.news_posts where title = 'Santa Cruz Clean-up'`)).rows[0];
+ok('an office’s event is marked as the office’s', own.office_post === true);
+ok('…and PGENRO’s is not', (await db.query(`select office_post from public.news_posts where title = 'Planting at Labuin'`)).rows[0].office_post === false);
+const fakedForward = await run(SCZ_ADMIN, `update public.news_posts set forwarded_at = now(), office_post = false where id = $1 returning forwarded_at, office_post`, [own.id]);
+ok('an office cannot mark its own event passed on, nor not its own', fakedForward.rows?.[0]?.forwarded_at === null && fakedForward.rows?.[0]?.office_post === true, JSON.stringify(fakedForward));
+const officeForwards = await run(SCZ_ADMIN, `select public.forward_news_post($1)`, [own.id]);
+ok('an office cannot pass an event on', Boolean(officeForwards.error), officeForwards.error ?? 'passed on');
+const pgenroPost = (await db.query(`select id from public.news_posts where title = 'Planting at Labuin'`)).rows[0].id;
+const notOffice = await run(PG, `select public.forward_news_post($1)`, [pgenroPost]);
+ok('PGENRO passes on only an office’s event (its own went to everyone)', Boolean(notOffice.error), notOffice.error ?? 'passed on');
+const beforeForward = await count(`select count(*) n from public.inbox_messages where subject = 'Santa Cruz Clean-up'`);
+const forwarded = await run(PG, `select public.forward_news_post($1)`, [own.id]);
+const after = await count(`select count(*) n from public.inbox_messages where subject = 'Santa Cruz Clean-up'`);
+ok('PGENRO passes it on to every other office', !forwarded.error && after === beforeForward + lgus - 1, forwarded.error ?? `${beforeForward} → ${after} of ${lgus}`);
+const kalCopy = (await inbox(KAL_ADMIN)).find((m) => m.subject === 'Santa Cruz Clean-up');
+ok('…saying whose it is', /^From Santa Cruz, passed on by PGENRO\./.test(kalCopy?.body ?? ''), JSON.stringify(kalCopy?.body));
+const twice = await run(PG, `select public.forward_news_post($1)`, [own.id]);
+ok('…once', Boolean(twice.error), twice.error ?? 'passed on twice');
+
 await db.exec(`update public.profiles set is_training = true where id = '${KAL_ADMIN}'`).catch(async () => {
   await db.exec(`alter table public.profiles add column if not exists is_training boolean not null default false; update public.profiles set is_training = true where id = '${KAL_ADMIN}'`);
 });

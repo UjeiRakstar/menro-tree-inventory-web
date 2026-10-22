@@ -9,6 +9,7 @@ import {
   imageryWindow,
   nextDue,
   requestsThisMonth,
+  savePlan,
   snapshotTiles,
   takeSnapshot,
 } from '../../lib/satellite.js';
@@ -37,7 +38,7 @@ export default function SatelliteCard() {
   const [settings, setSettings] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
   const [missing, setMissing] = useState(false);
-  const [form, setForm] = useState({ instanceId: '', cadenceDays: 7 });
+  const [form, setForm] = useState({ instanceId: '', cadenceDays: 7, auto: false });
   const [savingSettings, setSavingSettings] = useState(false);
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
@@ -46,13 +47,13 @@ export default function SatelliteCard() {
 
   const load = useCallback(async () => {
     const [kept, taken] = await Promise.all([
-      supabase.from('satellite_settings').select('instance_id, cadence_days').maybeSingle(),
+      supabase.from('satellite_settings').select('*').maybeSingle(),
       supabase.from('satellite_snapshots').select('*').order('taken_at', { ascending: false }),
     ]);
     setMissing(isMissingTable(kept.error) || isMissingTable(taken.error));
     const row = !kept.error && kept.data && !Array.isArray(kept.data) ? kept.data : null;
     setSettings(row);
-    setForm({ instanceId: row?.instance_id ?? '', cadenceDays: row?.cadence_days ?? 7 });
+    setForm({ instanceId: row?.instance_id ?? '', cadenceDays: row?.cadence_days ?? 7, auto: Boolean(row?.auto) });
     setSnapshots(!taken.error && Array.isArray(taken.data) ? taken.data : []);
   }, []);
 
@@ -67,24 +68,41 @@ export default function SatelliteCard() {
     setSavingSettings(true);
     setError('');
     setNotice('');
-    const { error: saveError } = await supabase
-      .from('satellite_settings')
-      .upsert({ id: true, instance_id: form.instanceId.trim() || null, cadence_days: Number(form.cadenceDays) }, { onConflict: 'id' });
-    setSavingSettings(false);
+    // The schedule (22 October) is sent only when it is on, so a database
+    // without the column (satellite.sql not run again) still saves the rest.
+    const row = { id: true, instance_id: form.instanceId.trim() || null, cadence_days: Number(form.cadenceDays) };
+    if (form.auto || settings?.auto) row.auto = form.auto;
+    const { error: saveError } = await supabase.from('satellite_settings').upsert(row, { onConflict: 'id' });
     if (saveError) {
+      setSavingSettings(false);
       setError(
         /instance_check/.test(saveError.message ?? '')
           ? 'That is not an instance ID. It looks like 1a2b3c4d-5e6f-…, on the configuration’s page.'
-          : saveError.message
+          : /auto/.test(saveError.message ?? '')
+            ? 'Taking it automatically needs supabase/satellite.sql to be run again (step 32).'
+            : saveError.message
       );
       return;
     }
-    setNotice('Saved.');
+    // The schedule reads which tiles to take from the bucket.
+    if (form.auto) {
+      try {
+        await savePlan(supabase);
+      } catch (failure) {
+        setSavingSettings(false);
+        setError(failure.message);
+        return;
+      }
+    }
+    setSavingSettings(false);
+    setNotice(form.auto ? 'Saved. A snapshot is taken by itself when one is due.' : 'Saved.');
     load();
   }
 
   const live = snapshots.find((s) => s.status === 'live') ?? null;
-  const unfinished = snapshots.find((s) => s.status === 'building') ?? null;
+  // One the schedule is taking is carried on by the schedule, not here.
+  const scheduled = snapshots.find((s) => s.status === 'building' && s.by_schedule) ?? null;
+  const unfinished = snapshots.find((s) => s.status === 'building' && !s.by_schedule) ?? null;
   const cadence = settings?.cadence_days ?? 7;
   const due = nextDue(live, cadence);
   const used = requestsThisMonth(snapshots);
@@ -186,6 +204,19 @@ export default function SatelliteCard() {
             >
               Save
             </button>
+            <label className="flex items-start gap-2 text-xs text-slate-700 sm:col-span-3">
+              <input
+                type="checkbox"
+                checked={form.auto}
+                onChange={(e) => setForm((f) => ({ ...f, auto: e.target.checked }))}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-semibold">Take it automatically</span> when one is due, on the server — nobody
+                needs to be on this page. It needs the satellite-snapshot function and its ten-minute schedule (PARKED.md,
+                step 32), and asks Copernicus for every zoom: about 588 requests a snapshot.
+              </span>
+            </label>
             <p className="text-[11px] text-slate-500 sm:col-span-3">
               Kept for PGENRO alone, like a key. Set the configuration’s map bounds to Laguna on the Copernicus dashboard,
               so the ID is no use anywhere else.
@@ -206,9 +237,21 @@ export default function SatelliteCard() {
             ) : (
               <p className="text-amber-800">No snapshot yet. The maps offer Esri’s satellite until there is one.</p>
             )}
-            <p className={`mt-1 ${due.due ? 'font-semibold text-amber-800' : ''}`}>
-              {due.due ? 'A new snapshot is due.' : `Next one due ${when(due.on)}.`}
-            </p>
+            {scheduled ? (
+              <p className="mt-1 font-semibold text-green-800">
+                Being taken on schedule: {thousands(scheduled.tiles_done)} of{' '}
+                {thousands(Object.values(snapshotTiles()).reduce((n, tiles) => n + tiles.length, 0))} tiles
+                {scheduled.note ? ` — ${scheduled.note}` : ''}. It carries on every ten minutes.
+              </p>
+            ) : (
+              <p className={`mt-1 ${due.due ? 'font-semibold text-amber-800' : ''}`}>
+                {due.due
+                  ? settings?.auto
+                    ? 'A new snapshot is due: the schedule takes it within ten minutes.'
+                    : 'A new snapshot is due.'
+                  : `Next one due ${when(due.on)}${settings?.auto ? ', taken automatically' : ''}.`}
+              </p>
+            )}
             <p className="mt-1 text-slate-500">
               This month: {thousands(used)} of {thousands(MONTHLY_REQUESTS)} Copernicus requests. A snapshot takes about{' '}
               {thousands(FETCHED)}; looking at the maps takes none.

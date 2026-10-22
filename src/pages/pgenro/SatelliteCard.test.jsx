@@ -75,3 +75,35 @@ describe('PGENRO’s satellite snapshots', () => {
     expect(supabaseMock.writesTo('satellite_snapshots', 'insert')).toHaveLength(0);
   });
 });
+
+describe('the schedule (22 October)', () => {
+  it('is switched on with the tile list the server needs', async () => {
+    supabaseMock.setResponse('satellite_settings:select', { data: { instance_id: INSTANCE, cadence_days: 7, auto: false }, error: null });
+    render(<SatelliteCard />);
+    const form = await screen.findByRole('form', { name: 'Copernicus settings' });
+    await waitFor(() => expect(within(form).getByLabelText('Instance ID')).toHaveValue(INSTANCE));
+    fireEvent.click(within(form).getByRole('checkbox', { name: /Take it automatically/ }));
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(/taken by itself when one is due/)).toBeInTheDocument();
+    expect(supabaseMock.writesTo('satellite_settings', 'upsert')[0].payload).toMatchObject({ auto: true });
+    const [bucket, path, blob, options] = supabaseMock.supabase.storage.upload.mock.calls[0];
+    expect([bucket, path, options.contentType]).toEqual(['satellite-tiles', 'plan.json', 'application/json']);
+    const text = await new Promise((done) => {
+      const reader = new FileReader();
+      reader.onload = () => done(reader.result);
+      reader.readAsText(blob);
+    });
+    expect(JSON.parse(text).tiles['14'].length).toBeGreaterThan(300);
+  });
+
+  it('shows a snapshot the schedule is taking, and leaves it to the schedule', async () => {
+    supabaseMock.setResponse('satellite_settings:select', { data: { instance_id: INSTANCE, cadence_days: 7, auto: true }, error: null });
+    supabaseMock.setResponse('satellite_snapshots:select', {
+      data: [{ ...LIVE, id: 'sched', status: 'building', by_schedule: true, tiles_done: 120, taken_at: '2026-10-22T01:00:00Z' }, LIVE],
+      error: null,
+    });
+    render(<SatelliteCard />);
+    expect(await screen.findByText(/Being taken on schedule: 120 of/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Carry on/ })).not.toBeInTheDocument();
+  });
+});

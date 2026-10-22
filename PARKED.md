@@ -226,9 +226,9 @@ can do everything. The RISE details on the public tree panel, more of them.
   The public map, the office map and the map sheet read the stored tiles, so
   viewing costs no Copernicus requests: a snapshot is about 406, so weekly is
   about 1,750 of the month's 30,000. The instance ID is kept in the database
-  for PGENRO alone, never in the code. Not automatic: PGENRO presses the
-  button when the page says one is due. (An Edge Function on a schedule could
-  take it instead; ask if wanted.)
+  for PGENRO alone, never in the code. On schedule since 22 October (step
+  32): the satellite-snapshot Edge Function takes it when due, with "Take it
+  automatically" ticked; or PGENRO presses the button.
 
 ## Before the account ticket touches anything
 
@@ -246,12 +246,12 @@ can do everything. The RISE details on the public tree panel, more of them.
 ## Needs you — and only you
 
 - ~~The tree at 0,0.~~ Gone: the health check reads 0 trees at 0,0 (22 October).
-- **Tags placed by their written names (found 22 October).** Two field-app
-  community tags in Pakil, Brgy. Burgos, carried guessed barangay names
-  ("Barangay III", "Alipit") and no municipality, so no office got them
-  (fixed by hand). A real one would sit unseen the same way: the app should
-  send the LGU and barangay from the coordinates, or the database route by
-  them when the names do not match.
+- ~~Tags placed by their written names~~ — two old community tags (May and
+  September, from the public tag form before 14 October) in Pakil, Brgy.
+  Burgos, carried guessed barangay names and no municipality, so no office
+  got them; fixed by hand 22 October. The form has placed a tag from its
+  coordinates since 14 October and will not send one without a town, so no
+  new tag can go astray this way. (The field app makes no tags.)
 - **`supabase/drop_trees_backup.sql`.** Look at section 1, then uncomment the
   drop. Nothing in either repo reads that table.
 - ~~Two decisions left hanging.~~ Answered 18 October: carbon stays in the
@@ -411,6 +411,31 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     event's purpose, not its CBI credit; a city's panel on the map shows its
     CBI points (9 of the Singapore Index Handbook's 28 indicators, 2021). Until it runs,
     events save without their pin.
+32. **Events passed on, and the satellite on schedule, 22 October** — run
+    `supabase/inbox.sql` again (PGENRO passes an office's event on to every
+    other office: "Pass on to every office" in News & Events) and
+    `supabase/satellite.sql` again (snapshots taken on schedule). Then:
+    - Edge Functions → Deploy a new function → name it exactly
+      `satellite-snapshot` → paste `supabase/functions/satellite-snapshot/index.ts`
+      → Deploy.
+    - Schedule it every ten minutes. Integrations → Cron → Create job: name
+      `green-tag-satellite`, schedule `*/10 * * * *`, type Supabase Edge
+      Function, method POST, function `satellite-snapshot`, timeout 150
+      seconds (switch on pg_net if it asks). Or in the SQL editor, with your
+      project's URL and anon key filled in — paste and run it there, never
+      save it in a file:
+      ```sql
+      select cron.schedule('green-tag-satellite', '*/10 * * * *', $$
+        select net.http_post(
+          url := 'https://YOUR-PROJECT.supabase.co/functions/v1/satellite-snapshot',
+          headers := jsonb_build_object('Content-Type', 'application/json',
+                                        'Authorization', 'Bearer YOUR-ANON-KEY'),
+          body := '{}'::jsonb, timeout_milliseconds := 150000);
+      $$);
+      ```
+    - On Map layers → Satellite base map, tick "Take it automatically" and
+      Save. It does nothing until a snapshot is due; then it takes one over
+      two or three runs (about 588 Copernicus requests) and puts it live.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
@@ -487,9 +512,7 @@ stayed online** after the area was deleted or its PDF replaced.
 
 ## Asked for on 14 October, not built yet
 
-- **PGENRO passing an office's event on (parked 22 October).** A MENRO /
-  CENRO's event goes to PGENRO's inbox and its own (inbox.sql). Parked: a
-  way for PGENRO to send that event on to other MENRO / CENRO offices.
+- ~~PGENRO passing an office's event on~~ — done 22 October (step 32).
 
 - **The field app's tree identification change** is committed (`1eb809e` on
   the field app's branch). `flutter test` there needs CMake installed (dartcv4

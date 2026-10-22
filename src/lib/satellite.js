@@ -165,6 +165,31 @@ export function snapshotTiles({ min, max } = SATELLITE_ZOOMS) {
 
 export const tilePath = (snapshotId, { z, x, y }) => `${snapshotId}/${z}/${x}/${y}.jpg`;
 
+/**
+ * Which tiles a snapshot takes, for the satellite-snapshot Edge Function,
+ * which has no boundaries of its own to work them out from (22 October):
+ * { min, max, tiles: { [zoom]: [[x, y], …] } }, saved as plan.json in the
+ * bucket when PGENRO switches the schedule on.
+ */
+export const PLAN_PATH = 'plan.json';
+
+export function snapshotPlan(zooms = SATELLITE_ZOOMS) {
+  const byZoom = snapshotTiles(zooms);
+  return {
+    min: zooms.min,
+    max: zooms.max,
+    tiles: Object.fromEntries(Object.entries(byZoom).map(([z, tiles]) => [z, tiles.map(({ x, y }) => [x, y])])),
+  };
+}
+
+export async function savePlan(supabase) {
+  const blob = new Blob([JSON.stringify(snapshotPlan())], { type: 'application/json' });
+  const { error } = await supabase.storage
+    .from(SATELLITE_BUCKET)
+    .upload(PLAN_PATH, blob, { contentType: 'application/json', cacheControl: '60', upsert: true });
+  if (error) throw new Error(`The schedule's tile list could not be saved: ${error.message}`);
+}
+
 /** Every file a snapshot put in the bucket — for removing an old one. */
 export function snapshotPaths(snapshot) {
   const byZoom = snapshotTiles({ min: snapshot.min_zoom ?? SATELLITE_ZOOMS.min, max: snapshot.max_zoom ?? SATELLITE_ZOOMS.max });

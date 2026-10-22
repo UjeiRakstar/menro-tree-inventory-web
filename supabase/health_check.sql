@@ -5,7 +5,7 @@
 -- true), missing (ok = false, with what is missing in the detail), or is a
 -- figure to read (ok = null).
 --
--- It looks for what steps 1–31 of PARKED.md make: tables, the columns the
+-- It looks for what steps 1–32 of PARKED.md make: tables, the columns the
 -- later steps add, the rules on who reads what, the triggers that stamp and
 -- route, the functions the pages call, and the storage buckets. A count that
 -- matters (tags no LGU will get, a Google account sitting in the approval
@@ -18,11 +18,13 @@ want_tables(name) as (values
   ('lgu_climate'), ('office_profiles'), ('barangay_stats'), ('office_ai_settings'), ('inbox_messages'),
   ('news_posts'), ('residents'), ('data_requests'), ('lccap_submissions'), ('satellite_settings'),
   ('satellite_snapshots')),
--- Columns later steps add to tables made earlier (steps 22, 26, 28, 31).
+-- Columns later steps add to tables made earlier (steps 22, 26, 28, 31, 32).
 want_columns(tbl, col) as (values
   ('profiles', 'is_super_admin'), ('species_profiles', 'wood_density'), ('species_profiles', 'wood_density_source'),
   ('news_posts', 'event_kind'), ('news_posts', 'cbi_credit'), ('news_posts', 'event_end_date'), ('news_posts', 'lgu_psgc'),
-  ('news_posts', 'venue_lat'), ('news_posts', 'venue_lng'), ('news_posts', 'map_area_id')),
+  ('news_posts', 'venue_lat'), ('news_posts', 'venue_lng'), ('news_posts', 'map_area_id'),
+  ('news_posts', 'office_post'), ('news_posts', 'forwarded_at'), ('satellite_settings', 'auto'),
+  ('satellite_snapshots', 'by_schedule')),
 want_rls(name) as (values
   ('profiles'), ('trees'), ('pending_trees'), ('permits'), ('account_codes'), ('map_areas'),
   ('office_ai_settings'), ('inbox_messages'), ('news_posts'), ('residents'), ('data_requests'),
@@ -48,7 +50,7 @@ want_functions(name) as (values
   ('nickname_problem'), ('set_resident_profile'), ('community_leaderboard'), ('community_counts'),
   ('publish_due_news'), ('deliver_news_post'), ('is_training_account'), ('record_reply'), ('mark_my_replies_read'),
   ('delete_my_account'), ('clear_office_ai_key'), ('log_data_request'), ('review_lccap'), ('is_super_admin'),
-  ('keeps_office')),
+  ('keeps_office'), ('forward_news_post')),
 want_buckets(name) as (values ('area-documents'), ('map-layers'), ('office-logos'), ('news-photos'),
   ('lccap-documents'), ('satellite-tiles')),
 -- A count from a table or column that may not be there yet: null instead of an error.

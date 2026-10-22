@@ -135,7 +135,11 @@ ok('PGENRO deletes an old one', !removeOld.error && removeOld.rows.length === 1,
 
 // ---- The tiles -------------------------------------------------------------------
 const bucket = (await db.query(`select public, allowed_mime_types, file_size_limit from storage.buckets where id = 'satellite-tiles'`)).rows[0];
-ok('the tiles bucket is public, JPEG only', bucket?.public === true && bucket.allowed_mime_types.join() === 'image/jpeg', JSON.stringify(bucket));
+ok('the tiles bucket is public: the tiles, and the plan the schedule reads', bucket?.public === true && bucket.allowed_mime_types.join() === 'image/jpeg,application/json', JSON.stringify(bucket));
+const scheduled = await run(PG, `update public.satellite_settings set auto = true returning auto`);
+ok('PGENRO switches the schedule on', !scheduled.error && scheduled.rows[0]?.auto === true, scheduled.error ?? '');
+const officeSchedules = await run(SCZ_ADMIN, `update public.satellite_settings set auto = false returning auto`);
+ok('a MENRO / CENRO cannot', Boolean(officeSchedules.error) || officeSchedules.rows.length === 0);
 const UPLOAD = `insert into storage.objects (bucket_id, name, owner) values ('satellite-tiles', $1, auth.uid()) returning id`;
 const officeUploads = await run(SCZ_ADMIN, UPLOAD, ['x/14/1/1.jpg']);
 ok('a MENRO / CENRO cannot upload a tile', Boolean(officeUploads.error), officeUploads.error ?? 'uploaded');

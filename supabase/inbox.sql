@@ -16,7 +16,8 @@
 --   notice    PGENRO set a tree planting site, or approved an office's
 --             request: every MENRO / CENRO is told, with View on map.
 --   news      PGENRO posted News & Events: a newsletter to every office. A
---             MENRO / CENRO's own event goes to PGENRO and to itself.
+--             MENRO / CENRO's own event goes to PGENRO and to itself, and
+--             PGENRO may pass it on to every other office.
 --   rise      a tree was saved under a species the RISE library has no
 --             profile for: PGENRO is told, once per species.
 --   contact   the public's contact form, to the office the visitor chose.
@@ -183,6 +184,15 @@ alter table public.news_posts
   add column if not exists venue_lng   double precision,
   add column if not exists map_area_id uuid;
 
+-- Whose a post is, and whether PGENRO passed an office's event on (22
+-- October): office_post is set as it is made, by who made it; forwarded_at
+-- when PGENRO sent it to every other office. Neither is the page's to set.
+alter table public.news_posts
+  add column if not exists office_post  boolean not null default false,
+  add column if not exists forwarded_at timestamptz;
+update public.news_posts n set office_post = true
+where not n.office_post and exists (select 1 from public.profiles p where p.id = n.created_by and p.role = 'lgu_admin');
+
 alter table public.news_posts drop constraint if exists news_posts_venue_check;
 alter table public.news_posts add constraint news_posts_venue_check check (
   (venue_lat is null) = (venue_lng is null)
@@ -209,12 +219,17 @@ begin
     new.created_at := now();
     new.publish_at := coalesce(new.publish_at, now());
     new.sent_at := null;
+    new.office_post := coalesce(public.my_role() = 'lgu_admin', false);
+    new.forwarded_at := null;
   else
     new.created_by := old.created_by;
     new.created_at := old.created_at;
-    -- When the newsletter went out is the database's to say, not the page's.
+    -- Whose it is, when the newsletter went out, and whether it was passed
+    -- on are the database's to say, not the page's.
     if current_user in ('authenticated', 'anon') then
+      new.office_post := old.office_post;
       new.sent_at := old.sent_at;
+      new.forwarded_at := old.forwarded_at;
     end if;
   end if;
   new.updated_at := now();
@@ -318,6 +333,48 @@ begin
   return true;
 end $$;
 revoke all on function public.deliver_news_post(uuid) from public;
+
+-- PGENRO passes an office's event on to every other MENRO / CENRO (22
+-- October): once, when it has gone out, and not archived. The office that
+-- posted it, and PGENRO, have it already.
+create or replace function public.forward_news_post(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  p public.news_posts%rowtype;
+begin
+  if not (public.is_pgenro() and public.is_active_account()) then
+    raise exception 'Only PGENRO passes an event on.' using errcode = '42501';
+  end if;
+  select * into p from public.news_posts where id = p_id for update;
+  if not found or not p.office_post then
+    raise exception 'That is not an office''s event.' using errcode = 'P0002';
+  end if;
+  if p.forwarded_at is not null then
+    raise exception 'It has been passed on already.' using errcode = '22023';
+  end if;
+  if p.sent_at is null or p.archived_at is not null then
+    raise exception 'Pass it on once it has gone out, and while it is not archived.' using errcode = '22023';
+  end if;
+  insert into public.inbox_messages (kind, office, subject, body, link, source_id)
+  select 'news', l.psgc::text, p.title,
+         concat_ws(E'\n\n',
+           'From ' || coalesce(l2.label, 'an office') || ', passed on by PGENRO.',
+           nullif(trim(concat_ws(' · ',
+             case
+               when p.event_date is null then null
+               when p.event_end_date is null or p.event_end_date = p.event_date then to_char(p.event_date, 'FMDD FMMonth YYYY')
+               else to_char(p.event_date, 'FMDD FMMonth YYYY') || ' to ' || to_char(p.event_end_date, 'FMDD FMMonth YYYY')
+             end,
+             nullif(p.venue, ''))), ''),
+           nullif(p.body, '')),
+         jsonb_build_object('kind', 'news', 'id', p.id), p.id::text
+  from public.lgus l
+  left join public.lgus l2 on l2.psgc = p.lgu_psgc
+  where l.psgc is distinct from p.lgu_psgc;
+  update public.news_posts set forwarded_at = now() where id = p.id;
+end $$;
+revoke all on function public.forward_news_post(uuid) from public;
+grant execute on function public.forward_news_post(uuid) to authenticated;
 
 -- Sent the moment a post is made or moved to now; a scheduled one waits.
 create or replace function public.send_news_to_offices()
@@ -527,6 +584,11 @@ union all
 select 'an event has its days, its kind and its CBI credit',
        exists (select 1 from information_schema.columns where table_name = 'news_posts' and column_name = 'cbi_credit')
        and exists (select 1 from pg_constraint where conname = 'news_posts_event_check'),
+       ''
+union all
+select 'PGENRO passes an office''s event on',
+       exists (select 1 from information_schema.columns where table_name = 'news_posts' and column_name = 'forwarded_at')
+       and exists (select 1 from information_schema.routines where routine_name = 'forward_news_post'),
        ''
 union all
 select 'an event has its pin, and a MENRO / CENRO posts its own',

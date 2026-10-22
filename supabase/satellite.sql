@@ -18,6 +18,12 @@
 --
 -- The instance ID opens PGENRO's Copernicus configuration, so it is read by
 -- PGENRO alone, like a key; it is never in the code.
+--
+-- On a schedule (22 October): with "Take it automatically" on, the
+-- satellite-snapshot Edge Function, called every ten minutes by a cron job,
+-- takes a snapshot when one is due and carries it on, run after run, until it
+-- is done. It reads which tiles to take from plan.json in the bucket, which
+-- PGENRO's browser writes. Run this file again for it (step 32).
 
 
 -- ===========================================================================
@@ -31,6 +37,9 @@ create table if not exists public.satellite_settings (
   updated_by    uuid,
   updated_at    timestamptz not null default now()
 );
+
+-- Taken on schedule, by the satellite-snapshot Edge Function (22 October).
+alter table public.satellite_settings add column if not exists auto boolean not null default false;
 
 alter table public.satellite_settings drop constraint if exists satellite_settings_cadence_check;
 alter table public.satellite_settings add constraint satellite_settings_cadence_check
@@ -90,6 +99,10 @@ create table if not exists public.satellite_snapshots (
   taken_at       timestamptz not null default now(),
   finished_at    timestamptz
 );
+
+-- A snapshot the schedule takes counts its tiles over every zoom, deepest
+-- first, and is carried on by the schedule only (22 October).
+alter table public.satellite_snapshots add column if not exists by_schedule boolean not null default false;
 
 alter table public.satellite_snapshots drop constraint if exists satellite_snapshots_status_check;
 alter table public.satellite_snapshots add constraint satellite_snapshots_status_check
@@ -160,9 +173,9 @@ begin
     return;
   end if;
   insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-  values ('satellite-tiles', 'satellite-tiles', true, 1048576, array['image/jpeg'])
+  values ('satellite-tiles', 'satellite-tiles', true, 1048576, array['image/jpeg', 'application/json'])
   on conflict (id) do update
-    set public = true, file_size_limit = 1048576, allowed_mime_types = array['image/jpeg'];
+    set public = true, file_size_limit = 1048576, allowed_mime_types = array['image/jpeg', 'application/json'];
 
   execute 'drop policy if exists "pgenro uploads satellite tiles" on storage.objects';
   execute $p$create policy "pgenro uploads satellite tiles" on storage.objects
@@ -208,6 +221,11 @@ union all
 select 'satellite tiles bucket, public',
        case when to_regclass('storage.buckets') is null then null
             else exists (select 1 from storage.buckets where id = 'satellite-tiles' and public) end,
+       ''
+union all
+select 'snapshots can be taken on schedule',
+       exists (select 1 from information_schema.columns where table_name = 'satellite_settings' and column_name = 'auto')
+       and exists (select 1 from information_schema.columns where table_name = 'satellite_snapshots' and column_name = 'by_schedule'),
        ''
 union all
 select 'READ: the snapshot on the maps', null,

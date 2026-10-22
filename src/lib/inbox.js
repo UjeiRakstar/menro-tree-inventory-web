@@ -73,6 +73,8 @@ export function linkOf(message) {
     const at = Number.isFinite(Number(link.lat)) && Number.isFinite(Number(link.lng)) ? `lat=${link.lat}&lng=${link.lng}&` : '';
     return { to: `/map?${at}tree=${encodeURIComponent(link.id)}`, label: 'View the tree on map' };
   }
+  // PGENRO's copy of an office's event opens News & Events, where it is passed on (22 October).
+  if (link.kind === 'news' && link.id && message.office === 'pgenro') return { to: '/news', label: 'Open in News & Events' };
   if (link.kind === 'news' && link.id) return { to: `/about#news-${link.id}`, label: 'See it on the website' };
   // A climate plan (lccap.sql): PGENRO checks it; the LGU's office sees it in Settings.
   if (link.kind === 'lccap') {

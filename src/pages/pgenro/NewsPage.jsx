@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, CalendarDays, ClipboardPaste, ImagePlus, List, Loader2, MapPin, Megaphone, Pencil, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarDays, ClipboardPaste, Forward, ImagePlus, List, Loader2, MapPin, Megaphone, Pencil, Trash2, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { useAuthIfAny } from '../../context/AuthContext.jsx';
 import { ROLES, roleOf } from '../../lib/roles.js';
@@ -341,6 +341,23 @@ export default function NewsPage() {
     });
   }
 
+  /**
+   * An office's event, passed on to every other MENRO / CENRO (22 October):
+   * it went to PGENRO and its own office only (inbox.sql).
+   */
+  async function forward(item) {
+    const from = MUNICIPALITY_LIST.find((lgu) => lgu.psgc === Number(item.lgu_psgc))?.label ?? 'the office';
+    if (!window.confirm(`Send "${item.title}" to every other MENRO / CENRO? It came from ${from}.`)) return;
+    const { error } = await supabase.rpc('forward_news_post', { p_id: item.id });
+    if (error) {
+      setOutcome({ ok: false, text: /forward_news_post|Could not find the function/i.test(error.message ?? '') ? 'Passing an event on needs supabase/inbox.sql to be run again (step 32).' : error.message });
+      return;
+    }
+    const at = new Date().toISOString();
+    setPosts((current) => current.map((p) => (p.id === item.id ? { ...p, forwarded_at: at } : p)));
+    setOutcome({ ok: true, text: `"${item.title}" sent to every other MENRO / CENRO.` });
+  }
+
   async function remove(item) {
     if (!window.confirm(`Delete "${item.title}"? It comes off the home page. The copies in the offices' inboxes stay theirs.`)) return;
     const { error } = await supabase.from('news_posts').delete().eq('id', item.id);
@@ -640,6 +657,21 @@ export default function NewsPage() {
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${STATUS_BADGE[status]}`}>{status}</span>
                   </p>
                   <p className="text-xs text-slate-500">{[publishedWhen(item), whenAndWhere(item) && `Event: ${whenAndWhere(item)}`].filter(Boolean).join(' · ')}</p>
+                  {!office && item.office_post && (
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
+                        From {MUNICIPALITY_LIST.find((lgu) => lgu.psgc === Number(item.lgu_psgc))?.label ?? 'an office'}
+                      </span>
+                      {item.forwarded_at ? (
+                        <span className="text-slate-500">Passed on to every office {new Date(item.forwarded_at).toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      ) : status === 'published' ? (
+                        <button type="button" onClick={() => forward(item)}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 font-semibold text-green-800 ring-1 ring-green-300 hover:bg-green-50">
+                          <Forward size={12} aria-hidden="true" /> Pass on to every office
+                        </button>
+                      ) : null}
+                    </p>
+                  )}
                   {item.body && <p className="mt-1 line-clamp-2 text-sm text-slate-600">{item.body}</p>}
                   {item.photos?.length > 1 && <p className="mt-1 text-xs text-slate-400">{item.photos.length} photos</p>}
                 </div>

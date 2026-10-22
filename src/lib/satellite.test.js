@@ -194,3 +194,23 @@ describe('taking a snapshot', () => {
     expect(supabaseMock.writesTo('satellite_snapshots', 'delete').map((w) => w.filters)).toEqual([[['id', 'older']], [['id', 'broken']]]);
   });
 });
+
+describe('the schedule (22 October)', () => {
+  it('is handed every tile of a snapshot, by zoom, in the plan', async () => {
+    const { snapshotPlan } = await import('./satellite.js');
+    const plan = snapshotPlan();
+    expect(plan).toMatchObject({ min: 9, max: 14 });
+    const byZoom = snapshotTiles();
+    for (const z of Object.keys(byZoom)) {
+      expect(plan.tiles[z]).toEqual(byZoom[z].map(({ x, y }) => [x, y]));
+    }
+  });
+
+  it('asks Copernicus with the same cloud-free script as the browser', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const source = readFileSync(resolve(process.cwd(), 'supabase/functions/satellite-snapshot/index.ts'), 'utf8').split('\r\n').join('\n');
+    const script = source.match(/const CLOUD_FREE_SCRIPT = `([\s\S]*?)`;/)[1];
+    expect(script).toBe(CLOUD_FREE_SCRIPT);
+  });
+});

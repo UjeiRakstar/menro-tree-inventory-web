@@ -183,7 +183,8 @@ describe('App shell and routing', () => {
     fireEvent.click(within(headerBefore).getByRole('button', { name: /account menu/ }));
     fireEvent.click(within(headerBefore).getByRole('link', { name: /Field officers/ }));
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Arborists' })).toBeInTheDocument();
+    // The page arrives on the click (lazy): slow when every test runs at once.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Arborists' }, { timeout: 15000 })).toBeInTheDocument();
     // The same DOM node: a navigation, not a reload.
     expect(adminHeader().closest('header')).toBe(headerBefore);
   });
