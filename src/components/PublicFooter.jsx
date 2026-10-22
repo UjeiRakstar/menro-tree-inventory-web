@@ -88,6 +88,15 @@ export default function PublicFooter() {
           </div>
 
         </div>
+
+        {/* The terms and the privacy policy, on every public page (22 October). */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-white/15 pt-6 text-xs text-green-50/80">
+          <a href="/terms.html" className="hover:text-white hover:underline">Terms of Use and Disclaimer</a>
+          <span aria-hidden="true">·</span>
+          <a href="/privacy.html" className="hover:text-white hover:underline">Privacy Policy</a>
+          <span aria-hidden="true">·</span>
+          <span>Maps and figures are for planning purposes only.</span>
+        </div>
       </div>
     </footer>
   );

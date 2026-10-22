@@ -14,9 +14,9 @@ beforeEach(() => {
   supabaseMock.reset();
   supabaseMock.setResponse('trees:select', {
     data: [
-      { id: 't1', species: 'Narra', scientific_name: 'Pterocarpus indicus' },
+      { id: 't1', species: 'Narra', scientific_name: 'Pterocarpus indicus', barangay_psgc: 403426001 },
       { id: 't2', species: 'Molave' },
-      { id: 't3', species: 'Narra' },
+      { id: 't3', species: 'Narra', barangay_psgc: 403405001 },
     ],
     error: null,
   });
@@ -45,7 +45,10 @@ describe('the public Tree Database (22 October)', () => {
     expect(within(narra).queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByText(/Kept by PGENRO Laguna/)).toBeInTheDocument();
     // Only the species are read from the trees: nothing else of them goes out.
-    expect(supabaseMock.calls.find((c) => c.table === 'trees').columns).toBe('id,species,scientific_name');
+    expect(supabaseMock.calls.find((c) => c.table === 'trees').columns).toBe('id,species,scientific_name,barangay_psgc');
+    // Where it is tagged, by city and municipality.
+    const where = within(narra).getByRole('region', { name: /Where it is tagged/ });
+    expect(within(where).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Calamba City 1', 'Santa Cruz 1']);
   });
 
   it('is in the public navigation', () => {

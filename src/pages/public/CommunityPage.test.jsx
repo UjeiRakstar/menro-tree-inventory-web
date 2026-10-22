@@ -1,5 +1,5 @@
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 vi.mock('../../supabaseClient.js', async () => {
   const { supabaseMock } = await import('../../test/supabaseMock.js');
@@ -121,7 +121,8 @@ describe('the community page', () => {
     renderPage();
     expect(await screen.findByText('You have joined as')).toBeInTheDocument();
     expect(screen.getByText('Puno ng Laguna', { selector: 'p' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Tag a tree/ })).toHaveAttribute('href', '/public-map');
+    // Every Tag a tree here opens the map with tagging started (22 October).
+    for (const link of screen.getAllByRole('link', { name: /Tag a tree/ })) expect(link).toHaveAttribute('href', '/public-map?tag=1');
     expect(await screen.findByText('(you)')).toBeInTheDocument();
   });
 
@@ -220,5 +221,50 @@ describe('the "!" on a resident’s name', () => {
     );
     await screen.findByText('Salamat!');
     await waitFor(() => expect(screen.queryByRole('status', { name: /reply from an office waiting/ })).not.toBeInTheDocument());
+  });
+});
+
+describe('the call to action (22 October)', () => {
+  function Where() {
+    const { pathname, search } = useLocation();
+    return <p data-testid="where">{pathname + search}</p>;
+  }
+  const renderWithMap = () =>
+    render(
+      <MemoryRouter initialEntries={['/community']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/community" element={<CommunityPage />} />
+            <Route path="*" element={<Where />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>
+    );
+  beforeEach(() => sessionStorage.clear());
+
+  it('opens with a hero, why the community matters, and the sign-up first', async () => {
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Green Tag Community' })).toHaveTextContent('Get involved');
+    expect(screen.getByRole('region', { name: 'Why the community matters' })).toHaveTextContent('Join the tree plantings');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign up with Google' }));
+    await waitFor(() => expect(supabaseMock.supabase.auth.signInWithOAuth).toHaveBeenCalled());
+    // Back to the Community page — the address Supabase allows — remembering to tag.
+    expect(supabaseMock.supabase.auth.signInWithOAuth.mock.calls[0][0].options.redirectTo).toMatch(/\/community$/);
+    expect(sessionStorage.getItem('green-tag:after-join')).toBe('tag');
+  });
+
+  it('sends a resident who signed up to tag straight to the map, Tag a tree open, once joined', async () => {
+    sessionStorage.setItem('green-tag:after-join', 'tag');
+    signInResident({ ...ANA, consented_at: '2026-10-22T00:00:00Z' });
+    renderWithMap();
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/public-map?tag=1'));
+    expect(sessionStorage.getItem('green-tag:after-join')).toBeNull();
+  });
+
+  it('leaves a resident who just visits on the Community page', async () => {
+    signInResident({ ...ANA, consented_at: '2026-10-22T00:00:00Z' });
+    renderWithMap();
+    expect(await screen.findByText('You have joined as')).toBeInTheDocument();
+    expect(screen.queryByTestId('where')).not.toBeInTheDocument();
   });
 });

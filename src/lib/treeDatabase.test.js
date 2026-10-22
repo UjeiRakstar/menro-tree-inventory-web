@@ -31,3 +31,17 @@ describe('a scientific name the record does not know', () => {
     expect(coconut.scientific).toBe('');
   });
 });
+
+describe('where a species is tagged (22 October)', () => {
+  it('counts its trees by the place each stands in, most first', () => {
+    const trees = [
+      { species: 'Narra', barangay: 'Labuin' },
+      { species: 'Narra', barangay: 'Gatid' },
+      { species: 'Narra', barangay: 'Gatid' },
+      { species: 'Narra' },
+    ];
+    const [narra] = speciesInInventory(trees, [], { placeOf: (tree) => tree.barangay });
+    expect(narra.count).toBe(4);
+    expect(narra.places).toEqual([{ name: 'Gatid', count: 2 }, { name: 'Labuin', count: 1 }]);
+  });
+});

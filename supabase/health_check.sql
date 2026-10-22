@@ -5,7 +5,7 @@
 -- true), missing (ok = false, with what is missing in the detail), or is a
 -- figure to read (ok = null).
 --
--- It looks for what steps 1–32 of PARKED.md make: tables, the columns the
+-- It looks for what steps 1–33 of PARKED.md make: tables, the columns the
 -- later steps add, the rules on who reads what, the triggers that stamp and
 -- route, the functions the pages call, and the storage buckets. A count that
 -- matters (tags no LGU will get, a Google account sitting in the approval
@@ -24,7 +24,7 @@ want_columns(tbl, col) as (values
   ('news_posts', 'event_kind'), ('news_posts', 'cbi_credit'), ('news_posts', 'event_end_date'), ('news_posts', 'lgu_psgc'),
   ('news_posts', 'venue_lat'), ('news_posts', 'venue_lng'), ('news_posts', 'map_area_id'),
   ('news_posts', 'office_post'), ('news_posts', 'forwarded_at'), ('satellite_settings', 'auto'),
-  ('satellite_snapshots', 'by_schedule')),
+  ('satellite_snapshots', 'by_schedule'), ('trees', 'captured_by'), ('trees', 'archived_at')),
 want_rls(name) as (values
   ('profiles'), ('trees'), ('pending_trees'), ('permits'), ('account_codes'), ('map_areas'),
   ('office_ai_settings'), ('inbox_messages'), ('news_posts'), ('residents'), ('data_requests'),
@@ -34,12 +34,14 @@ want_triggers(name) as (values
   ('guard_map_area'), ('guard_planting_request'), ('notify_planting_site'), ('notify_unknown_species'),
   ('stamp_permit_lgu'), ('stamp_news_post'), ('aaa_keep_residents_out'), ('zzzz_add_resident'),
   ('stamp_tag_sender'), ('trees_sync_barangay'), ('send_news_to_offices'), ('stamp_lccap_submission'),
-  ('notify_lccap_submission'), ('stamp_satellite_settings'), ('stamp_satellite_snapshot')),
+  ('notify_lccap_submission'), ('stamp_satellite_settings'), ('stamp_satellite_snapshot'),
+  ('stamp_tree_capture'), ('keep_tree_archive')),
 want_restrictive(tbl, policy) as (values
   ('trees', 'only active accounts'), ('pending_trees', 'only active accounts'),
   ('permits', 'permits stay with their LGU'), ('permits', 'the public reads no permit'),
   ('profiles', 'training stays in training'), ('map_areas', 'requests stay with the offices'),
-  ('satellite_settings', 'only active accounts'), ('satellite_snapshots', 'only active accounts')),
+  ('satellite_settings', 'only active accounts'), ('satellite_snapshots', 'only active accounts'),
+  ('trees', 'archived trees are out of the inventory')),
 -- Rules that let someone in (step 31: a MENRO / CENRO's own events).
 want_policies(tbl, policy) as (values
   ('news_posts', 'an office posts its own events'), ('satellite_settings', 'pgenro keeps the satellite settings')),
@@ -50,7 +52,7 @@ want_functions(name) as (values
   ('nickname_problem'), ('set_resident_profile'), ('community_leaderboard'), ('community_counts'),
   ('publish_due_news'), ('deliver_news_post'), ('is_training_account'), ('record_reply'), ('mark_my_replies_read'),
   ('delete_my_account'), ('clear_office_ai_key'), ('log_data_request'), ('review_lccap'), ('is_super_admin'),
-  ('keeps_office'), ('forward_news_post')),
+  ('keeps_office'), ('forward_news_post'), ('archive_tree'), ('archived_trees')),
 want_buckets(name) as (values ('area-documents'), ('map-layers'), ('office-logos'), ('news-photos'),
   ('lccap-documents'), ('satellite-tiles')),
 -- A count from a table or column that may not be there yet: null instead of an error.

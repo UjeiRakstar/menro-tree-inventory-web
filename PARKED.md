@@ -436,6 +436,17 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     - On Map layers → Satellite base map, tick "Take it automatically" and
       Save. It does nothing until a snapshot is due; then it takes one over
       two or three runs (about 588 Copernicus requests) and puts it live.
+33. **Who captured a tree, and archiving one, 22 October** — run
+    `supabase/tree_records.sql` (after accounts.sql and lgu_fence.sql). From
+    then on every new tree is stamped with the account that saved it (trees
+    saved before get it from the activity log, where it has them), so the
+    Trees table can say which field officer tagged it. A MENRO / CENRO
+    archives a tree with a reason, and puts it back from Archived; an archived
+    tree is in no page and no count, and is never deleted. Until it runs, the
+    table says "Field officer" without a name, and Archive says the file is
+    needed. One edge: a phone that re-sends its own copy of a tree its office
+    has archived gets that tree refused in its sync — the officer's copy is
+    old by then, and the office can put the tree back.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
@@ -516,8 +527,13 @@ Parked as asked: none of this is coded. Each item says what the system already
 has, what it would take, and an honest verdict on whether it earns its place.
 Suggested order at the end.
 
-1. **Get Involved → the Community page, with a hero and the sign-up as the call
-   to action.** *Has:* the About page's "Get Involved!" goes to the public map;
+1. **Done 22 October.** ~~Get Involved → the Community page, with a hero and
+   the sign-up as the call to action.~~ The button goes to `/community`; a hero
+   (`src/assets/community-hero.jpg` when you add one — until then About's
+   forest), "Why the community matters", and **Sign up with Google** first.
+   After Google and joining, the resident lands on the map with Tag a tree
+   started (`/public-map?tag=1`; on a computer, the "tag from a phone" note).
+   *Was:* *Has:* the About page's "Get Involved!" goes to the public map;
    the Community page has the Google sign-in and the leaderboard, but no hero
    or explanation. *Would take:* the button pointed at `/community`; a hero
    like About's (a photo of people doing community conservation) and a short
@@ -536,8 +552,9 @@ Suggested order at the end.
    light, low priority.** Consistency is worth having, but it adds nothing a
    visitor learns. Do it with item 4, when the page gets its photos anyway.
 
-3. **Where each species is tagged — by LGU for the public, by barangay for an
-   office.** *Has:* every tree's LGU and barangay already, in the data the page
+3. **Done 22 October.** ~~Where each species is tagged — by LGU for the
+   public, by barangay for an office.~~ "Where it is tagged" in each species'
+   card. *Was:* *Has:* every tree's LGU and barangay already, in the data the page
    loads. *Would take:* a "Where it grows here" list in each species' card
    (LGU or barangay with counts), and perhaps a small map. *Verdict:* **helpful,
    light.** No new data, no new query; it makes the database local, which is
@@ -553,7 +570,11 @@ Suggested order at the end.
    photos (a resident's untrusted photo should not illustrate a species), and
    PGENRO should be able to hide a photo that shows a person or a house.
 
-5. **The inventory table restructured** — Photo | Species | Barangay (office) /
+5. **Done 22 October (step 33).** ~~The inventory table restructured~~ —
+   Photo | Species | Barangay / LGU | DBH | Total height | Health (green, or
+   red with its warnings on a click) | Date recorded | Tagged by | Assigned to |
+   Dispatch (the Action Board's dialog, for a tree that is not healthy) |
+   Archive (with a reason; Archived lists them, to put back). *Was:* The inventory table restructured — Photo | Species | Barangay (office) /
    LGU (PGENRO) | DBH | Total height | Health | Date | Tagged by — and, for an
    office, Assigned to, Dispatch, Archive. *Has:* photo, species, DBH, both
    heights, date; the hazard flags (leaning, powerline, decay, roots) that make
@@ -620,7 +641,12 @@ Suggested order at the end.
    demo — medium.** No cost to the live system: the rows sit behind the
    training wall and `training_purge.sql` removes them.
 
-9. **Deployment, the public disclaimer and the privacy clause.** *Has:*
+9. **Done 22 October.** ~~Deployment, the public disclaimer and the privacy
+   clause.~~ `public/terms.html` (Terms of Use and Disclaimer — a DRAFT for
+   PGENRO's and the DPO's review), linked from the footer on every public page,
+   the residents' sign-up, the tag form and the data request form; host rules
+   for single-page addresses (`vercel.json`, `public/_redirects`,
+   `public/.htaccess`); `npm audit fix`. *Was:* Deployment, the public disclaimer and the privacy clause. *Has:*
    `public/privacy.html` (updated 21 October); the planning-purposes line on
    every sheet and report; consent on residents' sign-in and data requests.
    *Missing:* a **Terms of Use / Disclaimer** page — the map is for planning, not
@@ -645,24 +671,34 @@ Suggested order at the end.
 - **Hosting.** Any static host (Vercel, Netlify, the province's own server):
   build `npm ci && npm run build`, publish `dist/`, Node 20 or later. Every
   path must fall back to `index.html` (a single-page app): `/map`,
-  `/tree-database` and the rest give "not found" without that rule. The repo
-  has no host config yet — add the one for the host chosen. Environment
+  `/tree-database` and the rest give "not found" without that rule. The rule
+  is in the repo for three hosts: `vercel.json` (Vercel), `public/_redirects`
+  (Netlify), `public/.htaccess` (Apache). For nginx, IT adds
+  `try_files $uri $uri/ /index.html;` to the site's `location /`. Environment
   values: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
   `VITE_CLOUDINARY_CLOUD_NAME`.
 - **Supabase for the live address.** Authentication → URL Configuration: Site
   URL = the live domain; redirect URLs: the domain's `/community`,
   `/public-map` and the password-reset page. Without it, sign-in links and
   Google return to the wrong place.
-- **Database:** run step 32; then `health_check.sql` — every check true.
+- **Database:** run steps 32 and 33; then `health_check.sql` — every check true.
 - **Edge Functions** deployed: `identify-tree`, `improve-report`,
   `rise-extract`, `ai-key-test`, `manage-account`, `send-reply`,
   `satellite-snapshot` (and its cron job). Then remove `GEMINI_API_KEY` from the
   field app's `.env` and rebuild it.
 - **Copernicus:** the configuration's bounds stay on Laguna; the instance ID
   is re-entered on Map layers if the configuration changes.
-- **Before going live:** `npm run test` and `npm run test:sql` pass; `npm audit
-  fix` for the React Router advisory (a minor update), then the tests again;
-  the Terms of Use page (item 9 above); the field app tested on a phone.
+- **Before going live:** `npm run test` and `npm run test:sql` pass; the
+  Terms of Use reviewed by PGENRO and the DPO; the field app tested on a phone.
+- **Security advisories, as of 22 October** (`npm audit --omit=dev`, what
+  ships to a visitor): `npm audit fix` cleared what had a safe fix. Left, each
+  needing a major-version upgrade: React Router 6 — an open redirect through a
+  `<Link>` or `navigate()` given an address from outside (Green Tag never
+  navigates to an address taken from the URL or a user, checked), and a
+  server-rendering flaw (Green Tag renders nothing on a server); `uuid` inside
+  ExcelJS — a buffer check on a path ExcelJS does not use for workbooks. Low
+  risk as used; upgrading React Router to 7 is its own piece of work, with a
+  test of every page.
 - **Free-tier limits to watch:** Supabase (database 500 MB, storage 1 GB,
   5 GB egress a month — the satellite tiles are read from storage), Cloudinary
   credits, Copernicus 30,000 requests a month, Gemini quota per LGU key.

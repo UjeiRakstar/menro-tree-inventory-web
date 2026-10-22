@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2, LogOut, MapPin, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CalendarDays, ChevronDown, Leaf, Loader2, LogOut, MapPin, Megaphone, ShieldCheck, Sprout, Trash2, TreePine, Users } from 'lucide-react';
+import forestcoverImg from '../../assets/optimised/forestcover.avif';
 import { supabase } from '../../supabaseClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Leaderboard from '../../components/public/Leaderboard.jsx';
@@ -14,8 +15,88 @@ import {
   isMissingFunction,
   isProviderOff,
   nicknameShapeProblem,
+  rememberToTag,
   signInWithGoogle,
+  takeTagWish,
 } from '../../lib/community.js';
+
+// The hero's photo: the community at work. Drop one in as
+// src/assets/community-hero.jpg (or .webp / .png) — with the agreement of the
+// people in it (RA 10173) — and it is used; until then, the forest of About.
+const HERO_PHOTOS = import.meta.glob('../../assets/community-hero.{jpg,jpeg,webp,png,avif}', { eager: true, import: 'default' });
+const HERO_PHOTO = Object.values(HERO_PHOTOS)[0] ?? forestcoverImg;
+
+/** What a resident can do for Laguna's trees, beside tagging them. */
+const WAYS = [
+  { icon: TreePine, title: 'Tag the trees around you', text: 'A photo and a tap on the map add a tree to Laguna’s inventory once a field officer checks it — citizen science the City Biodiversity Index counts.' },
+  { icon: Sprout, title: 'Join the tree plantings', text: 'Your city or municipality and PGENRO plant on the sites they set aside. The events are on the home page, with their place on the map.' },
+  { icon: Leaf, title: 'Look after what grows', text: 'Native and endemic trees hold the soil, cool the streets and shelter wildlife. Learn them in the Tree Database; plant them, and keep them.' },
+  { icon: Megaphone, title: 'Spread the word', text: 'Talks, seminars and clean-ups — the offices’ information and education campaigns — reach further when residents bring their neighbours.' },
+  { icon: CalendarDays, title: 'Report what needs care', text: 'A leaning or diseased tree, or one by the power lines: write to your MENRO / CENRO from Contact Us.' },
+];
+
+/** The top of the page, as About's: the photo, the call, the sign-up. */
+function Hero({ signUp, joined, signedIn, starting }) {
+  return (
+    <section className="relative overflow-hidden bg-green-900" aria-label="Green Tag Community">
+      <img src={HERO_PHOTO} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-green-950/80" />
+      <div className="relative mx-auto flex min-h-[26rem] max-w-6xl flex-col justify-end px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+        <p className="text-sm font-bold uppercase tracking-widest text-lime-200">Get involved</p>
+        <h1 className="mt-2 flex items-center gap-3 text-4xl font-extrabold tracking-tight text-white sm:text-6xl">
+          <Users size={44} className="shrink-0 text-lime-300" aria-hidden="true" />
+          <span className="min-w-0">Green Tag Community</span>
+        </h1>
+        <p className="mt-4 max-w-2xl text-base leading-relaxed text-green-50 sm:text-lg">
+          Laguna&apos;s trees are counted, planted and cared for by the people who live among them. Join, tag the trees you
+          know, and take part in the plantings near you.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          {joined ? (
+            <Link to="/public-map?tag=1" className="inline-flex items-center gap-2 rounded-xl bg-lime-400 px-6 py-3 text-base font-bold text-green-950 shadow-lg hover:bg-lime-300">
+              <MapPin size={18} aria-hidden="true" /> Tag a tree
+            </Link>
+          ) : (
+            <button type="button" onClick={signUp} disabled={starting}
+              className="inline-flex items-center gap-3 rounded-xl bg-white px-6 py-3 text-base font-bold text-slate-900 shadow-lg hover:bg-green-50 disabled:opacity-60">
+              {starting ? <Loader2 size={20} className="animate-spin" aria-hidden="true" /> : <GoogleMark />}
+              {signedIn ? 'Finish joining below' : 'Sign up with Google'}
+            </button>
+          )}
+          <a href="#why" className="inline-flex items-center gap-2 rounded-xl px-5 py-3 text-base font-semibold text-white ring-1 ring-white/60 hover:bg-white/10">
+            Why it matters <ChevronDown size={18} aria-hidden="true" />
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Why community involvement matters, and the ways to be part of it. */
+function WhyItMatters() {
+  return (
+    <section id="why" aria-label="Why the community matters" className="scroll-mt-20 bg-white px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <h2 className="text-2xl font-extrabold text-green-900 sm:text-3xl">Why the community matters</h2>
+        <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-700">
+          No office can walk every street and every slope. The trees residents tag fill the inventory faster than any
+          survey; the plantings they join take root because neighbours keep them; and a province whose people know their
+          native trees protects them. The City Biodiversity Index counts this too — community science, outreach and
+          partnerships are among its indicators.
+        </p>
+        <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {WAYS.map(({ icon: Icon, title, text }) => (
+            <li key={title} className="rounded-2xl bg-green-50/60 p-5 ring-1 ring-green-100">
+              <Icon size={24} className="text-green-700" aria-hidden="true" />
+              <h3 className="mt-2 text-base font-bold text-slate-900">{title}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-700">{text}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
 
 /** Google's "G", in its own colours, as Google asks its sign-in buttons to carry. */
 function GoogleMark() {
@@ -116,7 +197,10 @@ function JoinForm({ resident, joined, onDone }) {
       {!joined && (
         <label className="flex items-start gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={agree} onChange={(event) => setAgree(event.target.checked)} className="mt-1" />
-          <span>I agree to Green Tag keeping what is listed above, and only that, for the leaderboard and the City Biodiversity Index.</span>
+          <span>
+            I agree to Green Tag keeping what is listed above, and only that, for the leaderboard and the City Biodiversity
+            Index, and to the <a href="/terms.html" target="_blank" rel="noreferrer" className="font-semibold text-green-800 underline">Terms of Use</a> and <a href="/privacy.html" target="_blank" rel="noreferrer" className="font-semibold text-green-800 underline">Privacy Policy</a>.
+          </span>
         </label>
       )}
       {problem && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
@@ -211,10 +295,19 @@ export default function CommunityPage() {
   const [editing, setEditing] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [boardLgu, setBoardLgu] = useState('');
+  const navigate = useNavigate();
+
+  // Signed up from the call to action: once joined, straight to the map with
+  // Tag a tree open (22 October).
+  const joined = Boolean(resident?.consented_at);
+  useEffect(() => {
+    if (joined && takeTagWish()) navigate('/public-map?tag=1', { replace: true });
+  }, [joined, navigate]);
 
   async function join() {
     setStarting(true);
     setProblem('');
+    rememberToTag();
     const { error } = await signInWithGoogle();
     // On success the browser is on its way to Google.
     if (error) {
@@ -289,7 +382,7 @@ export default function CommunityPage() {
             Every tree you tag while signed in is counted for you once a field officer verifies it.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link to="/public-map" className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-bold text-green-800 hover:bg-green-50">
+            <Link to="/public-map?tag=1" className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-bold text-green-800 hover:bg-green-50">
               <MapPin size={15} aria-hidden="true" /> Tag a tree
             </Link>
             <button type="button" onClick={() => setEditing((open) => !open)} aria-expanded={editing}
@@ -309,12 +402,12 @@ export default function CommunityPage() {
   }
 
   return (
+    <>
+    <Hero signUp={join} joined={joined} signedIn={Boolean(session) && !profile} starting={starting} />
+    <WhyItMatters />
     <div className="bg-gray-50 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <h1 className="flex items-center gap-3 text-3xl font-extrabold tracking-tight sm:text-5xl">
-          <Users size={40} className="shrink-0 text-green-700" aria-hidden="true" />
-          <span className="min-w-0"><span className="text-green-800">Green Tag </span><span className="text-gray-900">Community</span></span>
-        </h1>
+        <h2 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">Join, and see the board</h2>
         <p className="mt-3 max-w-3xl text-base text-gray-700">
           Sign in with Google and the trees you tag are counted for you. The residents whose tags are verified in the field
           most often lead the board.
@@ -340,5 +433,6 @@ export default function CommunityPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

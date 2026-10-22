@@ -251,7 +251,8 @@ export default function DataRequestModal({ open, onClose, place = '' }) {
                 for what (Data Privacy Act of 2012, RA 10173). They are not shown to anyone else.{' '}
                 <a href="/privacy.html" target="_blank" rel="noreferrer" className="font-semibold text-green-800 underline">
                   Privacy policy
-                </a>
+                </a>{' '}
+                · <a href="/terms.html" target="_blank" rel="noreferrer" className="font-semibold text-green-800 underline">Terms of use</a>
               </span>
             </label>
 

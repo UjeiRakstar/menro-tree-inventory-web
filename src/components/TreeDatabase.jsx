@@ -22,8 +22,10 @@ const paragraphsOf = (text) =>
  *   trees    the LGU's tagged trees — or, on the public page, Laguna's
  *   place    its name, for the headings
  *   bare     the page has its own title (the public Tree Database)
+ *   placeOf  where a tree stands (its LGU for the public, its barangay for an
+ *            office), for "Where it is tagged"; placesLabel names them
  */
-export default function TreeDatabase({ trees, place = 'this LGU', bare = false }) {
+export default function TreeDatabase({ trees, place = 'this LGU', bare = false, placeOf = null, placesLabel = 'Where it is tagged' }) {
   const [profiles, setProfiles] = useState(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');
@@ -42,7 +44,7 @@ export default function TreeDatabase({ trees, place = 'this LGU', bare = false }
     };
   }, []);
 
-  const species = useMemo(() => speciesInInventory(trees, profiles ?? []), [trees, profiles]);
+  const species = useMemo(() => speciesInInventory(trees, profiles ?? [], { placeOf }), [trees, profiles, placeOf]);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return q ? species.filter((s) => `${s.name} ${s.scientific}`.toLowerCase().includes(q)) : species;
@@ -127,6 +129,18 @@ export default function TreeDatabase({ trees, place = 'this LGU', bare = false }
                   {open.count.toLocaleString('en-US')} tagged {open.count === 1 ? 'tree' : 'trees'} in {place}
                 </p>
               </header>
+              {open.places?.length > 0 && (
+                <section aria-label={placesLabel} className="rounded-lg bg-green-50/60 p-3 ring-1 ring-green-100">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-green-800">{placesLabel}</h4>
+                  <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                    {open.places.map((p) => (
+                      <li key={p.name} className="rounded-full bg-white px-2.5 py-0.5 text-xs text-slate-700 ring-1 ring-green-200">
+                        {p.name} <span className="font-semibold text-green-800">{p.count.toLocaleString('en-US')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               {open.profile ? (
                 <>
                   {paragraphsOf(open.profile.description).map((paragraph, i) => (

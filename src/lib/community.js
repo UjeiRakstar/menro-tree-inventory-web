@@ -66,6 +66,33 @@ export async function enabledProviders(client = supabase) {
 }
 
 /**
+ * Signing up from the Community page's call to action (22 October): after
+ * Google, and after joining, the resident goes straight to the map with Tag a
+ * tree open. The wish is kept in the tab's session storage, not in the address
+ * — Supabase returns only to the addresses on its list, which /community is.
+ */
+const AFTER_JOIN = 'green-tag:after-join';
+
+export function rememberToTag() {
+  try {
+    globalThis.sessionStorage?.setItem(AFTER_JOIN, 'tag');
+  } catch {
+    // Private windows may refuse; the resident then lands on the Community page.
+  }
+}
+
+/** True once, when the resident asked to tag before signing in. */
+export function takeTagWish() {
+  try {
+    const wish = globalThis.sessionStorage?.getItem(AFTER_JOIN) === 'tag';
+    globalThis.sessionStorage?.removeItem(AFTER_JOIN);
+    return wish;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Off to Google, and back to `path` — the Community page, or the map a tag
  * was started from. Asks first whether Google is switched on: when it is not,
  * the page says so instead of sending the visitor to Supabase's bare error.

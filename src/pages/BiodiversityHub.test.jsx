@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const auth = vi.hoisted(() => ({ profile: null }));
@@ -158,5 +158,79 @@ describe('an office’s Trees (22 October)', () => {
     expect(within(narra).queryByRole('button')).not.toBeInTheDocument();
     expect(within(narra).queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByText(/Kept by PGENRO — read-only here/)).toBeInTheDocument();
+  });
+});
+
+describe('the inventory table (22 October)', () => {
+  const OFFICER = { id: 'u-ana', full_name: 'Ana Reyes', email: 'ana@field.ph', lgu_psgc: 403426000, is_approved: true, status: 'active', role: 'field_officer' };
+  beforeEach(() => {
+    auth.profile = SANTA_CRUZ_ADMIN;
+    supabaseMock.setResponse('trees:select', {
+      data: [
+        { id: 't1', species: 'Narra', barangay: 'Labuin', barangay_psgc: 403426001, dbh: '30 cm', total_height: '12', captured_by: 'u-ana', dateCaptured: '2026-10-01T00:00:00Z' },
+        { id: 't2', species: 'Acacia', barangay: 'Gatid', barangay_psgc: 403426002, is_leaning: true, has_powerline_conflict: true, assigned_to: 'ANA@field.ph', task_status: 'Pending', source: 'crowdsource' },
+      ],
+      error: null,
+    });
+    supabaseMock.setResponse('profiles:select', { data: [OFFICER], error: null });
+  });
+
+  it('shows each tree’s barangay, heights, health, who tagged it and who it is assigned to', async () => {
+    renderPage();
+    const table = await screen.findByRole('table', { name: 'Tree inventory' });
+    const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(['Photo', 'Species', 'Barangay', 'DBH', 'Total height', 'Health', 'Date recorded', 'Tagged by', 'Assigned to', 'Actions']);
+    const [narra, acacia] = within(table).getAllByRole('row').slice(1);
+    expect(narra).toHaveTextContent('Labuin');
+    expect(narra).toHaveTextContent('12 m');
+    expect(narra).toHaveTextContent('Healthy');
+    // Tagged by the officer who captured it, by name, once the team is in.
+    await waitFor(() => expect(narra).toHaveTextContent('Ana Reyes'));
+    expect(acacia).toHaveTextContent('Community');
+    // Assigned to the officer, by name, whatever the email's case.
+    expect(within(acacia).getAllByText('Ana Reyes').length).toBeGreaterThan(0);
+    fireEvent.click(within(acacia).getByRole('button', { name: /Not healthy: 2 warnings/ }));
+    const warnings = within(acacia).getByRole('dialog', { name: 'Warnings' });
+    expect(warnings).toHaveTextContent('Leaning');
+    expect(warnings).toHaveTextContent('In conflict with power lines');
+    // Dispatch is offered for the tree that is not healthy only.
+    expect(within(acacia).getByRole('button', { name: /Re-assign for Acacia/ })).toBeInTheDocument();
+    expect(within(narra).queryByRole('button', { name: /Dispatch|Re-assign/ })).not.toBeInTheDocument();
+  });
+
+  it('archives a tree with its reason, and puts it back from Archived', async () => {
+    supabaseMock.supabase.rpc.mockImplementation(async (name) =>
+      name === 'archived_trees'
+        ? { data: [{ id: 't1', species: 'Narra', barangay: 'Labuin', archive_reason: 'Cut under a permit — permit 14', archived_at: '2026-10-22T00:00:00Z' }], error: null }
+        : { data: null, error: null }
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Archive Narra' }));
+    const dialog = screen.getByRole('dialog', { name: 'Archive the tree' });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Archive it/ }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Choose why it is archived.');
+    fireEvent.click(within(dialog).getByLabelText('Cut under a permit'));
+    fireEvent.change(within(dialog).getByLabelText(/Note/), { target: { value: 'permit 14' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Archive it/ }));
+    expect(await screen.findByText(/Narra archived: Cut under a permit — permit 14/)).toBeInTheDocument();
+    expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('archive_tree', { p_id: 't1', p_archived: true, p_reason: 'Cut under a permit — permit 14' });
+    expect(screen.queryByRole('button', { name: 'Archive Narra' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+    const list = await screen.findByRole('region', { name: 'Archived trees' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Put back Narra' }));
+    await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('archive_tree', { p_id: 't1', p_archived: false, p_reason: null }));
+    expect(await screen.findByText('Narra is back in the inventory.')).toBeInTheDocument();
+  });
+
+  it('shows PGENRO the city or municipality, and no actions', async () => {
+    auth.profile = PGENRO_ADMIN;
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Santa Cruz/ }));
+    const table = await screen.findByRole('table', { name: 'Tree inventory' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(
+      ['Photo', 'Species', 'City / municipality', 'DBH', 'Total height', 'Health', 'Date recorded', 'Tagged by']
+    );
+    expect(within(table).queryByRole('button', { name: /Archive/ })).not.toBeInTheDocument();
   });
 });

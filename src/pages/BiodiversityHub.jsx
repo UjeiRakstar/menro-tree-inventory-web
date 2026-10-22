@@ -8,9 +8,15 @@ import { lguOfTree } from '../hooks/useAttention.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 
 const LGU_LABEL = new Map(MUNICIPALITY_LIST.map((item) => [item.psgc, item.label]));
-import { classifyPinColor } from '../lib/pinColor.js';
-import { X, Image, ArrowUpDown, MapPin, Download, Search, ChevronRight } from 'lucide-react';
+import { X, MapPin, Download, Search, ChevronRight, Archive, RotateCcw } from 'lucide-react';
 import { everyRow } from '../lib/everyRow.js';
+import { loadFieldOfficers } from '../lib/fieldTeam.js';
+import InventoryTable, { ArchiveTreeDialog } from '../components/trees/InventoryTable.jsx';
+
+/** A tree's barangay, for the Tree Database's "Where it is tagged". */
+const barangayOfTree = (tree) => tree.barangay;
+
+const DispatchModal = lazy(() => import('../components/DispatchModal.jsx'));
 
 // PGENRO's forester keeps the RISE write-ups; nobody else opens the tab, so
 // nobody else downloads it.
@@ -65,6 +71,63 @@ export default function BiodiversityHub() {
   const [sortField, setSortField] = useState('dateCaptured');
   const [sortDir, setSortDir] = useState('desc');
   const navigate = useNavigate();
+  // The office's field officers, for who tagged a tree and who it is assigned
+  // to (22 October); dispatching and archiving from the table.
+  const [team, setTeam] = useState({ people: new Map(), officers: new Map() });
+  const [dispatchTree, setDispatchTree] = useState(null);
+  const [archiveTree, setArchiveTree] = useState(null);
+  const [archived, setArchived] = useState(null);
+  const [archiveNotice, setArchiveNotice] = useState(null);
+
+  useEffect(() => {
+    if (officeLgu === undefined) return undefined;
+    let cancelled = false;
+    loadFieldOfficers(officeLgu).then(({ officers }) => {
+      if (cancelled) return;
+      setTeam({
+        people: new Map(officers.map((o) => [o.id, o.name])),
+        officers: new Map(officers.map((o) => [String(o.email).toLowerCase(), o.name])),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [officeLgu]);
+
+  /** Archive a tree with its reason (tree_records.sql); returns what went wrong, or null. */
+  async function archiveOne(tree, reason) {
+    const { error } = await supabase.rpc('archive_tree', { p_id: String(tree.id), p_archived: true, p_reason: reason });
+    if (error) {
+      return /archive_tree|Could not find the function/i.test(error.message ?? '')
+        ? 'Archiving needs supabase/tree_records.sql to be run (step 33).'
+        : error.message;
+    }
+    setTrees((current) => current.filter((t) => t.id !== tree.id));
+    setArchiveTree(null);
+    setArchived(null);
+    setArchiveNotice(`${tree.species || 'The tree'} archived: ${reason}. It is under Archived, to put back if need be.`);
+    return null;
+  }
+
+  async function showArchived() {
+    if (archived) {
+      setArchived(null);
+      return;
+    }
+    const { data, error } = await supabase.rpc('archived_trees');
+    setArchived(error ? { error: /archived_trees|Could not find the function/i.test(error.message ?? '') ? 'Archiving needs supabase/tree_records.sql to be run (step 33).' : error.message, rows: [] } : { rows: Array.isArray(data) ? data : [] });
+  }
+
+  async function restore(tree) {
+    const { error } = await supabase.rpc('archive_tree', { p_id: String(tree.id), p_archived: false, p_reason: null });
+    if (error) {
+      setArchiveNotice(error.message);
+      return;
+    }
+    setArchived((current) => ({ ...current, rows: current.rows.filter((t) => t.id !== tree.id) }));
+    setTrees((current) => [{ ...tree, archived_at: null, archive_reason: null }, ...current]);
+    setArchiveNotice(`${tree.species || 'The tree'} is back in the inventory.`);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -108,7 +171,7 @@ export default function BiodiversityHub() {
     result.sort((a, b) => {
       let aVal = a[sortField] ?? '';
       let bVal = b[sortField] ?? '';
-      if (sortField === 'dbh') { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0; }
+      if (sortField === 'dbh' || sortField === 'total_height') { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0; }
       else { aVal = String(aVal).toLowerCase(); bVal = String(bVal).toLowerCase(); }
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
@@ -155,53 +218,17 @@ export default function BiodiversityHub() {
 
   /** The trees as a table: the office's, or one city or municipality's. */
   const renderTable = (rows) => (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Photo</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('tree_id')}>Tree ID</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('species')}>Species</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('dbh')}>DBH</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">MH</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">TH</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Coordinates</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Category</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Stem Quality</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 cursor-pointer" onClick={() => handleSort('dateCaptured')}>Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {rows.map((tree) => {
-                    const photoUrl = tree.photo_url || tree.imageUrl;
-                    return (
-                      <tr key={tree.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTree(tree)}>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          {photoUrl ? (
-                            <img src={photoUrl} alt={tree.species} onClick={() => setLightboxUrl(photoUrl)}
-                              className="w-9 h-9 object-cover rounded cursor-pointer hover:ring-2 hover:ring-green-500"
-                              onError={(e) => { e.target.style.display = 'none'; }} />
-                          ) : (
-                            <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center"><Image size={12} className="text-slate-400" /></div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-sm font-medium text-slate-900">{tree.tree_id || '—'}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.species}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.dbh}</td>
-                        <td className="px-3 py-2 text-sm text-slate-500">{tree.merchantable_height || tree.height_m || '—'}</td>
-                        <td className="px-3 py-2 text-sm text-slate-500">{tree.total_height || tree.heightClass || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">
-                          {tree.latitude && tree.longitude ? `${Number(tree.latitude).toFixed(4)}, ${Number(tree.longitude).toFixed(4)}` : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.tree_category || '—'}</td>
-                        <td className="px-3 py-2 text-sm text-slate-700">{tree.stem_quality || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">{tree.dateCaptured ? new Date(tree.dateCaptured).toLocaleDateString() : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+    <InventoryTable
+      rows={rows}
+      province={province}
+      people={team.people}
+      officers={team.officers}
+      onOpen={setSelectedTree}
+      onPhoto={setLightboxUrl}
+      onSort={handleSort}
+      onDispatch={setDispatchTree}
+      onArchive={setArchiveTree}
+    />
   );
 
   return (
@@ -246,16 +273,53 @@ export default function BiodiversityHub() {
           {activeTab === 'species' && <SpeciesLibrary trees={trees} />}
           {activeTab === 'requests' && <PlantingRequests decides />}
           {activeTab === 'tags' && <PendingTreesTable />}
-          {activeTab === 'database' && <TreeDatabase trees={trees} place={lgu?.label ?? 'this LGU'} />}
+          {activeTab === 'database' && (
+            <TreeDatabase trees={trees} place={lgu?.label ?? 'this LGU'} placeOf={barangayOfTree} placesLabel="Where it is tagged, by barangay" />
+          )}
         </Suspense>
       ) : (
         <>
-          {/* Search */}
-          <div className="relative max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search species, ID, barangay…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
+          {/* Search, and an office's archived trees */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search species, ID, barangay…"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20" />
+            </div>
+            {!province && (
+              <button type="button" onClick={showArchived} aria-pressed={Boolean(archived)}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">
+                <Archive size={14} aria-hidden="true" /> {archived ? 'Hide archived' : 'Archived'}
+              </button>
+            )}
           </div>
+          {archiveNotice && <p role="status" className="text-sm text-green-800">{archiveNotice}</p>}
+          {archived && (
+            <section aria-label="Archived trees" className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <h2 className="text-sm font-semibold text-slate-800">Archived trees</h2>
+              {archived.error ? (
+                <p role="alert" className="mt-1 text-sm text-red-700">{archived.error}</p>
+              ) : archived.rows.length === 0 ? (
+                <p className="mt-1 text-sm text-slate-500">None archived.</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-slate-200">
+                  {archived.rows.map((tree) => (
+                    <li key={tree.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                      <span>
+                        <span className="font-medium text-slate-900">{tree.species || '—'}</span>
+                        <span className="text-slate-500"> · {tree.barangay || '—'} · {tree.archive_reason}</span>
+                        <span className="block text-xs text-slate-400">Archived {new Date(tree.archived_at).toLocaleDateString()}</span>
+                      </span>
+                      <button type="button" onClick={() => restore(tree)} aria-label={`Put back ${tree.species || 'this tree'}`}
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-300 hover:bg-green-50">
+                        <RotateCcw size={11} aria-hidden="true" /> Put back
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {/* Inventory Table: the province's by city or municipality (21 October). */}
           {province ? (
@@ -285,6 +349,20 @@ export default function BiodiversityHub() {
           )}
         </>
       )}
+
+      {/* Dispatch, as on the Action Board; archiving with a reason */}
+      {dispatchTree && (
+        <Suspense fallback={null}>
+          <DispatchModal
+            tree={dispatchTree}
+            onClose={() => setDispatchTree(null)}
+            onDispatched={(email) => {
+              setTrees((current) => current.map((t) => (t.id === dispatchTree.id ? { ...t, assigned_to: email } : t)));
+            }}
+          />
+        </Suspense>
+      )}
+      {archiveTree && <ArchiveTreeDialog tree={archiveTree} onCancel={() => setArchiveTree(null)} onArchive={archiveOne} />}
 
       {/* Lightbox */}
       {lightboxUrl && (

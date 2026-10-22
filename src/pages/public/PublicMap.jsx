@@ -458,9 +458,18 @@ function MunicipalityLayer({
  * Without `onTagAttempt` — the LGU map, whose staff tag from the field app —
  * it is only the dot.
  */
-function UserLocationMarker({ onTagAttempt = null }) {
+function UserLocationMarker({ onTagAttempt = null, autoStart = false, onAutoStarted = null }) {
   const [position, setPosition] = useState(null);
   const [accuracy, setAccuracy] = useState(0);
+  // Arrived to tag (/public-map?tag=1, from the Community page): the tag starts
+  // at the first fix, as if the dot were tapped.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || started.current || !position || !onTagAttempt) return;
+    started.current = true;
+    onTagAttempt(position);
+    onAutoStarted?.();
+  }, [autoStart, position, onTagAttempt, onAutoStarted]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -1093,6 +1102,8 @@ export function TreeMap({
   const [showTaggingForm, setShowTaggingForm] = useState(false);
   const [userTagPosition, setUserTagPosition] = useState(null);
   const isMobileView = useIsMobileView();
+  // /public-map?tag=1 — from the Community page's Tag a tree, or after joining.
+  const tagOnArrival = !admin && searchParams.get('tag') === '1';
   // Which side opened most recently, so a window narrowed to phone width with
   // both panels open keeps the one the visitor reached for last.
   const lastPanelSide = useRef(null);
@@ -2221,7 +2232,13 @@ export function TreeMap({
 
         {/* The visitor's blue dot, and tagging from it, are for residents. The
             office map has no "where am I": it flies to the office's hall. */}
-        {!admin && <UserLocationMarker onTagAttempt={handleTagAttempt} />}
+        {!admin && (
+          <UserLocationMarker
+            onTagAttempt={handleTagAttempt}
+            autoStart={tagOnArrival}
+            onAutoStarted={() => setSearchParams({}, { replace: true })}
+          />
+        )}
 
         {admin && hall && (
           <Marker

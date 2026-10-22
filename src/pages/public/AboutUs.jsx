@@ -589,7 +589,7 @@ export default function AboutUs() {
               <FadeIn delay={400} direction="up">
                 <div className="mt-12 flex justify-center lg:justify-start">
                   <Link 
-                    to="/public-map" 
+                    to="/community" 
                     className="inline-flex items-center gap-3 bg-gradient-to-r from-green-700 to-green-600 
                                text-white px-8 py-4 rounded-xl font-bold text-lg 
                                hover:from-green-800 hover:to-green-700 hover:shadow-xl hover:-translate-y-1 

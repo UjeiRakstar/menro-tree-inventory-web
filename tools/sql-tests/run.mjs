@@ -34,6 +34,7 @@ const SUITES = [
   ['replies to the public', 'replies.mjs'],
   ['data requests', 'data-requests.mjs'],
   ['the satellite snapshots', 'satellite.mjs'],
+  ['who captured a tree, and archiving one', 'trees.mjs'],
 ];
 
 let failed = 0;

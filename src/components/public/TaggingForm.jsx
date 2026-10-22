@@ -505,6 +505,11 @@ export default function TaggingForm({ onClose, onSuccess, initialPosition, nearb
 
           <CountedFor />
 
+          <p className="text-xs text-slate-500">
+            By sending a tag you agree to the <a href="/terms.html" target="_blank" rel="noreferrer" className="font-semibold text-green-800 underline">Terms of Use</a>: a tree you have seen, with your own
+            photos, checked by a field officer before it is shown.
+          </p>
+
           {/* Submit */}
           <button
             type="submit"

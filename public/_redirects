@@ -1,0 +1,3 @@
+# Netlify: every address is the app (a single-page app); real files such as
+# /privacy.html and /terms.html are served first.
+/*    /index.html   200

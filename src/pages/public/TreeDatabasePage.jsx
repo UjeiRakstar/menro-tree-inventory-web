@@ -3,9 +3,10 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { selectPublicTrees } from '../../lib/treeColumns.js';
 import TreeDatabase from '../../components/TreeDatabase.jsx';
+import { lguLabelOfTree } from '../../lib/treeRows.js';
 
-/** Only what the list needs of a tree: its species. */
-const COLUMNS = 'id,species,scientific_name';
+/** Only what the list needs of a tree: its species, and its barangay's code for its LGU. */
+const COLUMNS = 'id,species,scientific_name,barangay_psgc';
 
 /**
  * The public Tree Database (22 October): every species tagged in Laguna, with
@@ -50,7 +51,7 @@ export default function TreeDatabasePage() {
           ) : failed ? (
             <p role="alert" className="text-sm text-red-700">The tagged trees could not be loaded. Try again in a moment.</p>
           ) : (
-            <TreeDatabase trees={trees} place="Laguna" bare />
+            <TreeDatabase trees={trees} place="Laguna" bare placeOf={lguLabelOfTree} placesLabel="Where it is tagged, by city and municipality" />
           )}
         </div>
       </div>

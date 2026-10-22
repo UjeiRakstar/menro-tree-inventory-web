@@ -1,0 +1,9 @@
+# Apache (e.g. the province's own server): every address that is not a real
+# file or folder is the app (a single-page app).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
