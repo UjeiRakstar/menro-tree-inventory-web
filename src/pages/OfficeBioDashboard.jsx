@@ -19,8 +19,8 @@ import PendingTreesTable from '../components/admin/PendingTreesTable.jsx';
  *   PGENRO         the province — the summary that was its Action Board's
  *                  overview, with the seals to narrow both to one LGU
  *
- * Community tags waiting for a field check are a tab of their own: the
- * office verifies them there; PGENRO reads them.
+ * Community tags waiting for a field check are a tab of their own for
+ * PGENRO, which reads them. An office verifies its own on Trees (22 October).
  */
 export default function OfficeBioDashboard() {
   const { profile } = useAuth();
@@ -88,6 +88,7 @@ export default function OfficeBioDashboard() {
   return (
     // The shell pads its pages; the dashboard brings its own full-width padding.
     <div className="-m-6">
+      {pgenro && (
       <div role="tablist" aria-label="BioDashboard views" className="flex gap-2 border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
         {[
           ['dashboard', 'BioDashboard'],
@@ -107,7 +108,8 @@ export default function OfficeBioDashboard() {
           </button>
         ))}
       </div>
-      {tab === 'tags' ? (
+      )}
+      {pgenro && tab === 'tags' ? (
         <div className="p-6">
           <PendingTreesTable readOnly={!actsOnTags} />
         </div>

@@ -5,16 +5,12 @@ import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
 import { lguOfTree } from '../hooks/useAttention.js';
-import { annualCo2Kg } from '../lib/treeCarbon.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 
 const LGU_LABEL = new Map(MUNICIPALITY_LIST.map((item) => [item.psgc, item.label]));
 import { classifyPinColor } from '../lib/pinColor.js';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { X, Image, ArrowUpDown, MapPin, Download, Search, ChevronRight } from 'lucide-react';
 import { everyRow } from '../lib/everyRow.js';
-
-const PIE_COLORS = ['#16a34a', '#dc2626', '#f97316', '#eab308', '#06b6d4'];
 
 // PGENRO's forester keeps the RISE write-ups; nobody else opens the tab, so
 // nobody else downloads it.
@@ -22,6 +18,31 @@ const SpeciesLibrary = lazy(() => import('../components/pgenro/SpeciesLibrary.js
 // PGENRO decides the planting site requests here (22 October; they were on
 // its Action Board).
 const PlantingRequests = lazy(() => import('../components/PlantingRequests.jsx'));
+// An office's tags to check, and its Tree Database (22 October): the tags
+// moved here from its BioDashboard.
+const PendingTreesTable = lazy(() => import('../components/admin/PendingTreesTable.jsx'));
+const TreeDatabase = lazy(() => import('../components/TreeDatabase.jsx'));
+
+/**
+ * The tabs of Trees. The carbon and biodiversity charts that were here are
+ * on the BioDashboard (22 October).
+ *   PGENRO         the inventory, the planting site requests to decide, and
+ *                  the RISE species library it keeps
+ *   MENRO / CENRO  the inventory, the tags to check, and the Tree Database:
+ *                  its own species, with PGENRO's write-ups, read-only
+ */
+const TABS = {
+  pgenro: [
+    ['inventory', '🌳 Inventory'],
+    ['requests', '🌱 Planting site requests'],
+    ['species', '📘 Species (RISE)'],
+  ],
+  office: [
+    ['inventory', '🌳 Inventory'],
+    ['tags', '🏷️ Tags'],
+    ['database', '📚 Tree Database'],
+  ],
+};
 
 export default function BiodiversityHub() {
   const { profile, lgu } = useAuth();
@@ -29,12 +50,15 @@ export default function BiodiversityHub() {
   const officeLgu = officeLguOf(profile);
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
-  // ?tab=requests opens PGENRO's planting site requests (the header links there).
+  // ?tab=… opens a tab: PGENRO's requests, an office's tags, and so on.
+  const tabs = forester ? TABS.pgenro : TABS.office;
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => (forester && searchParams.get('tab') === 'requests' ? 'requests' : 'inventory'));
+  const askedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(() => (tabs.some(([id]) => id === askedTab) ? askedTab : 'inventory'));
   useEffect(() => {
-    if (forester && searchParams.get('tab') === 'requests') setActiveTab('requests');
-  }, [forester, searchParams]);
+    if (tabs.some(([id]) => id === askedTab)) setActiveTab(askedTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askedTab, forester]);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [search, setSearch] = useState('');
@@ -53,7 +77,21 @@ export default function BiodiversityHub() {
       setLoading(false);
     }
     fetch();
-    return () => { cancelled = true; };
+    // A tree tagged while the page is open comes on it, and its species on
+    // the Tree Database, as it comes on the map (supabase/live_updates.sql).
+    let timer = null;
+    const channel = supabase
+      .channel('trees-page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trees' }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(fetch, 1500);
+      })
+      .subscribe();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      supabase.removeChannel?.(channel);
+    };
   }, [officeLgu]);
 
   // Filtered & sorted trees for inventory tab
@@ -83,40 +121,6 @@ export default function BiodiversityHub() {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
   }
-
-  // Analytics data
-  const endemicCount = trees.filter(t => (t.biodiversity_status || t.species_type) === 'Endemic').length;
-  const invasiveCount = trees.filter(t => (t.biodiversity_status || t.species_type) === 'Invasive').length;
-  const fruitCount = trees.filter(t => t.tree_category === 'Fruit Trees').length;
-  const timberCount = trees.filter(t => t.tree_category === 'Timber Trees').length;
-  const ornamentalCount = trees.filter(t => t.tree_category === 'Ornamental Trees').length;
-
-  const biodiversityPie = [
-    { name: 'Endemic', value: endemicCount },
-    { name: 'Invasive', value: invasiveCount },
-  ].filter(d => d.value > 0);
-
-  const categoryPie = [
-    { name: 'Fruit Trees', value: fruitCount },
-    { name: 'Timber Trees', value: timberCount },
-    { name: 'Ornamental Trees', value: ornamentalCount },
-  ].filter(d => d.value > 0);
-
-  // Each barangay the trees stand in, and the CO₂ they take up a year (Chave
-  // et al. 2014, treeCarbon.js). It used to be Santa Cruz's barangays for any
-  // office, at a flat 62.47 kg a tree.
-  const barangayData = [...trees.reduce((places, t) => {
-    const name = String(t.barangay ?? '').trim();
-    if (!name) return places;
-    const row = places.get(name) ?? { name, trees: 0, sequestration: 0 };
-    row.trees += 1;
-    row.sequestration += annualCo2Kg(t) ?? 0;
-    places.set(name, row);
-    return places;
-  }, new Map()).values()]
-    .map((row) => ({ ...row, sequestration: Math.round(row.sequestration * 10) / 10 }))
-    .sort((a, b) => b.trees - a.trees)
-    .slice(0, 30);
 
   // The province sees every LGU's trees: grouped by the LGU each stands in.
   const province = officeLgu === undefined;
@@ -208,7 +212,7 @@ export default function BiodiversityHub() {
           <p className="mt-1 text-slate-600 text-sm">
             {forester
               ? 'Tree inventory, the planting site requests to decide, and the species library.'
-              : 'Tree inventory, carbon sink analytics, and DENR reporting.'}
+              : 'Tree inventory, the tags to check, and the Tree Database of the species tagged here.'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -228,40 +232,23 @@ export default function BiodiversityHub() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-2 border-b border-slate-200">
-        <button onClick={() => setActiveTab('inventory')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'inventory' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          🌳 Inventory
-        </button>
-        {/* PGENRO's carbon and biodiversity are on its BioDashboard (22 October). */}
-        {forester ? (
-          <button onClick={() => setActiveTab('requests')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'requests' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            🌱 Planting site requests
+      <div role="tablist" aria-label="Trees views" className="flex gap-2 border-b border-slate-200">
+        {tabs.map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={activeTab === id} onClick={() => setActiveTab(id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === id ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            {label}
           </button>
-        ) : (
-          <button onClick={() => setActiveTab('analytics')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'analytics' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            📊 Carbon Sink & Biodiversity
-          </button>
-        )}
-        {forester && (
-          <button onClick={() => setActiveTab('species')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'species' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            📘 Species (RISE)
-          </button>
-        )}
+        ))}
       </div>
 
-      {activeTab === 'species' && forester ? (
-        <Suspense fallback={<p className="text-sm text-slate-500">Loading species…</p>}>
-          <SpeciesLibrary trees={trees} />
+      {activeTab !== 'inventory' ? (
+        <Suspense fallback={<p className="text-sm text-slate-500">Loading…</p>}>
+          {activeTab === 'species' && <SpeciesLibrary trees={trees} />}
+          {activeTab === 'requests' && <PlantingRequests decides />}
+          {activeTab === 'tags' && <PendingTreesTable />}
+          {activeTab === 'database' && <TreeDatabase trees={trees} place={lgu?.label ?? 'this LGU'} />}
         </Suspense>
-      ) : activeTab === 'requests' && forester ? (
-        <Suspense fallback={<p className="text-sm text-slate-500">Loading the requests…</p>}>
-          <PlantingRequests decides />
-        </Suspense>
-      ) : activeTab === 'inventory' || forester ? (
+      ) : (
         <>
           {/* Search */}
           <div className="relative max-w-sm">
@@ -297,56 +284,6 @@ export default function BiodiversityHub() {
             </section>
           )}
         </>
-      ) : (
-        /* Analytics Tab */
-        <div className="space-y-6">
-          {/* Pie Charts Row */}
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">Endemic vs. Invasive</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={biodiversityPie} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                    {biodiversityPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">Tree Category Breakdown</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie data={categoryPie} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                    {categoryPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i + 2]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Bar Chart */}
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">CO₂ Taken Up a Year, by Barangay</h3>
-            {barangayData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={barangayData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} label={{ value: 'kg CO₂', angle: -90, position: 'insideLeft' }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} label={{ value: 'Trees', angle: 90, position: 'insideRight' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar yAxisId="left" dataKey="sequestration" fill="#16a34a" name="CO₂ taken up a year (kg)" radius={[4, 4, 0, 0]} />
-                  <Bar yAxisId="right" dataKey="trees" fill="#06b6d4" name="Number of Trees" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-sm text-slate-500">No barangay data available. Assign barangays to trees to see this chart.</p>
-            )}
-          </div>
-        </div>
       )}
 
       {/* Lightbox */}

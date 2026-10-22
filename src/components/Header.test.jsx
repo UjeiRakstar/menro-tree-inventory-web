@@ -66,7 +66,9 @@ describe('Header', () => {
     expect(screen.queryByRole('link', { name: /Field officers/ })).not.toBeInTheDocument();
     openMenu();
     expect(screen.getByRole('link', { name: /Field officers/ })).toHaveAttribute('href', '/arborists');
-    expect(screen.getByRole('link', { name: /Permit logs/ })).toHaveAttribute('href', '/permits');
+    // The permit logs and planting site requests are Action Board tabs (22 October).
+    expect(screen.queryByRole('link', { name: /Permit logs/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Planting site requests/ })).not.toBeInTheDocument();
   });
 
   it('signs the admin out and sends them to the login page', async () => {

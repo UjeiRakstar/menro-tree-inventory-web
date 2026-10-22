@@ -152,11 +152,10 @@ describe('the BioDashboard of a MENRO / CENRO', () => {
     await waitFor(() => expect(supabaseMock.writesTo('pending_trees', 'delete')).toHaveLength(1));
   });
 
-  it('keeps the community tags to verify in a tab of their own', async () => {
+  it('leaves the community tags to Trees, where the office verifies them (22 October)', async () => {
     show(SANTA_CRUZ);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Tags · 1 to review' }));
-    expect(await screen.findByText('Duhat')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Verify/ })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'What needs action' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Tags/ })).not.toBeInTheDocument();
   });
 });
 

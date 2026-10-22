@@ -13,10 +13,6 @@ import PermitsLog from './PermitsLog.jsx';
 import PlantingRequests from '../components/PlantingRequests.jsx';
 import { everyRow } from '../lib/everyRow.js';
 
-// Inline wrapper so PermitsLog renders as a tab without its own page heading
-function PermitsLogTab({ lgu }) {
-  return <PermitsLog lgu={lgu} />;
-}
 
 // PGENRO's own board: only PGENRO downloads it.
 const ProvinceBoard = lazy(() => import('./pgenro/ProvinceBoard.jsx'));
@@ -38,18 +34,22 @@ export default function ActionBoard() {
   return <OfficeBoard lgu={officeLguOf(profile)} />;
 }
 
+const OFFICE_TABS = ['hazards', 'walkins', 'permits', 'requests'];
+
 /** One office's board: its own LGU's hazards and permits only. */
 function OfficeBoard({ lgu }) {
   const navigate = useNavigate();
   const [status, setStatus] = useState('loading');
   const [trees, setTrees] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  // ?tab=requests opens the planting site requests (the header's menu links there).
+  // ?tab=… opens a tab: the permit logs (/permits sends an office here, 22
+  // October), the planting site requests, and so on.
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => (searchParams.get('tab') === 'requests' ? 'requests' : 'hazards'));
+  const askedTab = OFFICE_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : null;
+  const [activeTab, setActiveTab] = useState(() => askedTab ?? 'hazards');
   useEffect(() => {
-    if (searchParams.get('tab') === 'requests') setActiveTab('requests');
-  }, [searchParams]);
+    if (askedTab) setActiveTab(askedTab);
+  }, [askedTab]);
   const [dispatchTree, setDispatchTree] = useState(null);
   const [permitModalOpen, setPermitModalOpen] = useState(false);
   const [selectedPermitTree, setSelectedPermitTree] = useState(null);
@@ -139,7 +139,7 @@ function OfficeBoard({ lgu }) {
       ) : activeTab === 'requests' ? (
         <PlantingRequests />
       ) : (
-        <PermitsLogTab lgu={lgu} />
+        <PermitsLog lgu={lgu} embedded />
       )}
 
       {/* Dispatch Modal */}

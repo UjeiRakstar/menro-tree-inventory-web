@@ -9,7 +9,7 @@ import TrainingBanner from './components/TrainingBanner.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import { ROLES, accessFor, isPgenro, needsOnboarding, officeLguOf, roleOf } from './lib/roles.js';
+import { ROLES, accessFor, isPgenro, needsOnboarding, roleOf } from './lib/roles.js';
 
 /**
  * Every page but the landing one is fetched when it is first opened.
@@ -33,7 +33,6 @@ const ActionBoard = lazy(() => import('./pages/ActionBoard.jsx'));
 const MapSheet = lazy(() => import('./pages/MapSheet.jsx'));
 const Settings = lazy(() => import('./pages/settings/Settings.jsx'));
 const ManageArborists = lazy(() => import('./pages/ManageArborists.jsx'));
-const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
 const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
 const Inbox = lazy(() => import('./pages/Inbox.jsx'));
 const NewsPage = lazy(() => import('./pages/pgenro/NewsPage.jsx'));
@@ -60,12 +59,6 @@ function PageLoading() {
  * is how the BioDashboard opened on its own footer with the charts above the
  * fold.
  */
-/** The permit log, narrowed to the signed-in office's own LGU. */
-function OwnPermitsLog() {
-  const { profile } = useAuth();
-  return <PermitsLog lgu={officeLguOf(profile)} />;
-}
-
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -266,7 +259,7 @@ function AppRoutes() {
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
         <Route path="arborists" element={<OnPgenroBoard tab="officers"><ManageArborists /></OnPgenroBoard>} />
-        <Route path="permits" element={<OnPgenroBoard tab="permits"><OwnPermitsLog /></OnPgenroBoard>} />
+        <Route path="permits" element={<Navigate to="/action-board?tab=permits" replace />} />
         <Route path="biodiversity-dashboard" element={<OfficeBioDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Route>

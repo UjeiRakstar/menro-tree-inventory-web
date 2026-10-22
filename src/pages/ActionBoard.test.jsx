@@ -314,3 +314,26 @@ describe('ActionBoard', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('the office’s permit logs (22 October)', () => {
+  beforeEach(() => {
+    supabaseMock.reset();
+    loadTrees([]);
+    supabaseMock.setResponse('permits:select', {
+      data: [{ id: 'p1', lgu_psgc: 403426000, client_name: 'Maria Santos', created_at: '2026-10-01T08:00:00Z' }],
+      error: null,
+    });
+  });
+  afterEach(cleanup);
+
+  it('are the permits page itself, a tab of the board, opened from ?tab=permits', async () => {
+    render(
+      <MemoryRouter initialEntries={['/action-board?tab=permits']}>
+        <ActionBoard />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('heading', { level: 2, name: 'Permit Logs' })).toBeInTheDocument();
+    expect(await screen.findByText('Maria Santos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Report/ })).toBeInTheDocument();
+  });
+});

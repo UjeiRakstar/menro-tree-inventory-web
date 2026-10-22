@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, Sprout, Users } from 'lucide-react';
+import { ChevronDown, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -13,9 +13,10 @@ import santaCruzLogo from '../assets/Santa Cruz Logo.png';
 /**
  * The four places an office goes every day, in the order of the mockup.
  *
- * "Trees" is the inventory list. An office reaches its field officers and
- * permit log from its seal on the right: they are visited, not lived in, and
- * four tabs read faster than seven. PGENRO's field officers, accounts, permit
+ * "Trees" is the inventory list. An office reaches its field officers from
+ * its seal on the right: they are visited, not lived in, and four tabs read
+ * faster than seven. Its permit logs and planting site requests are tabs of
+ * its Action Board (22 October). PGENRO's field officers, accounts, permit
  * logs and climate plans are tabs of its Action Board, and its planting site
  * requests are on Trees (22 October).
  */
@@ -130,25 +131,30 @@ export default function Header() {
         },
       }
     : {
+        // An office's planting site requests and permit logs are tabs of its
+        // Action Board (22 October): a declined request is marked there too.
         board: {
-          count: attention.actions,
-          label: `${attention.actions} ${attention.actions === 1 ? 'hazard needs' : 'hazards need'} dispatching`,
+          count: attention.actions + attention.requests,
+          label: [
+            attention.actions > 0 && `${attention.actions} ${attention.actions === 1 ? 'hazard needs' : 'hazards need'} dispatching`,
+            attention.requests > 0 &&
+              `${attention.requests} planting site ${attention.requests === 1 ? 'request was' : 'requests were'} declined`,
+          ]
+            .filter(Boolean)
+            .join('; '),
         },
         trees: { count: 0, label: '' },
       };
 
   // The seal's "!" is everything waiting on this office's say-so that its
   // menu opens. PGENRO's officers, plans and requests are on the tabs.
-  const waiting = pgenro ? attention.inbox : attention.approvals + attention.proposals + attention.requests + attention.inbox;
+  const waiting = pgenro ? attention.inbox : attention.approvals + attention.proposals + attention.inbox;
   const waitingLabel = [
     !pgenro &&
       attention.approvals > 0 &&
       `${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`,
     attention.proposals > 0 &&
       `${attention.proposals} PGENRO ${attention.proposals === 1 ? 'proposal is' : 'proposals are'} waiting for a decision`,
-    !pgenro &&
-      attention.requests > 0 &&
-      `${attention.requests} planting site ${attention.requests === 1 ? 'request was' : 'requests were'} declined`,
     attention.inbox > 0 && `${attention.inbox} unread ${attention.inbox === 1 ? 'message' : 'messages'} in the inbox`,
   ]
     .filter(Boolean)
@@ -292,19 +298,6 @@ export default function Header() {
                     <MapPinned size={16} aria-hidden="true" className="text-slate-500" />
                     <span className="flex-1">Proposals from PGENRO</span>
                     <MenuAlert label={`${attention.proposals} to decide`} />
-                  </NavLink>
-                )}
-                {lguAdmin && (
-                  <NavLink to="/action-board?tab=requests" className={menuItem}>
-                    <Sprout size={16} aria-hidden="true" className="text-slate-500" />
-                    <span className="flex-1">Planting site requests</span>
-                    {attention.requests > 0 && <MenuAlert label={`${attention.requests} declined`} />}
-                  </NavLink>
-                )}
-                {!pgenro && (
-                  <NavLink to="/permits" className={menuItem}>
-                    <FileText size={16} aria-hidden="true" className="text-slate-500" />
-                    Permit logs
                   </NavLink>
                 )}
                 {(pgenro || (lguAdmin && !profile?.is_training)) && (
