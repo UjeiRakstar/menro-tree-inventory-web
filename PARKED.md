@@ -245,8 +245,13 @@ can do everything. The RISE details on the public tree panel, more of them.
 
 ## Needs you — and only you
 
-- **The tree at 0,0.** You decided to delete it. `supabase/delete_unplaceable_tree.sql`
-  (id `663077f0-9961-48a8-95fe-9e3304f61e01`). Not yet run.
+- ~~The tree at 0,0.~~ Gone: the health check reads 0 trees at 0,0 (22 October).
+- **Tags placed by their written names (found 22 October).** Two field-app
+  community tags in Pakil, Brgy. Burgos, carried guessed barangay names
+  ("Barangay III", "Alipit") and no municipality, so no office got them
+  (fixed by hand). A real one would sit unseen the same way: the app should
+  send the LGU and barangay from the coordinates, or the database route by
+  them when the names do not match.
 - **`supabase/drop_trees_backup.sql`.** Look at section 1, then uncomment the
   drop. Nothing in either repo reads that table.
 - ~~Two decisions left hanging.~~ Answered 18 October: carbon stays in the
