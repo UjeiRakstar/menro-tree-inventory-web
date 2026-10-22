@@ -290,8 +290,10 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
 4. `supabase/tag_routing.sql` — then **open the field app's task list** and
    check a dispatched tag still shows
 5. `supabase/training_sandbox.sql` — the wall between training and real data
-6. `supabase/training_seed.sql` — the dummy Siniloan data (run again any time
-   to reset it; `node tools/make-training-seed.mjs` regenerates it)
+6. `supabase/training_seed.sql`, then `training_seed_2.sql` and
+   `training_seed_3.sql` — the dummy training data, in three parts run in
+   that order (run them again any time to reset it;
+   `node tools/make-training-seed.mjs` regenerates them)
 
 7. `supabase/species_rise.sql` — the RISE fields on species profiles (any
    time; nothing else depends on it)
@@ -485,6 +487,16 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     /training/practice-document.html, never a real document. Run
     training_seed.sql again for them, and training_purge.sql's new version
     when the batch is done.
+    **The seed is now in three parts.** At 1.18 MB the SQL editor refused it
+    ("Query is too large to be run via the SQL Editor"), so it is
+    `training_seed.sql`, `training_seed_2.sql` and `training_seed_3.sql`,
+    about 400 KB each. Run them in that order, each in a new SQL editor tab.
+    Only the first clears the old training rows. Each part ends with its own
+    check: the first row says which part comes next. A part run out of turn
+    stops before changing anything and says which part to run first. Each
+    part also pauses and restarts the activity log itself, so stopping between
+    two parts leaves nothing switched off. (psql with the database connection
+    string runs them too, in the same order.)
 36. **Bamboo stands, 22 October** — run `supabase/bamboo_stands.sql`. The
     drawing tool has "Bamboo stand" beside NAMRIA's twelve classes, and the
     area form suggests it when three or more of the points inside — at least

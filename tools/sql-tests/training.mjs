@@ -1,7 +1,7 @@
 // The training wall, in real Postgres: every SQL file in the order the live
 // database got them, then training_sandbox.sql, the seed and the purge, and
 // what each account can and cannot see and do.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const SQL = (file) => readFileSync(new URL(`../../supabase/${file}`, import.meta.url), 'utf8');
@@ -18,6 +18,16 @@ async function asEditor(text) {
   await db.exec(text.slice(0, cut));
   await db.exec('discard temp');
   return db.exec(text.slice(cut));
+}
+// The training seed comes in parts — the SQL editor refuses a query of about
+// a megabyte — run one after another: training_seed.sql, training_seed_2.sql, …
+const SEED_PARTS = readdirSync(new URL('../../supabase/', import.meta.url))
+  .filter((file) => /^training_seed(_\d+)?\.sql$/.test(file))
+  .sort((a, b) => Number(a.match(/_(\d+)\.sql$/)?.[1] ?? 1) - Number(b.match(/_(\d+)\.sql$/)?.[1] ?? 1));
+async function seedAll() {
+  const outs = [];
+  for (const file of SEED_PARTS) outs.push(await asEditor(SQL(file)));
+  return outs;
 }
 const results = [];
 const check = (name, ok, detail = '') => {
@@ -158,15 +168,28 @@ const count = async (sql, params) => Number((await one(sql, params)).n);
 // Every town's mock trees (22 October): how many, from the seed's own header.
 const SEEDED = Number(SQL('training_seed.sql').match(/--\s+(\d+) trees across/)[1]);
 const realLogBefore = await count(`select count(*) n from public.activity_log where not is_training`);
-const seedOut = await asEditor(SQL('training_seed.sql'));
-const seedRows = seedOut[seedOut.length - 1].rows;
+const sizes = SEED_PARTS.map((file) => `${file} ${Math.round(Buffer.byteLength(SQL(file)) / 1000)} KB`);
+check('the seed is in parts the SQL editor takes (each well under a megabyte)',
+  SEED_PARTS.length > 1 && SEED_PARTS[0] === 'training_seed.sql' &&
+  SEED_PARTS.every((file) => Buffer.byteLength(SQL(file)) < 600_000), sizes.join(', '));
+const seedOuts = await seedAll();
+const partRows = seedOuts.map((out) => out[out.length - 1].rows);
+check('…every part ends with its own check, all of it true',
+  partRows.every((rows, i) => rows[0].check === `part ${i + 1} of ${SEED_PARTS.length}` && rows.every((r) => r.ok !== false)),
+  partRows.flatMap((rows) => rows.filter((r) => r.ok === false).map((r) => `${r.check}=${r.detail}`)).join('; '));
+const seedRows = partRows[partRows.length - 1];
 check('the seed runs and every count matches', seedRows.filter((r) => r.ok === false).length === 0,
   seedRows.map((r) => `${r.check}=${r.ok} (${r.detail})`).join('; '));
 check('…and says which keys had no column', seedRows.some((r) => /left out of trees/.test(r.check) && /height_class/.test(r.detail)),
   seedRows.filter((r) => r.ok === null).map((r) => `${r.check}: ${r.detail}`).join('; '));
 check('seeding writes nothing to the real activity log',
   (await count(`select count(*) n from public.activity_log where not is_training`)) === realLogBefore);
-const reseed = await fails(() => asEditor(SQL('training_seed.sql')));
+const outOfTurn = await fails(() => asEditor(SQL(SEED_PARTS[1])));
+check('a part run out of turn stops, and says which to run first',
+  /This is part 2 of the training seed: run training_seed\.sql just before it/.test(outOfTurn ?? '') &&
+  (await count(`select count(*) n from public.trees where is_training`)) === SEEDED &&
+  (await count(`select count(*) n from pg_trigger where tgname = 'log_tree_changes' and tgenabled = 'D'`)) === 0, outOfTurn ?? 'it ran');
+const reseed = await fails(() => seedAll());
 check('the seed runs again (a reset), without doubling up',
   reseed === null && (await count(`select count(*) n from public.trees where is_training`)) === SEEDED, reseed ?? '');
 
@@ -417,7 +440,7 @@ const realLeft = await count(`select count(*) n from public.trees where not is_t
 check('…every real tree is still there', realLeft === realBefore.trees && realLeft > 0, `${realLeft} of ${realBefore.trees}`);
 check('…the real permit and real tag too',
   (await count(`select count(*) n from public.permits`)) === realBefore.permits && (await count(`select count(*) n from public.pending_trees where not is_training`)) === realBefore.tags);
-const reseedAfter = await fails(() => asEditor(SQL('training_seed.sql')));
+const reseedAfter = await fails(() => seedAll());
 check('…and the next batch can be seeded', reseedAfter === null, reseedAfter ?? '');
 
 const failed = results.filter((r) => !r.ok);

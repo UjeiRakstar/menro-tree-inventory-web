@@ -6,7 +6,7 @@
 -- are never touched: every delete below says "where is_training".
 --
 -- To start the next batch from the same dummy data, run training_seed.sql
--- afterwards.
+-- and the parts after it (training_seed_2.sql, …) afterwards.
 --
 -- The training ACCOUNTS are left alone, so one batch can carry on another
 -- day. To close them too, uncomment section 3.

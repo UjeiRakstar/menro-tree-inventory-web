@@ -1,5 +1,6 @@
 /**
- * Writes supabase/training_seed.sql: dummy data for training the offices.
+ * Writes supabase/training_seed.sql, and the parts after it (training_seed_2.sql,
+ * …): dummy data for training the offices.
  *
  *   node tools/make-training-seed.mjs
  *
@@ -19,7 +20,7 @@
  *
  * The random numbers are seeded, so running this twice writes the same file.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ringAreaM2 } from '../src/lib/areaGeometry.js';
@@ -491,12 +492,78 @@ const seededKeys = Object.entries({ arborists, trees, permits, pending_trees: pe
 // Dollar-quoted, so nothing in the data needs escaping.
 const json = (rows) => `$seed$${JSON.stringify(rows)}$seed$::jsonb`;
 
-const sql = `-- Green Tag: dummy data for training the offices. GENERATED — do not edit;
--- change tools/make-training-seed.mjs and run it again.
+// ---- In parts ------------------------------------------------------------------
+// The Supabase SQL editor refuses a query of about a megabyte ("Query is too
+// large to be run via the SQL Editor"), and every town's areas took the seed
+// past that on 23 October. So the rows go out in parts of well under it, run
+// one after another: training_seed.sql, then training_seed_2.sql, and so on.
+// Each part stands on its own — it pauses and restarts the loggers, and makes
+// and drops its own helper — so stopping between two leaves nothing off.
+const PART_LIMIT = 400_000; // characters of data in one part
+
+// The tables in the order they go in, and what each insert waits for: a table
+// that is there (and, for the areas, walled — map_areas.sql has run).
+const TABLES = [
+  { table: 'arborists', rows: arborists, guard: `where to_regclass('public.arborists') is not null` },
+  { table: 'trees', rows: trees, guard: '' },
+  { table: 'permits', rows: permits, guard: `where to_regclass('public.permits') is not null` },
+  { table: 'pending_trees', rows: pendingTags, guard: `where to_regclass('public.pending_trees') is not null` },
+  {
+    table: 'map_areas',
+    rows: areas,
+    guard: `where exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')`,
+  },
+];
+
+// Filled in order, a table split wherever a part is full.
+const parts = [[]];
+let used = 0;
+for (const { table, rows, guard } of TABLES) {
+  let chunk = [];
+  for (const row of rows) {
+    const size = JSON.stringify(row).length + 1;
+    if (used + size > PART_LIMIT && used > 0) {
+      if (chunk.length) parts.at(-1).push({ table, rows: chunk, guard });
+      parts.push([]);
+      chunk = [];
+      used = 0;
+    }
+    chunk.push(row);
+    used += size;
+  }
+  if (chunk.length) parts.at(-1).push({ table, rows: chunk, guard });
+}
+const fileOf = (n) => (n === 1 ? 'training_seed.sql' : `training_seed_${n}.sql`);
+const runOrder = parts.map((_, i) => fileOf(i + 1)).join(', ');
+
+// How many of a table's rows are in once part `n` has run.
+const seededBy = (n, table) =>
+  parts
+    .slice(0, n)
+    .flat()
+    .filter((batch) => batch.table === table)
+    .reduce((sum, batch) => sum + batch.rows.length, 0);
+
+const loggers = (verb) => `do $$
+begin
+  if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
+    alter table public.trees ${verb} trigger log_tree_changes;
+  end if;
+  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
+    alter table public.map_areas ${verb} trigger log_map_area_changes;
+  end if;
+end $$;`;
+
+const firstHeader = `-- Green Tag: dummy data for training the offices, part 1 of ${parts.length}. GENERATED —
+-- do not edit; change tools/make-training-seed.mjs and run it again.
 --
--- Run in the SQL editor, after training_sandbox.sql. Safe to run again: it
--- clears the training rows first, so running it is also "reset the training
--- data to how it started". Real rows are never touched.
+-- Run in the SQL editor, after training_sandbox.sql, in ${parts.length} parts one after
+-- another (the editor refuses one query this big):
+--   ${runOrder}
+-- Safe to run again from this first part: it clears the training rows first,
+-- so running the parts is also "reset the training data to how it started".
+-- Real rows are never touched.
 --
 -- Everything here is behind the training wall: only training accounts see it.
 --
@@ -512,22 +579,41 @@ ${seeded.map((t) => `--     ${t.town}: ${t.trees.length} trees, ${t.tags.length}
 --     ${bambooClumps.length} bamboo clumps tagged in the bamboo stands
 --
 -- Columns are matched by name: a key with no column of that name is left out
--- rather than failing, and listed in the check at the end.
+-- rather than failing, and listed in the check at the end of the last part.`;
 
--- Inserting a tree or an area normally writes to PGENRO's activity log.
--- Paused while seeding, so ${trees.length} dummy trees and ${areas.length} areas do not
--- land in the real log.
+const laterHeader = (n) => `-- Green Tag: dummy data for training the offices, part ${n} of ${parts.length}. GENERATED —
+-- do not edit; change tools/make-training-seed.mjs and run it again.
+--
+-- Run in the SQL editor just after ${fileOf(n - 1)}${n < parts.length ? `, and before ${fileOf(n + 1)}` : ''}.
+-- The whole run:
+--   ${runOrder}
+-- It checks that the part before it has run, and stops before changing
+-- anything if not.`;
+
+// Parts 2 on: the part before has run, and nothing since. A part run out of
+// turn stops here with a message, rather than at a duplicate key halfway in.
+const orderCheck = (n) => `-- The part before this one has run, and nothing after it: otherwise stop
+-- here, before anything is changed.
 do $$
+declare
+  r record;
+  v_have bigint;
 begin
-  if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
-    alter table public.trees disable trigger log_tree_changes;
-  end if;
-  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
-    alter table public.map_areas disable trigger log_map_area_changes;
-  end if;
-end $$;
+  for r in select * from (values
+    ${TABLES.map(({ table }) => `('${table}', ${seededBy(n - 1, table)})`).join(',\n    ')}
+  ) want(tbl, n) loop
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = r.tbl and column_name = 'is_training') then
+      execute format('select count(*) from public.%I where is_training', r.tbl) into v_have;
+      if v_have <> r.n then
+        raise exception 'This is part ${n} of the training seed: run ${fileOf(n - 1)} just before it (the whole run: ${runOrder}). There are % training rows in %, where the part before leaves %.',
+          v_have, r.tbl, r.n;
+      end if;
+    end if;
+  end loop;
+end $$;`;
 
--- Start clean.
+const startClean = `-- Start clean.
 do $$
 declare t text;
 begin
@@ -538,8 +624,77 @@ begin
       execute format('delete from public.%I where is_training', t);
     end if;
   end loop;
-end $$;
+end $$;`;
 
+const inserts = (n) =>
+  parts[n - 1]
+    .map(
+      ({ table, rows, guard }) =>
+        (table === 'map_areas' ? '-- The areas: only where map_areas.sql has made the table and walled it.\n' : '') +
+        `select public.training_seed_into('${table}', ${json(rows)})${guard ? ` ${guard}` : ''};`
+    )
+    .join('\n\n');
+
+// The counts once this part has run: every part ends with them, the last with
+// the whole seed's.
+const finalCheck = (n) => {
+  const last = n === parts.length;
+  const want = (table) => seededBy(n, table);
+  return `-- ===========================================================================
+-- Did it take? Self-contained: it reads only the tables themselves.
+-- ===========================================================================
+select 'part ${n} of ${parts.length}' as check, true as ok,
+       ${last ? `'the last: the training data is all in'` : `'next: ${fileOf(n + 1)}'`} as detail
+union all
+select 'training trees', (select count(*) from public.trees where is_training) = ${want('trees')},
+       (select count(*) from public.trees where is_training)::text
+union all
+select 'training permits', (select count(*) from public.permits where is_training) = ${want('permits')},
+       (select count(*) from public.permits where is_training)::text
+union all
+select 'training tags', (select count(*) from public.pending_trees where is_training) = ${want('pending_trees')},
+       (select count(*) from public.pending_trees where is_training)::text
+union all
+select 'training arborists', (select count(*) from public.arborists where is_training) = ${want('arborists')},
+       (select count(*) from public.arborists where is_training)::text
+union all
+select 'the activity log is paused no longer',
+       not exists (select 1 from pg_trigger where tgname in ('log_tree_changes', 'log_map_area_changes') and tgenabled = 'D'), ''
+union all
+-- Read through query_to_xml, and only once there is a table to read: a
+-- database without map_areas still gets an answer.
+select 'training areas',
+       case when exists (select 1 from information_schema.columns
+                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
+            then (xpath('/row/n/text()', query_to_xml(
+                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text::int = ${want('map_areas')}
+            else true end,
+       case when exists (select 1 from information_schema.columns
+                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
+            then (xpath('/row/n/text()', query_to_xml(
+                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text
+            else 'map_areas.sql not run: no areas seeded' end${
+              last
+                ? `
+union all
+select 'READ: left out of ' || seeded.tbl || ' (no such column)', null, string_agg(seeded.k, ', ' order by seeded.k)
+from (values
+${seededKeys}
+) seeded(tbl, k)
+where not exists (select 1 from information_schema.columns c
+                  where c.table_schema = 'public' and c.table_name = seeded.tbl and c.column_name = seeded.k)
+group by seeded.tbl`
+                : ''
+            };`;
+};
+
+const partSql = (n) => `${n === 1 ? firstHeader : laterHeader(n)}
+${n === 1 ? '' : `\n${orderCheck(n)}\n`}
+-- Inserting a tree or an area normally writes to PGENRO's activity log.
+-- Paused while seeding, so ${trees.length} dummy trees and ${areas.length} areas do not
+-- land in the real log.
+${loggers('disable')}
+${n === 1 ? `\n${startClean}\n` : ''}
 -- Insert the keys that are columns, and skip the ones that are not.
 --
 -- A plain function, created here and dropped again below — not a temporary
@@ -562,75 +717,22 @@ end $$;
 
 revoke all on function public.training_seed_into(text, jsonb) from public, anon, authenticated;
 
-select public.training_seed_into('arborists', ${json(arborists)}) where to_regclass('public.arborists') is not null;
-
-select public.training_seed_into('trees', ${json(trees)});
-
-select public.training_seed_into('permits', ${json(permits)}) where to_regclass('public.permits') is not null;
-
-select public.training_seed_into('pending_trees', ${json(pendingTags)}) where to_regclass('public.pending_trees') is not null;
-
--- The areas: only where map_areas.sql has made the table and walled it.
-select public.training_seed_into('map_areas', ${json(areas)})
-where exists (select 1 from information_schema.columns
-              where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training');
+${inserts(n)}
 
 drop function public.training_seed_into(text, jsonb);
 
-do $$
-begin
-  if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
-    alter table public.trees enable trigger log_tree_changes;
-  end if;
-  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
-    alter table public.map_areas enable trigger log_map_area_changes;
-  end if;
-end $$;
+${loggers('enable')}
 
--- ===========================================================================
--- Did it take? Self-contained: it reads only the tables themselves.
--- ===========================================================================
-select 'training trees' as check,
-       (select count(*) from public.trees where is_training) = ${trees.length} as ok,
-       (select count(*) from public.trees where is_training)::text as detail
-union all
-select 'training permits', (select count(*) from public.permits where is_training) = ${permits.length},
-       (select count(*) from public.permits where is_training)::text
-union all
-select 'training tags', (select count(*) from public.pending_trees where is_training) = ${pendingTags.length},
-       (select count(*) from public.pending_trees where is_training)::text
-union all
-select 'training arborists', (select count(*) from public.arborists where is_training) = ${arborists.length},
-       (select count(*) from public.arborists where is_training)::text
-union all
-select 'the activity log is paused no longer',
-       not exists (select 1 from pg_trigger where tgname in ('log_tree_changes', 'log_map_area_changes') and tgenabled = 'D'), ''
-union all
--- Read through query_to_xml, and only once there is a table to read: a
--- database without map_areas still gets an answer.
-select 'training areas',
-       case when exists (select 1 from information_schema.columns
-                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
-            then (xpath('/row/n/text()', query_to_xml(
-                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text::int = ${areas.length}
-            else true end,
-       case when exists (select 1 from information_schema.columns
-                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
-            then (xpath('/row/n/text()', query_to_xml(
-                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text
-            else 'map_areas.sql not run: no areas seeded' end
-union all
-select 'READ: left out of ' || seeded.tbl || ' (no such column)', null, string_agg(seeded.k, ', ' order by seeded.k)
-from (values
-${seededKeys}
-) seeded(tbl, k)
-where not exists (select 1 from information_schema.columns c
-                  where c.table_schema = 'public' and c.table_name = seeded.tbl and c.column_name = seeded.k)
-group by seeded.tbl;
+${finalCheck(n)}
 `;
 
-writeFileSync(join(root, 'supabase/training_seed.sql'), sql);
+// A part left over from a bigger seed would be run by mistake: gone.
+for (const name of readdirSync(join(root, 'supabase'))) {
+  const match = name.match(/^training_seed_(\d+)\.sql$/);
+  if (match && Number(match[1]) > parts.length) unlinkSync(join(root, 'supabase', name));
+}
+parts.forEach((_, i) => writeFileSync(join(root, 'supabase', fileOf(i + 1)), partSql(i + 1)));
 console.log(
-  `Wrote supabase/training_seed.sql: ${trees.length} trees, ${permits.length} permits, ` +
-    `${pendingTags.length} tags, ${arborists.length} arborists.`
+  `Wrote ${runOrder} (in supabase/): ${trees.length} trees, ${permits.length} permits, ` +
+    `${pendingTags.length} tags, ${arborists.length} arborists, ${areas.length} areas.`
 );

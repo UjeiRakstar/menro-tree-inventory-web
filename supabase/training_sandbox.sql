@@ -24,7 +24,7 @@
 -- training trees because of who synced them.
 --
 -- Afterwards, training_purge.sql deletes every training row in one go, and
--- training_seed.sql puts the dummy Siniloan data back for the next batch.
+-- training_seed.sql and its parts put the dummy data back for the next batch.
 --
 -- ===========================================================================
 -- WHO IS A TRAINING ACCOUNT

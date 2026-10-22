@@ -1,6 +1,6 @@
 // map_areas.sql in real Postgres, after the files the live database has:
 // accounts, lgu_fence, training_sandbox, municipal_halls, tag_routing.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const SQL = (file) => readFileSync(new URL(`../../supabase/${file}`, import.meta.url), 'utf8');
@@ -19,6 +19,17 @@ async function asEditor(text) {
   await db.exec(text.slice(0, cut));
   await db.exec('discard temp');
   return db.exec(text.slice(cut));
+}
+
+// The training seed comes in parts — the SQL editor refuses a query of about
+// a megabyte — run one after another: training_seed.sql, training_seed_2.sql, …
+const SEED_PARTS = readdirSync(new URL('../../supabase/', import.meta.url))
+  .filter((file) => /^training_seed(_\d+)?\.sql$/.test(file))
+  .sort((a, b) => Number(a.match(/_(\d+)\.sql$/)?.[1] ?? 1) - Number(b.match(/_(\d+)\.sql$/)?.[1] ?? 1));
+async function seedAll() {
+  const outs = [];
+  for (const file of SEED_PARTS) outs.push(await asEditor(SQL(file)));
+  return outs;
 }
 
 const PGENRO = '00000000-0000-0000-0000-00000000000a';
@@ -433,8 +444,8 @@ check('is_pgenro() is the real PGENRO only',
 
 // ---- The training seed's areas (23 October) ----------------------------------------------------------
 const realLogBefore = await count(`select count(*) n from public.activity_log where not is_training`);
-const seedOut = await asEditor(SQL('training_seed.sql'));
-const seedRows = seedOut[seedOut.length - 1].rows;
+const seedOuts = await seedAll();
+const seedRows = seedOuts[seedOuts.length - 1][seedOuts[seedOuts.length - 1].length - 1].rows;
 const seededAreas = Number(SQL('training_seed.sql').match(/--\s+(\d+) areas on the map/)[1]);
 check('the training seed puts every town’s areas on the map — every one within the rules on areas',
   seedRows.find((r) => r.check === 'training areas')?.ok === true && seededAreas > 200 &&
