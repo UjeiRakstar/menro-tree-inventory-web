@@ -59,6 +59,7 @@ export function sortingFields(collection) {
 export function guessCover(value) {
   const text = String(value).toLowerCase();
   if (/mangrove/.test(text)) return 'mangrove-forest';
+  if (/bamboo|kawayan/.test(text)) return 'bamboo-stand';
   if (/closed.?forest|old.?growth|primary/.test(text)) return 'closed-forest';
   if (/forest|timber|woodland|tree/.test(text)) return 'open-forest';
   if (/brush|shrub/.test(text)) return 'brush-shrubs';

@@ -84,6 +84,45 @@ describe('PGENRO’s Trees (22 October)', () => {
     expect(screen.queryByRole('tab', { name: /Carbon Sink/ })).not.toBeInTheDocument();
   });
 
+  it('has the province’s Tree Database, where PGENRO chooses each species’ cover and hides a photo', async () => {
+    auth.profile = PGENRO_ADMIN;
+    const CLOUD = 'https://res.cloudinary.com/demo/image/upload/v1/';
+    supabaseMock.setResponse('trees:select', {
+      data: [
+        { id: 't1', species: 'Narra', barangay_psgc: 403426001, source: 'field', imageUrl: `${CLOUD}a.jpg`, leaves_url: `${CLOUD}b.jpg` },
+        { id: 't2', species: 'Narra', barangay_psgc: 403405001, source: 'field', imageUrl: `${CLOUD}c.jpg` },
+      ],
+      error: null,
+    });
+    supabaseMock.setResponse('species_photo_choices:select', { data: [], error: null });
+    supabaseMock.setResponse('species_photo_choices:upsert', { data: null, error: null });
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: /Tree Database/ }));
+    const narra = await screen.findByRole('article', { name: 'Narra' });
+    expect(within(narra).getByRole('region', { name: /by city and municipality/ })).toHaveTextContent('Calamba City');
+    const chooser = within(narra).getByRole('region', { name: 'Choose the photos' });
+    fireEvent.click(within(chooser).getAllByRole('button', { name: 'Make the cover: Main' })[1]);
+    await waitFor(() => expect(supabaseMock.writesTo('species_photo_choices', 'upsert')).toHaveLength(1));
+    expect(supabaseMock.writesTo('species_photo_choices', 'upsert')[0].payload).toEqual({
+      species: 'narra', cover_url: `${CLOUD}c.jpg`, hidden_urls: [],
+    });
+    await waitFor(() =>
+      expect(within(narra).getByRole('img', { name: 'Narra — the tree' }).getAttribute('src')).toMatch(/c\.jpg$/)
+    );
+    fireEvent.click(within(chooser).getByRole('button', { name: 'Hide: Leaves' }));
+    await waitFor(() => expect(supabaseMock.writesTo('species_photo_choices', 'upsert')).toHaveLength(2));
+    expect(supabaseMock.writesTo('species_photo_choices', 'upsert')[1].payload.hidden_urls).toEqual([`${CLOUD}b.jpg`]);
+    expect(await within(chooser).findByText('Hidden (1)')).toBeInTheDocument();
+  });
+
+  it('gives a PGENRO training account the Tree Database without the choosing', async () => {
+    auth.profile = { ...PGENRO_ADMIN, is_training: true };
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: /Tree Database/ }));
+    await screen.findByRole('article', { name: 'Narra' });
+    expect(screen.queryByRole('region', { name: 'Choose the photos' })).not.toBeInTheDocument();
+  });
+
   it('opens on the requests from ?tab=requests, as the old links had them', async () => {
     auth.profile = PGENRO_ADMIN;
     render(

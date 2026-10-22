@@ -395,6 +395,42 @@ const withdrawn = await as(MENRO_SCZ, 'authenticated', async () => {
   return db.query(`delete from public.map_areas where id = $1`, [fresh.id]);
 });
 check('an office withdraws a request it has not had decided', withdrawn.affectedRows === 1);
+
+// ---- A bamboo stand (bamboo_stands.sql) ---------------------------------------------------------------
+for (const label of ['runs', 'runs twice']) {
+  const out = await asEditor(SQL('bamboo_stands.sql'));
+  const rows = out[out.length - 1].rows;
+  check(`bamboo_stands.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok}`).join('; '));
+}
+const bamboo = await as(MENRO_SCZ, 'authenticated', () => fails(() => insertArea({ name: 'Riverbank kawayan', cover_class: 'bamboo-stand' })));
+check('an office draws a bamboo stand', bamboo === null, bamboo ?? '');
+const madeUp = await as(MENRO_SCZ, 'authenticated', () => fails(() => insertArea({ name: 'x', cover_class: 'jungle' })));
+check('…and still no class that is not on the list', madeUp !== null, madeUp ?? 'SAVED');
+
+// ---- A PGENRO training account (pgenro_training.sql) ------------------------------------------------
+const PG_TRAINEE = '00000000-0000-0000-0000-0000000000f1';
+await db.query(`insert into auth.users (id, email) values ($1, 'pg.trainee@training.invalid')`, [PG_TRAINEE]);
+for (const label of ['runs', 'runs twice']) {
+  const text = SQL('pgenro_training.sql').replace('PUT-THE-TRAINING-ACCOUNT-EMAIL-HERE', 'pg.trainee@training.invalid');
+  const out = await asEditor(text);
+  const rows = out[out.length - 1].rows;
+  check(`pgenro_training.sql ${label}`, rows.every((r) => r.ok !== false), rows.map((r) => `${r.check}=${r.ok} ${r.detail ?? ''}`).join('; '));
+}
+const realRequest = (await as(MENRO_SCZ, 'authenticated', () => plantingSite({ name: 'A real request' }))).rows[0];
+const pgtSees = async (id) => as(PG_TRAINEE, 'authenticated', () => count(`select count(*) n from public.map_areas where id = $1`, [id]));
+check('a training PGENRO sees a trainee office’s request', (await pgtSees(traineeSite.id)) === 1);
+check('…and no real request', (await pgtSees(realRequest.id)) === 0);
+const pgtOnReal = await as(PG_TRAINEE, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true)`, [realRequest.id])));
+check('…nor decides one', pgtOnReal !== null, pgtOnReal ?? 'DECIDED');
+const pgtDecides = await as(PG_TRAINEE, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true, 'Practice')`, [traineeSite.id])));
+check('it decides the trainee’s request',
+  pgtDecides === null && (await one(`select approval from public.map_areas where id = $1`, [traineeSite.id])).approval === 'approved', pgtDecides ?? '');
+const realStillDecides = await as(PGENRO, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, false, 'No')`, [realRequest.id])));
+check('the real PGENRO still decides the real ones', realStillDecides === null, realStillDecides ?? '');
+check('is_pgenro() is the real PGENRO only',
+  (await as(PGENRO, 'authenticated', () => one(`select public.is_pgenro() v`))).v === true &&
+  (await as(PG_TRAINEE, 'authenticated', () => one(`select public.is_pgenro() v`))).v === false);
+
 const reMap = await asEditor(SQL('map_areas.sql'));
 check('running map_areas.sql again does not make requests public',
   reMap[reMap.length - 1].rows.every((r) => r.ok !== false) &&

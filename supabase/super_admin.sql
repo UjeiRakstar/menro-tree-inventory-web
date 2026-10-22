@@ -51,7 +51,9 @@ create trigger aab_guard_super_admin_flag
 -- Whether the caller is the super admin: flagged, and an active account.
 create or replace function public.is_super_admin()
 returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce((select is_super_admin from public.profiles where id = auth.uid() and status = 'active'), false);
+  -- Never a training account, whatever its flag says (pgenro_training.sql).
+  select coalesce((select is_super_admin and not coalesce((to_jsonb(p) ->> 'is_training')::boolean, false)
+                   from public.profiles p where id = auth.uid() and status = 'active'), false);
 $$;
 revoke all on function public.is_super_admin() from public;
 grant execute on function public.is_super_admin() to anon, authenticated;
@@ -81,7 +83,7 @@ begin
     create policy "permits stay with their LGU" on public.permits as restrictive
       for all to authenticated
       using (
-        (select public.is_pgenro())
+        (select public.sees_as_pgenro())
         or ((select public.my_role()) = 'lgu_admin' and lgu_psgc = (select public.my_lgu()))
       )
       with check (

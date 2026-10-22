@@ -5,7 +5,7 @@
 -- true), missing (ok = false, with what is missing in the detail), or is a
 -- figure to read (ok = null).
 --
--- It looks for what steps 1–33 of PARKED.md make: tables, the columns the
+-- It looks for what steps 1–36 of PARKED.md make: tables, the columns the
 -- later steps add, the rules on who reads what, the triggers that stamp and
 -- route, the functions the pages call, and the storage buckets. A count that
 -- matters (tags no LGU will get, a Google account sitting in the approval
@@ -17,7 +17,7 @@ want_tables(name) as (values
   ('activity_log'), ('species_profiles'), ('map_areas'), ('map_area_proposals'), ('map_layers'),
   ('lgu_climate'), ('office_profiles'), ('barangay_stats'), ('office_ai_settings'), ('inbox_messages'),
   ('news_posts'), ('residents'), ('data_requests'), ('lccap_submissions'), ('satellite_settings'),
-  ('satellite_snapshots')),
+  ('satellite_snapshots'), ('species_photo_choices')),
 -- Columns later steps add to tables made earlier (steps 22, 26, 28, 31, 32).
 want_columns(tbl, col) as (values
   ('profiles', 'is_super_admin'), ('species_profiles', 'wood_density'), ('species_profiles', 'wood_density_source'),
@@ -28,14 +28,14 @@ want_columns(tbl, col) as (values
 want_rls(name) as (values
   ('profiles'), ('trees'), ('pending_trees'), ('permits'), ('account_codes'), ('map_areas'),
   ('office_ai_settings'), ('inbox_messages'), ('news_posts'), ('residents'), ('data_requests'),
-  ('lccap_submissions'), ('satellite_settings'), ('satellite_snapshots')),
+  ('lccap_submissions'), ('satellite_settings'), ('satellite_snapshots'), ('species_photo_choices')),
 want_triggers(name) as (values
   ('guard_profile_changes'), ('zzz_apply_account_code'), ('route_pending_tree'), ('stamp_training'),
   ('guard_map_area'), ('guard_planting_request'), ('notify_planting_site'), ('notify_unknown_species'),
   ('stamp_permit_lgu'), ('stamp_news_post'), ('aaa_keep_residents_out'), ('zzzz_add_resident'),
   ('stamp_tag_sender'), ('trees_sync_barangay'), ('send_news_to_offices'), ('stamp_lccap_submission'),
   ('notify_lccap_submission'), ('stamp_satellite_settings'), ('stamp_satellite_snapshot'),
-  ('stamp_tree_capture'), ('keep_tree_archive')),
+  ('stamp_tree_capture'), ('keep_tree_archive'), ('stamp_species_photo_choice')),
 want_restrictive(tbl, policy) as (values
   ('trees', 'only active accounts'), ('pending_trees', 'only active accounts'),
   ('permits', 'permits stay with their LGU'), ('permits', 'the public reads no permit'),
@@ -44,7 +44,8 @@ want_restrictive(tbl, policy) as (values
   ('trees', 'archived trees are out of the inventory')),
 -- Rules that let someone in (step 31: a MENRO / CENRO's own events).
 want_policies(tbl, policy) as (values
-  ('news_posts', 'an office posts its own events'), ('satellite_settings', 'pgenro keeps the satellite settings')),
+  ('news_posts', 'an office posts its own events'), ('satellite_settings', 'pgenro keeps the satellite settings'),
+  ('species_photo_choices', 'pgenro chooses the photos'), ('profiles', 'a training pgenro reads the training accounts')),
 want_functions(name) as (values
   ('my_role'), ('my_lgu'), ('is_pgenro'), ('check_account_code'), ('issue_account_code'), ('set_lgu_hall'),
   ('can_see_tag'), ('can_manage_tag'), ('promote_pending_tree'), ('archive_permit'), ('decide_planting_request'),
@@ -52,7 +53,8 @@ want_functions(name) as (values
   ('nickname_problem'), ('set_resident_profile'), ('community_leaderboard'), ('community_counts'),
   ('publish_due_news'), ('deliver_news_post'), ('is_training_account'), ('record_reply'), ('mark_my_replies_read'),
   ('delete_my_account'), ('clear_office_ai_key'), ('log_data_request'), ('review_lccap'), ('is_super_admin'),
-  ('keeps_office'), ('forward_news_post'), ('archive_tree'), ('archived_trees')),
+  ('keeps_office'), ('forward_news_post'), ('archive_tree'), ('archived_trees'), ('same_side_of_the_wall'),
+  ('sees_as_pgenro')),
 want_buckets(name) as (values ('area-documents'), ('map-layers'), ('office-logos'), ('news-photos'),
   ('lccap-documents'), ('satellite-tiles')),
 -- A count from a table or column that may not be there yet: null instead of an error.
@@ -130,6 +132,18 @@ select 'storage buckets, public',
        not exists (select 1 from want_buckets w where not exists (select 1 from storage.buckets b where b.id = w.name and b.public)),
        coalesce('missing or private: ' || (select string_agg(w.name, ', ') from want_buckets w
                                            where not exists (select 1 from storage.buckets b where b.id = w.name and b.public)), '')
+union all
+select 'a training account does not act as PGENRO (step 35)',
+       coalesce(pg_get_functiondef(to_regprocedure('public.is_pgenro()')) like '%is_training%', false),
+       case when coalesce(pg_get_functiondef(to_regprocedure('public.is_pgenro()')) like '%is_training%', false)
+            then '' else 'pgenro_training.sql not run' end
+union all
+select 'an area can be a bamboo stand (step 36)',
+       exists (select 1 from pg_constraint where conname = 'map_areas_cover_check'
+               and pg_get_constraintdef(oid) like '%bamboo-stand%'),
+       case when exists (select 1 from pg_constraint where conname = 'map_areas_cover_check'
+                         and pg_get_constraintdef(oid) like '%bamboo-stand%')
+            then '' else 'bamboo_stands.sql not run' end
 union all
 select 'no Google account in the approval queue',
        (select value from n where label = 'google_in_profiles') = '0',

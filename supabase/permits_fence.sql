@@ -131,7 +131,7 @@ drop policy if exists "permits stay with their LGU" on public.permits;
 create policy "permits stay with their LGU" on public.permits as restrictive
   for all to authenticated
   using (
-    (select public.is_pgenro())
+    (select public.sees_as_pgenro())
     or ((select public.my_role()) = 'lgu_admin' and lgu_psgc = (select public.my_lgu()))
   )
   with check ((select public.my_role()) = 'lgu_admin' and lgu_psgc = (select public.my_lgu()));

@@ -29,6 +29,8 @@ export default function TrainingBanner() {
           {' '}
           · Everything here is practice data. Nothing you do reaches the real inventory, the public map
           or other offices, and it is all cleared when training ends.
+          {profile.role === 'pgenro' &&
+            ' You see every town’s practice data; PGENRO’s live work — accounts and codes, the species write-ups, news, map layers, the satellite — stays with the real PGENRO account.'}
         </span>
       </p>
     </div>

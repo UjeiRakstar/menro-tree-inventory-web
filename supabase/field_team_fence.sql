@@ -25,7 +25,7 @@
 
 create or replace function public.is_my_field_officer(p_email text)
 returns boolean language sql stable security definer set search_path = public as $$
-  select coalesce(public.is_pgenro(), false)
+  select coalesce(public.sees_as_pgenro(), false)
       or exists (select 1 from public.profiles p
                  where lower(p.email) = lower(trim(coalesce(p_email, '')))
                    and p.role = 'field_officer'

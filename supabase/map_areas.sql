@@ -91,7 +91,7 @@ alter table public.map_areas add constraint map_areas_cover_check check (
   and (cover_class is null or cover_class in (
     'closed-forest', 'open-forest', 'brush-shrubs', 'perennial-crop', 'grassland',
     'mangrove-forest', 'annual-crop', 'open-barren', 'built-up', 'marshland-swamp',
-    'fishpond', 'inland-water'))
+    'fishpond', 'inland-water', 'bamboo-stand'))
 );
 
 -- Decision 7: a legal designation is only as good as its document.
@@ -168,7 +168,7 @@ create policy "anyone sees the areas" on public.map_areas
 drop policy if exists "offices save areas" on public.map_areas;
 create policy "offices save areas" on public.map_areas
   for insert to authenticated
-  with check (public.is_pgenro() or public.is_lgu_admin_of(lgu_psgc));
+  with check (public.sees_as_pgenro() or public.is_lgu_admin_of(lgu_psgc));
 
 drop policy if exists "offices change their own areas" on public.map_areas;
 create policy "offices change their own areas" on public.map_areas
@@ -257,17 +257,17 @@ alter table public.map_area_proposals enable row level security;
 drop policy if exists "pgenro and the lgu see proposals" on public.map_area_proposals;
 create policy "pgenro and the lgu see proposals" on public.map_area_proposals
   for select to authenticated
-  using (public.is_pgenro() or public.is_lgu_admin_of(public.area_lgu(area_id)));
+  using (public.sees_as_pgenro() or public.is_lgu_admin_of(public.area_lgu(area_id)));
 
 drop policy if exists "pgenro proposes" on public.map_area_proposals;
 create policy "pgenro proposes" on public.map_area_proposals
   for insert to authenticated
-  with check (public.is_pgenro() and public.area_drawn_by_office(area_id));
+  with check (public.sees_as_pgenro() and public.area_drawn_by_office(area_id));
 
 drop policy if exists "pgenro withdraws a pending proposal" on public.map_area_proposals;
 create policy "pgenro withdraws a pending proposal" on public.map_area_proposals
   for delete to authenticated
-  using (public.is_pgenro() and status = 'pending' and proposed_by = auth.uid());
+  using (public.sees_as_pgenro() and status = 'pending' and proposed_by = auth.uid());
 
 drop policy if exists "only active accounts" on public.map_area_proposals;
 create policy "only active accounts" on public.map_area_proposals as restrictive

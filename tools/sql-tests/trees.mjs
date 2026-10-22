@@ -158,6 +158,22 @@ const restored = await as(MENRO, 'authenticated', () => fails(() => db.query(ARC
 check('the MENRO puts it back', restored === null && (await seenBy(null, 'anon')).includes('scz'), restored ?? '');
 check('…with its reason cleared', (await db.query(`select archive_reason from public.trees where id = 'scz'`)).rows[0].archive_reason === null);
 
+// The training wall (training_sandbox.sql): these functions are past its
+// policy, so they keep to it themselves.
+await db.exec(`alter table public.trees add column if not exists is_training boolean not null default false;
+               alter table public.profiles add column if not exists is_training boolean not null default false;
+               update public.trees set is_training = true where id = 'scz-2';`);
+const realOnTraining = await as(MENRO, 'authenticated', () => fails(() => db.query(ARCHIVE, ['scz-2', true, 'Died'])));
+check('a real MENRO archives no training tree', realOnTraining !== null, realOnTraining ?? 'archived');
+await db.query(`update public.profiles set is_training = true where id = $1`, [MENRO]);
+const traineeOnReal = await as(MENRO, 'authenticated', () => fails(() => db.query(ARCHIVE, ['scz', true, 'Died'])));
+check('a trainee MENRO archives no real tree of their town', traineeOnReal !== null, traineeOnReal ?? 'archived');
+const traineeOwn = await as(MENRO, 'authenticated', () => fails(() => db.query(ARCHIVE, ['scz-2', true, 'Practice'])));
+check('…but archives a training one', traineeOwn === null, traineeOwn ?? '');
+await db.query(`update public.trees set archived_at = now(), archive_reason = 'Real' where id = 'scz'`);
+const traineeList = (await rows(MENRO, 'authenticated', `select id from public.archived_trees()`)).map((r) => r.id);
+check('…and lists only the training ones archived', traineeList.join() === 'scz-2', traineeList.join());
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length} of ${results.length} passed`);
 process.exit(failed.length ? 1 : 0);

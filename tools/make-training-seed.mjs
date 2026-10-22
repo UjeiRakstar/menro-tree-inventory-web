@@ -1,9 +1,14 @@
 /**
- * Writes supabase/training_seed.sql: dummy Siniloan data for LGU training.
+ * Writes supabase/training_seed.sql: dummy data for training the offices.
  *
  *   node tools/make-training-seed.mjs
  *
- * Every tree stands inside a real Siniloan barangay (from the same PSA
+ * Siniloan, as from the start (150 trees, the same ones), and since 22 October
+ * the six cities and the rest of the 4th district — so every trainee office
+ * has its own town's mock data, and a PGENRO training account
+ * (pgenro_training.sql) the whole of it.
+ *
+ * Every tree stands inside a real barangay of its town (from the same PSA
  * boundaries the map uses), so the training map looks like the real one: pins
  * in the town centre, fewer up in the forest barangays. The mix is made to
  * give a trainee something to do — hazards nobody has been sent to, hazards
@@ -17,9 +22,21 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SINILOAN = 403429000;
-const TREE_COUNT = 150;
-const TAG_COUNT = 12;
+
+// Which towns, and how many trees and tags each. Siniloan comes first, so its
+// trees come out of the random numbers exactly as before.
+const SINILOAN = { name: 'Siniloan', trees: 150, tags: 12 };
+const CITIES = ['Biñan', 'Cabuyao', 'Calamba', 'San Pablo', 'San Pedro', 'Santa Rosa'];
+// The 4th district, Siniloan aside.
+const DISTRICT_4 = [
+  'Cavinti', 'Famy', 'Kalayaan', 'Luisiana', 'Lumban', 'Mabitac', 'Magdalena', 'Majayjay',
+  'Paete', 'Pagsanjan', 'Pakil', 'Pangil', 'Pila', 'Santa Cruz', 'Santa Maria',
+];
+const TOWNS = [
+  SINILOAN,
+  ...CITIES.map((name) => ({ name, trees: 60, tags: 4 })),
+  ...DISTRICT_4.map((name) => ({ name, trees: 40, tags: 3 })),
+];
 
 // ---- Seeded randomness -------------------------------------------------------
 function mulberry32(seed) {
@@ -43,8 +60,7 @@ const uuid = () =>
 
 // ---- Where -------------------------------------------------------------------
 const { barangays } = JSON.parse(readFileSync(join(root, 'src/data/barangay-index.json'), 'utf8'));
-const siniloan = barangays.filter((b) => Math.floor(b.p / 1000) * 1000 === SINILOAN);
-if (siniloan.length === 0) throw new Error('No Siniloan barangays in the index.');
+const LGUS = JSON.parse(readFileSync(join(root, 'src/data/Laguna-LGUs.json'), 'utf8'));
 
 /** Even-odd test against every ring of a polygon; rings are flat [x, y, x, y, …]. */
 function insidePolygon(lng, lat, rings) {
@@ -72,15 +88,17 @@ function pointIn(barangay) {
 
 // Town-centre barangays are small and full of tagged trees; the big upland
 // ones have a few. Weighting by the inverse of the bounding box does that.
-const weights = siniloan.map((b) => 1 / Math.sqrt((b.b[2] - b.b[0]) * (b.b[3] - b.b[1])));
-const totalWeight = weights.reduce((a, b) => a + b, 0);
-function pickBarangay() {
-  let r = random() * totalWeight;
-  for (let i = 0; i < siniloan.length; i += 1) {
-    r -= weights[i];
-    if (r <= 0) return siniloan[i];
-  }
-  return siniloan[siniloan.length - 1];
+function barangayPicker(inTown) {
+  const weights = inTown.map((b) => 1 / Math.sqrt((b.b[2] - b.b[0]) * (b.b[3] - b.b[1])));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  return () => {
+    let r = random() * totalWeight;
+    for (let i = 0; i < inTown.length; i += 1) {
+      r -= weights[i];
+      if (r <= 0) return inTown[i];
+    }
+    return inTown[inTown.length - 1];
+  };
 }
 
 // ---- What --------------------------------------------------------------------
@@ -126,93 +144,109 @@ const daysAgo = (days) => new Date(NOW - days * 86400000).toISOString();
 
 const heightClassOf = (height) => (height < 6 ? 'Short' : height < 12 ? 'Medium' : 'Tall');
 
-// ---- The trees ---------------------------------------------------------------
-const trees = [];
-for (let i = 0; i < TREE_COUNT; i += 1) {
-  const barangay = pickBarangay();
-  const [latitude, longitude] = pointIn(barangay);
-  const kind = pick(speciesBag);
+// ---- One town: its trees, the permits for some, and tags from the public -----
+// In this order, town by town: Siniloan's come out as they always have.
+function seedTown(town) {
+  const lgu = LGUS.find((entry) => entry.name === town.name);
+  if (!lgu) throw new Error(`No LGU named ${town.name}.`);
+  const inTown = barangays.filter((b) => Math.floor(b.p / 1000) * 1000 === lgu.psgc);
+  if (inTown.length === 0) throw new Error(`No ${town.name} barangays in the index.`);
+  const pickBarangay = barangayPicker(inTown);
+  // TRN-29-0001: the town's number in its PSGC (Siniloan is 29), then the tree's.
+  const prefix = `TRN-${String(Math.floor(lgu.psgc / 1000) % 100).padStart(2, '0')}`;
 
-  // About one in six has a hazard; a third of those already have somebody on
-  // them. A tree with a hazard is far more likely to have a poor stem.
-  const hazard = chance(0.17);
-  const hazardType = hazard ? pick(['isLeaning', 'hasPowerlineConflict', 'isRootProblem', 'isDecayed']) : null;
-  const dispatched = hazard && chance(0.35);
-  const permitted = !hazard && chance(0.06);
-  const stem = hazard ? pick([1, 2, 2, 2, 3, 3]) : pick([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3]);
+  const trees = [];
+  for (let i = 0; i < town.trees; i += 1) {
+    const barangay = pickBarangay();
+    const [latitude, longitude] = pointIn(barangay);
+    const kind = pick(speciesBag);
 
-  const total = between(3, 22);
-  const id = uuid();
-  trees.push({
-    id,
-    tree_id: `TRN-${String(i + 1).padStart(4, '0')}`,
-    latitude,
-    longitude,
-    barangay: barangay.n,
-    barangay_psgc: barangay.p,
-    municipality: 'Siniloan',
-    species: kind.species,
-    scientific_name: kind.scientific_name,
-    species_type: kind.species_type,
-    biodiversity_status: kind.species_type,
-    tree_category: kind.tree_category,
-    dbh: between(8, 110),
-    merchantable_height: Number((total * between(0.4, 0.7, 2)).toFixed(1)),
-    total_height: total,
-    heightClass: heightClassOf(total),
-    height_class: heightClassOf(total),
-    stem_quality: STEM[stem],
-    isLeaning: hazardType === 'isLeaning',
-    hasPowerlineConflict: hazardType === 'hasPowerlineConflict',
-    isRootProblem: hazardType === 'isRootProblem',
-    isDecayed: hazardType === 'isDecayed',
-    assigned_to: dispatched ? pick(ARBORISTS).email : null,
-    has_cutting_permit: permitted,
-    task_status: 'Pending',
-    source: 'field',
-    is_tagged: true,
-    dateCaptured: daysAgo(Math.floor(random() * 180)),
-    is_training: true,
-  });
+    // About one in six has a hazard; a third of those already have somebody on
+    // them. A tree with a hazard is far more likely to have a poor stem.
+    const hazard = chance(0.17);
+    const hazardType = hazard ? pick(['isLeaning', 'hasPowerlineConflict', 'isRootProblem', 'isDecayed']) : null;
+    const dispatched = hazard && chance(0.35);
+    const permitted = !hazard && chance(0.06);
+    const stem = hazard ? pick([1, 2, 2, 2, 3, 3]) : pick([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3]);
+
+    const total = between(3, 22);
+    const id = uuid();
+    trees.push({
+      id,
+      tree_id: `${prefix}-${String(i + 1).padStart(4, '0')}`,
+      latitude,
+      longitude,
+      barangay: barangay.n,
+      barangay_psgc: barangay.p,
+      municipality: lgu.name,
+      species: kind.species,
+      scientific_name: kind.scientific_name,
+      species_type: kind.species_type,
+      biodiversity_status: kind.species_type,
+      tree_category: kind.tree_category,
+      dbh: between(8, 110),
+      merchantable_height: Number((total * between(0.4, 0.7, 2)).toFixed(1)),
+      total_height: total,
+      heightClass: heightClassOf(total),
+      height_class: heightClassOf(total),
+      stem_quality: STEM[stem],
+      isLeaning: hazardType === 'isLeaning',
+      hasPowerlineConflict: hazardType === 'hasPowerlineConflict',
+      isRootProblem: hazardType === 'isRootProblem',
+      isDecayed: hazardType === 'isDecayed',
+      assigned_to: dispatched ? pick(ARBORISTS).email : null,
+      has_cutting_permit: permitted,
+      task_status: 'Pending',
+      source: 'field',
+      is_tagged: true,
+      dateCaptured: daysAgo(Math.floor(random() * 180)),
+      is_training: true,
+    });
+  }
+
+  const permits = trees
+    .filter((tree) => tree.has_cutting_permit)
+    .map((tree) => ({
+      tree_id: tree.id,
+      client_name: pick(CLIENTS),
+      contact_info: `09${Math.floor(100000000 + random() * 899999999)}`,
+      reason: pick(REASONS),
+      requirements_urls: [],
+      species: tree.species,
+      number_of_trees: 1,
+      address: `${tree.barangay}, ${lgu.label}, Laguna`,
+      latitude: tree.latitude,
+      longitude: tree.longitude,
+      created_at: daysAgo(Math.floor(random() * 60)),
+      is_training: true,
+    }));
+
+  const tags = [];
+  for (let i = 0; i < town.tags; i += 1) {
+    const barangay = pickBarangay();
+    const [latitude, longitude] = pointIn(barangay);
+    const dispatched = i < Math.ceil(town.tags / 3);
+    tags.push({
+      species: pick(speciesBag).species,
+      barangay: barangay.n,
+      municipality: lgu.name,
+      lgu_psgc: lgu.psgc,
+      latitude,
+      longitude,
+      status: dispatched ? 'dispatched' : 'pending',
+      assigned_to: dispatched ? pick(ARBORISTS).email : null,
+      submitted_at: daysAgo(Math.floor(random() * 21)),
+      is_training: true,
+    });
+  }
+
+  return { town: lgu.label, trees, permits, tags };
 }
 
-// ---- Permits, for the trees that have one --------------------------------------
-const permits = trees
-  .filter((tree) => tree.has_cutting_permit)
-  .map((tree) => ({
-    tree_id: tree.id,
-    client_name: pick(CLIENTS),
-    contact_info: `09${Math.floor(100000000 + random() * 899999999)}`,
-    reason: pick(REASONS),
-    requirements_urls: [],
-    species: tree.species,
-    number_of_trees: 1,
-    address: `${tree.barangay}, Siniloan, Laguna`,
-    latitude: tree.latitude,
-    longitude: tree.longitude,
-    created_at: daysAgo(Math.floor(random() * 60)),
-    is_training: true,
-  }));
-
-// ---- Tags from the public, waiting for a field check ----------------------------
-const pendingTags = [];
-for (let i = 0; i < TAG_COUNT; i += 1) {
-  const barangay = pickBarangay();
-  const [latitude, longitude] = pointIn(barangay);
-  const dispatched = i < 4;
-  pendingTags.push({
-    species: pick(speciesBag).species,
-    barangay: barangay.n,
-    municipality: 'Siniloan',
-    lgu_psgc: SINILOAN,
-    latitude,
-    longitude,
-    status: dispatched ? 'dispatched' : 'pending',
-    assigned_to: dispatched ? pick(ARBORISTS).email : null,
-    submitted_at: daysAgo(Math.floor(random() * 21)),
-    is_training: true,
-  });
-}
+const seeded = TOWNS.map(seedTown);
+const trees = seeded.flatMap((t) => t.trees);
+const permits = seeded.flatMap((t) => t.permits);
+const pendingTags = seeded.flatMap((t) => t.tags);
 
 const arborists = ARBORISTS.map((a) => ({ ...a, status: 'Active', is_training: true }));
 
@@ -228,7 +262,7 @@ const seededKeys = Object.entries({ arborists, trees, permits, pending_trees: pe
 // Dollar-quoted, so nothing in the data needs escaping.
 const json = (rows) => `$seed$${JSON.stringify(rows)}$seed$::jsonb`;
 
-const sql = `-- Green Tag: dummy Siniloan data for LGU training. GENERATED — do not edit;
+const sql = `-- Green Tag: dummy data for training the offices. GENERATED — do not edit;
 -- change tools/make-training-seed.mjs and run it again.
 --
 -- Run in the SQL editor, after training_sandbox.sql. Safe to run again: it
@@ -237,7 +271,8 @@ const sql = `-- Green Tag: dummy Siniloan data for LGU training. GENERATED — d
 --
 -- Everything here is behind the training wall: only training accounts see it.
 --
---   ${trees.length} trees across ${new Set(trees.map((t) => t.barangay)).size} Siniloan barangays
+--   ${trees.length} trees across ${new Set(trees.map((t) => t.barangay_psgc)).size} barangays of ${seeded.length} towns:
+${seeded.map((t) => `--     ${t.town}: ${t.trees.length} trees, ${t.tags.length} tags`).join('\n')}
 --   ${trees.filter((t) => (t.isLeaning || t.hasPowerlineConflict || t.isRootProblem || t.isDecayed) && !t.assigned_to).length} hazards nobody has been sent to (red), ${trees.filter((t) => t.assigned_to).length} already dispatched (orange)
 --   ${permits.length} cutting permits issued (yellow)
 --   ${trees.filter((t) => t.stem_quality.startsWith('Code 2')).length} Code 2 stems, ${trees.filter((t) => t.stem_quality.startsWith('Code 3')).length} Code 3
@@ -248,7 +283,7 @@ const sql = `-- Green Tag: dummy Siniloan data for LGU training. GENERATED — d
 -- rather than failing, and listed in the check at the end.
 
 -- Inserting a tree normally writes "tree created" to PGENRO's activity log.
--- Paused while seeding, so 150 dummy trees do not land in the real log.
+-- Paused while seeding, so ${trees.length} dummy trees do not land in the real log.
 do $$
 begin
   if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then

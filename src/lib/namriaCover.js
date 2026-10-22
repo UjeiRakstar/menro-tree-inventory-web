@@ -15,6 +15,13 @@ import { landCoverById } from './landCover.js';
  *                'not-applicable'  not tree cover; no woody increment
  *   treeCover    whether it is a cover of trees at all
  *   match        for the classes with a rate: how good the borrowed rate is
+ *
+ * One class is not NAMRIA's: a bamboo stand (22 October), Green Tag's own, for
+ * the Forest Land Use Plan — riverbank and slope protection, livelihood.
+ * NAMRIA maps bamboo inside whatever cover surrounds it. It is not tree cover
+ * (no canopy, no woody growth: bamboo is left out of the carbon, as it is for
+ * a tagged clump in treeCarbon.js), and not counted as a natural area for the
+ * CBI, since most stands here were planted.
  */
 export const NAMRIA_CLASSES = Object.freeze([
   {
@@ -50,6 +57,7 @@ export const NAMRIA_CLASSES = Object.freeze([
     match: 'Approximate: the only agroforestry rate published is an improved Leucaena fallow.',
   },
   { id: 'grassland', label: 'Grassland', maiCoverId: null, rate: 'none', treeCover: false },
+  { id: 'bamboo-stand', label: 'Bamboo stand', maiCoverId: null, rate: 'not-applicable', treeCover: false, namria: false },
   { id: 'mangrove-forest', label: 'Mangrove forest', maiCoverId: null, rate: 'none', treeCover: true },
   { id: 'annual-crop', label: 'Annual crop', maiCoverId: null, rate: 'not-applicable', treeCover: false },
   { id: 'open-barren', label: 'Open / barren', maiCoverId: null, rate: 'not-applicable', treeCover: false },

@@ -10,13 +10,16 @@ import { supabaseMock } from '../../test/supabaseMock.js';
 import TreeDatabasePage from './TreeDatabasePage.jsx';
 import PublicNavbar from '../../components/PublicNavbar.jsx';
 
+const CLOUD = 'https://res.cloudinary.com/demo/image/upload/v1/';
+
 beforeEach(() => {
   supabaseMock.reset();
   supabaseMock.setResponse('trees:select', {
     data: [
-      { id: 't1', species: 'Narra', scientific_name: 'Pterocarpus indicus', barangay_psgc: 403426001 },
+      { id: 't1', species: 'Narra', scientific_name: 'Pterocarpus indicus', barangay_psgc: 403426001, source: 'field',
+        imageUrl: CLOUD + 'narra.jpg', leaves_url: CLOUD + 'narra-leaf.jpg' },
       { id: 't2', species: 'Molave' },
-      { id: 't3', species: 'Narra', barangay_psgc: 403405001 },
+      { id: 't3', species: 'Narra', barangay_psgc: 403405001, source: 'crowdsource', photo_url: CLOUD + 'resident.jpg' },
     ],
     error: null,
   });
@@ -45,10 +48,27 @@ describe('the public Tree Database (22 October)', () => {
     expect(within(narra).queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByText(/Kept by PGENRO Laguna/)).toBeInTheDocument();
     // Only the species are read from the trees: nothing else of them goes out.
-    expect(supabaseMock.calls.find((c) => c.table === 'trees').columns).toBe('id,species,scientific_name,barangay_psgc');
+    expect(supabaseMock.calls.find((c) => c.table === 'trees').columns).toBe(
+      'id,species,scientific_name,barangay_psgc,source,imageUrl,photo_url,leaves_url,bark_url,fruits_url'
+    );
     // Where it is tagged, by city and municipality.
     const where = within(narra).getByRole('region', { name: /Where it is tagged/ });
     expect(within(where).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Calamba City 1', 'Santa Cruz 1']);
+  });
+
+  it('shows a species with the field officers’ photos, sized by Cloudinary, never a resident’s', async () => {
+    render(<TreeDatabasePage />);
+    expect(screen.getByRole('region', { name: 'Tree Database of Laguna' })).toBeInTheDocument();
+    const list = await screen.findByRole('list', { name: 'Species tagged' });
+    fireEvent.click(within(list).getByRole('button', { name: /^Narra/ }));
+    const photos = screen.getByRole('figure', { name: 'Photos of Narra' });
+    expect(within(photos).getByRole('img', { name: 'Narra — the tree' })).toHaveAttribute(
+      'src', CLOUD.replace('v1/', 'w_900,c_limit,f_auto,q_auto/v1/') + 'narra.jpg'
+    );
+    expect(within(photos).getByRole('img', { name: 'Narra — leaves' })).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain('resident.jpg');
+    // The public chooses nothing.
+    expect(screen.queryByRole('region', { name: 'Choose the photos' })).not.toBeInTheDocument();
   });
 
   it('is in the public navigation', () => {

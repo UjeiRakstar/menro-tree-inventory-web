@@ -28,6 +28,13 @@ export const SUGGESTION_RULES = Object.freeze({
   dipterocarpShare: 0.3,
   /** One species at least this share was most likely planted. */
   plantationShare: 0.6,
+  /**
+   * Bamboo clumps (22 October): at least this many tagged, and at least this
+   * share of the points inside, read as a bamboo stand. A clump is tagged as
+   * one point, so fewer are needed than trees.
+   */
+  bambooMinClumps: 3,
+  bambooShare: 0.5,
 });
 
 /**
@@ -44,6 +51,17 @@ export const isDipterocarp = (tree) =>
 
 export const isFruitTree = (tree) => /fruit/i.test(String(tree?.tree_category ?? ''));
 
+/**
+ * Bamboo, by genus and by the names it goes by here: kawayan tinik (Bambusa
+ * blumeana), kawayan kiling (B. vulgaris), giant bamboo or botong
+ * (Dendrocalamus asper), bolo (Gigantochloa levis), buho (Schizostachyum).
+ */
+const BAMBOO_GENERA = /^(bambusa|dendrocalamus|gigantochloa|schizostachyum|thyrsostachys|phyllostachys|dinochloa)\b/i;
+const BAMBOO_NAMES = /\b(bamboos?|kawayan|botong|bolo|buho|anos|bayog|kayali)\b/i;
+
+export const isBamboo = (tree) =>
+  BAMBOO_GENERA.test(String(tree?.scientific_name ?? '').trim()) || BAMBOO_NAMES.test(String(tree?.species ?? ''));
+
 const speciesKey = (tree) => String(tree?.species ?? '').trim().toLowerCase();
 
 const percent = (share) => `${Math.round(share * 100)}%`;
@@ -56,11 +74,19 @@ export function describeTrees(trees) {
   const counts = new Map();
   let fruit = 0;
   let dipterocarps = 0;
+  let bamboo = 0;
+  const bambooSpecies = new Map();
   for (const tree of list) {
     const key = speciesKey(tree) || '(unknown)';
     counts.set(key, (counts.get(key) ?? 0) + 1);
     if (isFruitTree(tree)) fruit += 1;
     if (isDipterocarp(tree)) dipterocarps += 1;
+    if (isBamboo(tree)) {
+      bamboo += 1;
+      const name = String(tree.species ?? '').trim() || 'Bamboo';
+      const scientific = String(tree.scientific_name ?? '').trim();
+      if (!bambooSpecies.has(key)) bambooSpecies.set(key, scientific && !/^unknown$/i.test(scientific) ? `${name} (${scientific})` : name);
+    }
   }
   let topSpecies = null;
   let topCount = 0;
@@ -78,6 +104,9 @@ export function describeTrees(trees) {
     topShare: total ? topCount / total : 0,
     fruitShare: total ? fruit / total : 0,
     dipterocarpShare: total ? dipterocarps / total : 0,
+    bamboo,
+    bambooShare: total ? bamboo / total : 0,
+    bambooSpecies: [...bambooSpecies.values()],
   };
 }
 
@@ -90,6 +119,16 @@ export function suggestCover(trees, rules = SUGGESTION_RULES) {
   const d = describeTrees(trees);
   const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
   const counted = `${n(d.total, 'tree', 'trees')}, ${n(d.species, 'species', 'species')}`;
+
+  // Bamboo first: a few clumps are a stand, where a few trees say nothing.
+  if (d.bamboo >= rules.bambooMinClumps && d.bambooShare >= rules.bambooShare) {
+    return {
+      classId: 'bamboo-stand',
+      plantation: false,
+      reason: `${n(d.bamboo, 'bamboo clump', 'bamboo clumps')} of ${n(d.total, 'tagged point', 'tagged points')} — a bamboo stand: ${d.bambooSpecies.join(', ')}.`,
+      facts: d,
+    };
+  }
 
   if (d.total < rules.minTrees) {
     return {

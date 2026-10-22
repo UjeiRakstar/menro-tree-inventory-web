@@ -79,18 +79,32 @@ create policy "archived trees are out of the inventory" on public.trees as restr
   for select to anon, authenticated
   using (archived_at is null);
 
+-- Which side of the training wall a tree, and the caller, are on. Written
+-- through to_jsonb so this file runs before training_sandbox.sql too. These
+-- functions are SECURITY DEFINER, past the wall's own policy, so they check it
+-- themselves: a trainee MENRO does not archive, or list, a real tree of their
+-- town, nor a real MENRO a training one.
+create or replace function public.same_side_of_the_wall(p_tree public.trees)
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((to_jsonb(p_tree) ->> 'is_training')::boolean, false)
+       = coalesce((select (to_jsonb(p) ->> 'is_training')::boolean from public.profiles p where p.id = auth.uid()), false);
+$$;
+revoke all on function public.same_side_of_the_wall(public.trees) from public;
+
 -- Archive or restore: the MENRO / CENRO of the tree's LGU, with a reason to
 -- archive. The archive fields are written only here.
 create or replace function public.archive_tree(p_id text, p_archived boolean, p_reason text default null)
 returns void language plpgsql security definer set search_path = public as $$
 declare
+  v_tree public.trees%rowtype;
   v_barangay bigint;
   v_reason text := nullif(trim(coalesce(p_reason, '')), '');
 begin
-  select barangay_psgc into v_barangay from public.trees where id::text = p_id for update;
-  if not found then
+  select * into v_tree from public.trees where id::text = p_id for update;
+  if v_tree.id is null or not public.same_side_of_the_wall(v_tree) then
     raise exception 'No such tree.' using errcode = 'P0002';
   end if;
+  v_barangay := v_tree.barangay_psgc;
   if not (public.my_role() = 'lgu_admin' and public.is_active_account()
           and public.lgu_of_barangay(v_barangay) = public.my_lgu()) then
     raise exception 'Only the tree''s own MENRO / CENRO archives it.' using errcode = '42501';
@@ -113,6 +127,7 @@ create or replace function public.archived_trees()
 returns setof public.trees language sql stable security definer set search_path = public as $$
   select t.* from public.trees t
   where t.archived_at is not null
+    and public.same_side_of_the_wall(t)
     and public.my_role() = 'lgu_admin' and public.is_active_account()
     and public.lgu_of_barangay(t.barangay_psgc) = public.my_lgu()
   order by t.archived_at desc;

@@ -60,6 +60,20 @@ const JOBS = [
     width: 2048,
     encode: (image) => image.avif({ quality: 50 }),
   },
+  // The Community page's hero (22 October), and the Tree Database's: behind
+  // a gradient, full width, as About's forest is.
+  {
+    from: 'community-hero.jpg',
+    to: 'community-hero.avif',
+    width: 2048,
+    encode: (image) => image.avif({ quality: 50 }),
+  },
+  {
+    from: 'Aerial.jpg',
+    to: 'aerial.avif',
+    width: 2048,
+    encode: (image) => image.avif({ quality: 50 }),
+  },
 
   // The one heavy seal in the row of data sources on the About page. The
   // others there are already small enough to leave alone.

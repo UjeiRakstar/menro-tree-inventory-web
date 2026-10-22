@@ -155,6 +155,8 @@ const one = async (sql, params) => (await db.query(sql, params)).rows[0];
 const count = async (sql, params) => Number((await one(sql, params)).n);
 
 // ---- The seed ----------------------------------------------------------------------
+// Every town's mock trees (22 October): how many, from the seed's own header.
+const SEEDED = Number(SQL('training_seed.sql').match(/--\s+(\d+) trees across/)[1]);
 const realLogBefore = await count(`select count(*) n from public.activity_log where not is_training`);
 const seedOut = await asEditor(SQL('training_seed.sql'));
 const seedRows = seedOut[seedOut.length - 1].rows;
@@ -166,7 +168,7 @@ check('seeding writes nothing to the real activity log',
   (await count(`select count(*) n from public.activity_log where not is_training`)) === realLogBefore);
 const reseed = await fails(() => asEditor(SQL('training_seed.sql')));
 check('the seed runs again (a reset), without doubling up',
-  reseed === null && (await count(`select count(*) n from public.trees where is_training`)) === 150, reseed ?? '');
+  reseed === null && (await count(`select count(*) n from public.trees where is_training`)) === SEEDED, reseed ?? '');
 
 // ---- Outside the wall --------------------------------------------------------------
 const anonTrees = await as(null, 'anon', () => db.query(`select id from public.trees`));
@@ -201,8 +203,10 @@ check('…and whose activation is logged behind the wall', redeemedLog?.is_train
 
 // ---- Inside the wall ---------------------------------------------------------------
 const tTrees = await as(TRAINEE, 'authenticated', () => db.query(`select id from public.trees`));
-check('a trainee sees the 150 training trees and no real ones',
-  tTrees.rows.length === 150 && !tTrees.rows.some((r) => r.id.startsWith('real')), String(tTrees.rows.length));
+check('a trainee sees the training trees of every town and no real ones',
+  tTrees.rows.length === SEEDED && SEEDED > 1000 && !tTrees.rows.some((r) => r.id.startsWith('real')), String(tTrees.rows.length));
+check('…Siniloan’s 150 among them, as before',
+  (await as(TRAINEE, 'authenticated', () => count(`select count(*) n from public.trees where municipality = 'Siniloan'`))) === 150);
 const tTags = await as(TRAINEE, 'authenticated', () => count(`select count(*) n from public.pending_trees`));
 check('…the 12 training tags', tTags === 12, String(tTags));
 const tArb = await as(TRAINEE, 'authenticated', () => db.query(`select email from public.arborists`));
@@ -338,6 +342,66 @@ const pgSeesTrainee = await as(PGENRO, 'authenticated', () => count(`select coun
 check('PGENRO still sees every training account, to manage it', pgSeesTrainee === 1);
 const sczSeesTrainee = await as(FIELD_SCZ, 'authenticated', () => count(`select count(*) n from public.profiles where is_training`));
 check('a real account sees no training accounts', sczSeesTrainee === 0);
+
+// ---- A PGENRO training account (pgenro_training.sql), and the photo choices --------------------
+for (const file of ['species_photos.sql', 'pgenro_training.sql']) {
+  await runAll([file], 'runs');
+}
+const PG_TRAINEE = '00000000-0000-0000-0000-0000000000f1';
+await db.query(`insert into auth.users (id, email) values ($1, 'pg.trainee@training.invalid')`, [PG_TRAINEE]);
+const makeIt = SQL('pgenro_training.sql').replace('PUT-THE-TRAINING-ACCOUNT-EMAIL-HERE', 'pg.trainee@training.invalid');
+const made = await fails(() => asEditor(makeIt));
+const pgt = await one(`select role, is_training, lgu_psgc from public.profiles where id = $1`, [PG_TRAINEE]);
+check('section 4 makes the training PGENRO account', made === null && pgt.role === 'pgenro' && pgt.is_training === true && pgt.lgu_psgc === null,
+  made ?? JSON.stringify(pgt));
+const realAsTrainee = await fails(() => asEditor(SQL('pgenro_training.sql').replace('PUT-THE-TRAINING-ACCOUNT-EMAIL-HERE', 'pgenro@laguna.gov.ph')));
+check('…and refuses to turn the real PGENRO account into one', realAsTrainee !== null && /real PGENRO/.test(realAsTrainee), realAsTrainee ?? 'TURNED');
+
+const pgtTrees = await as(PG_TRAINEE, 'authenticated', () => db.query(`select id from public.trees`));
+check('a training PGENRO sees every town’s training trees and no real one',
+  pgtTrees.rows.length === await count(`select count(*) n from public.trees where is_training`) && !pgtTrees.rows.some((r) => r.id.startsWith('real')),
+  String(pgtTrees.rows.length));
+const pgtTags = await as(PG_TRAINEE, 'authenticated', () => count(`select count(*) n from public.pending_trees`));
+check('…every town’s training tags', pgtTags === await count(`select count(*) n from public.pending_trees where is_training`) && pgtTags > 12, String(pgtTags));
+const pgtLog = await as(PG_TRAINEE, 'authenticated', () => db.query(`select is_training from public.activity_log`));
+check('…the trainees’ log and not the real one', pgtLog.rows.length > 0 && pgtLog.rows.every((r) => r.is_training), String(pgtLog.rows.length));
+const pgtAccounts = await as(PG_TRAINEE, 'authenticated', () => db.query(`select id, is_training from public.profiles`));
+check('…the training accounts, not the real ones',
+  pgtAccounts.rows.some((r) => r.id === TRAINEE) && pgtAccounts.rows.every((r) => r.is_training), JSON.stringify(pgtAccounts.rows.length));
+const pgtArb = await as(PG_TRAINEE, 'authenticated', () => db.query(`select email from public.arborists`));
+check('…and the trainee arborists only', pgtArb.rows.length > 0 && pgtArb.rows.every((r) => /training/.test(r.email)), String(pgtArb.rows.length));
+
+const pgtTag = await one(`select id from public.pending_trees where is_training and lgu_psgc <> ${SNL} and status = 'pending' limit 1`);
+const pgtDispatch = await as(PG_TRAINEE, 'authenticated', () => db.query(
+  `update public.pending_trees set status = 'dispatched', assigned_to = 'ana.arborist@training.greentag.invalid' where id = $1`, [pgtTag.id]));
+check('it dispatches a training tag in any town', pgtDispatch.affectedRows === 1);
+
+for (const [what, sql] of [
+  ['issue a real account code', `select * from public.issue_account_code(${SNL})`],
+  ['move an account out of training', `select public.set_account_training('${TRAINEE}', false)`],
+  ['choose a species photo', `insert into public.species_photo_choices (species, cover_url) values ('Narra', 'https://x/a.jpg')`],
+]) {
+  const refused = await as(PG_TRAINEE, 'authenticated', () => fails(() => db.query(sql)));
+  check(`it cannot ${what}`, refused !== null, refused ?? 'DONE');
+}
+await as(PG_TRAINEE, 'authenticated', () => db.query(`update public.profiles set status = 'locked' where id = '${TRAINEE}'`));
+check('it cannot lock an account', (await one(`select status from public.profiles where id = $1`, [TRAINEE])).status === 'active');
+check('…and is not is_pgenro()', (await as(PG_TRAINEE, 'authenticated', () => one(`select public.is_pgenro() v`))).v === false);
+check('the real PGENRO still is', (await as(PGENRO, 'authenticated', () => one(`select public.is_pgenro() v`))).v === true);
+check('…and still sees no training tree', (await as(PGENRO, 'authenticated', () => count(`select count(*) n from public.trees where is_training`))) === 0);
+
+// species_photos.sql: PGENRO's cover and hidden photos.
+const chose = await as(PGENRO, 'authenticated', () => fails(() => db.query(
+  `insert into public.species_photo_choices (species, cover_url, hidden_urls) values ('  Narra ', 'https://x/a.jpg', '{https://x/b.jpg,https://x/b.jpg}')`)));
+const choice = await one(`select species, cover_url, hidden_urls, updated_by from public.species_photo_choices`);
+check('PGENRO chooses a species’ cover and hides a photo', chose === null && choice.species === 'narra' && choice.cover_url === 'https://x/a.jpg'
+  && choice.hidden_urls.join() === 'https://x/b.jpg' && choice.updated_by === PGENRO, chose ?? JSON.stringify(choice));
+await as(PGENRO, 'authenticated', () => db.query(`update public.species_photo_choices set hidden_urls = '{https://x/a.jpg}' where species = 'narra'`));
+check('…a hidden photo is never the cover', (await one(`select cover_url from public.species_photo_choices`)).cover_url === null);
+check('everyone reads the choices', (await as(null, 'anon', () => count(`select count(*) n from public.species_photo_choices`))) === 1);
+const menroChooses = await as(TRAINEE, 'authenticated', () => fails(() => db.query(`update public.species_photo_choices set cover_url = 'https://x/c.jpg'`)));
+const after = await one(`select cover_url from public.species_photo_choices`);
+check('an office does not choose them', after.cover_url === null, menroChooses ?? JSON.stringify(after));
 
 // ---- Purge ----------------------------------------------------------------------------------
 const realBefore = {

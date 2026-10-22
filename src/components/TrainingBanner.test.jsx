@@ -17,6 +17,12 @@ describe('TrainingBanner', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('tells a PGENRO training account what stays with the real PGENRO (22 October)', () => {
+    auth.profile = { role: 'pgenro', is_training: true };
+    render(<TrainingBanner />);
+    expect(screen.getByRole('note', { name: 'Training mode' })).toHaveTextContent(/every town’s practice data.*stays with the real PGENRO account/);
+  });
+
   it('says nothing to a real account', () => {
     auth.profile = { role: 'lgu_admin', is_training: false };
     const { container } = render(<TrainingBanner />);

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarDays, ChevronDown, Leaf, Loader2, LogOut, MapPin, Megaphone, ShieldCheck, Sprout, Trash2, TreePine, Users } from 'lucide-react';
-import forestcoverImg from '../../assets/optimised/forestcover.avif';
+// The community at work: a resident planting a seedling. Shrunk from
+// src/assets/community-hero.jpg by tools/optimise-images.mjs; a new photo
+// replaces that file (with the agreement of the people in it, RA 10173) and
+// the tool is run again.
+import heroImg from '../../assets/optimised/community-hero.avif';
 import { supabase } from '../../supabaseClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import Leaderboard from '../../components/public/Leaderboard.jsx';
@@ -20,12 +24,6 @@ import {
   takeTagWish,
 } from '../../lib/community.js';
 
-// The hero's photo: the community at work. Drop one in as
-// src/assets/community-hero.jpg (or .webp / .png) — with the agreement of the
-// people in it (RA 10173) — and it is used; until then, the forest of About.
-const HERO_PHOTOS = import.meta.glob('../../assets/community-hero.{jpg,jpeg,webp,png,avif}', { eager: true, import: 'default' });
-const HERO_PHOTO = Object.values(HERO_PHOTOS)[0] ?? forestcoverImg;
-
 /** What a resident can do for Laguna's trees, beside tagging them. */
 const WAYS = [
   { icon: TreePine, title: 'Tag the trees around you', text: 'A photo and a tap on the map add a tree to Laguna’s inventory once a field officer checks it — citizen science the City Biodiversity Index counts.' },
@@ -39,7 +37,7 @@ const WAYS = [
 function Hero({ signUp, joined, signedIn, starting }) {
   return (
     <section className="relative overflow-hidden bg-green-900" aria-label="Green Tag Community">
-      <img src={HERO_PHOTO} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+      <img src={heroImg} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-[50%_60%] opacity-60" />
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-green-950/80" />
       <div className="relative mx-auto flex min-h-[26rem] max-w-6xl flex-col justify-end px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <p className="text-sm font-bold uppercase tracking-widest text-lime-200">Get involved</p>

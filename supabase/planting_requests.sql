@@ -88,30 +88,30 @@ create policy "requests stay with the offices" on public.map_areas as restrictiv
 drop policy if exists "requests are seen by who decides them" on public.map_areas;
 create policy "requests are seen by who decides them" on public.map_areas as restrictive
   for select to authenticated
-  using (approval = 'approved' or public.is_pgenro() or public.is_lgu_admin_of(lgu_psgc));
+  using (approval = 'approved' or public.sees_as_pgenro() or public.is_lgu_admin_of(lgu_psgc));
 
 -- An approved planting site is PGENRO's to keep, whoever asked for it.
 drop policy if exists "pgenro keeps the planting sites" on public.map_areas;
 create policy "pgenro keeps the planting sites" on public.map_areas
   for update to authenticated
-  using (public.is_pgenro() and kind = 'planting-site' and approval = 'approved')
-  with check (public.is_pgenro() and kind = 'planting-site');
+  using (public.sees_as_pgenro() and kind = 'planting-site' and approval = 'approved')
+  with check (public.sees_as_pgenro() and kind = 'planting-site');
 
 drop policy if exists "pgenro removes planting sites" on public.map_areas;
 create policy "pgenro removes planting sites" on public.map_areas
   for delete to authenticated
-  using (public.is_pgenro() and kind = 'planting-site' and approval = 'approved');
+  using (public.sees_as_pgenro() and kind = 'planting-site' and approval = 'approved');
 
 -- …and not the office's any more, once approved.
 drop policy if exists "approved planting sites are pgenro's" on public.map_areas;
 create policy "approved planting sites are pgenro's" on public.map_areas as restrictive
   for update to authenticated
-  using (kind <> 'planting-site' or approval <> 'approved' or public.is_pgenro());
+  using (kind <> 'planting-site' or approval <> 'approved' or public.sees_as_pgenro());
 
 drop policy if exists "approved planting sites stay unless pgenro removes them" on public.map_areas;
 create policy "approved planting sites stay unless pgenro removes them" on public.map_areas as restrictive
   for delete to authenticated
-  using (kind <> 'planting-site' or approval <> 'approved' or public.is_pgenro());
+  using (kind <> 'planting-site' or approval <> 'approved' or public.sees_as_pgenro());
 
 -- PGENRO's decision, with a note the office sees.
 create or replace function public.decide_planting_request(p_id uuid, p_approve boolean, p_note text default null)
@@ -119,7 +119,8 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   v_area public.map_areas%rowtype;
 begin
-  if not public.is_pgenro() or not public.is_active_account() then
+  -- A training PGENRO decides the training requests (the wall check below).
+  if not public.sees_as_pgenro() or not public.is_active_account() then
     raise exception 'Only PGENRO decides on planting site requests.' using errcode = '42501';
   end if;
   select * into v_area from public.map_areas where id = p_id for update;

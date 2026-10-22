@@ -12,6 +12,7 @@ import { X, MapPin, Download, Search, ChevronRight, Archive, RotateCcw } from 'l
 import { everyRow } from '../lib/everyRow.js';
 import { loadFieldOfficers } from '../lib/fieldTeam.js';
 import InventoryTable, { ArchiveTreeDialog } from '../components/trees/InventoryTable.jsx';
+import { lguLabelOfTree } from '../lib/treeRows.js';
 
 /** A tree's barangay, for the Tree Database's "Where it is tagged". */
 const barangayOfTree = (tree) => tree.barangay;
@@ -32,8 +33,10 @@ const TreeDatabase = lazy(() => import('../components/TreeDatabase.jsx'));
 /**
  * The tabs of Trees. The carbon and biodiversity charts that were here are
  * on the BioDashboard (22 October).
- *   PGENRO         the inventory, the planting site requests to decide, and
- *                  the RISE species library it keeps
+ *   PGENRO         the inventory, the planting site requests to decide, the
+ *                  RISE species library it keeps, and the province's Tree
+ *                  Database as the public sees it — where it chooses each
+ *                  species' cover photo and hides the wrong ones
  *   MENRO / CENRO  the inventory, the tags to check, and the Tree Database:
  *                  its own species, with PGENRO's write-ups, read-only
  */
@@ -42,6 +45,7 @@ const TABS = {
     ['inventory', '🌳 Inventory'],
     ['requests', '🌱 Planting site requests'],
     ['species', '📘 Species (RISE)'],
+    ['database', '📚 Tree Database'],
   ],
   office: [
     ['inventory', '🌳 Inventory'],
@@ -274,7 +278,17 @@ export default function BiodiversityHub() {
           {activeTab === 'requests' && <PlantingRequests decides />}
           {activeTab === 'tags' && <PendingTreesTable />}
           {activeTab === 'database' && (
-            <TreeDatabase trees={trees} place={lgu?.label ?? 'this LGU'} placeOf={barangayOfTree} placesLabel="Where it is tagged, by barangay" />
+            forester ? (
+              <TreeDatabase
+                trees={trees}
+                place="Laguna"
+                placeOf={lguLabelOfTree}
+                placesLabel="Where it is tagged, by city and municipality"
+                choosePhotos={!profile?.is_training}
+              />
+            ) : (
+              <TreeDatabase trees={trees} place={lgu?.label ?? 'this LGU'} placeOf={barangayOfTree} placesLabel="Where it is tagged, by barangay" />
+            )
           )}
         </Suspense>
       ) : (

@@ -447,6 +447,40 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     needed. One edge: a phone that re-sends its own copy of a tree its office
     has archived gets that tree refused in its sync — the officer's copy is
     old by then, and the office can put the tree back.
+    **Run it again** (22 October, later): archiving now keeps to the training
+    wall — a trainee MENRO can no longer archive or list a real tree of their
+    town, nor a real MENRO a training one.
+34. **The Tree Database's photos, 22 October** — run
+    `supabase/species_photos.sql`. Each species in the Tree Database (the
+    public page, an office's, and PGENRO's new Tree Database tab under Trees)
+    shows its tagged trees' photos: a cover and a strip of leaves, bark and
+    fruits — field officers' photos only, never a resident's tag. On its own
+    tab PGENRO makes a photo the cover (the star) or hides one (a face, a
+    house, a wrong species) and shows it again from "Hidden". Until it runs,
+    the page picks the cover itself and choosing says the file is needed.
+35. **A PGENRO training account, 22 October** — run
+    `supabase/pgenro_training.sql` (after the training sandbox and step 34).
+    From then on a training account never acts as PGENRO for real: accounts,
+    codes, write-ups, photos, news, layers, the satellite, the inbox and data
+    requests all refuse it. A PGENRO trainee sees every town's training trees,
+    tags, permits and planting sites, the training accounts and the trainees'
+    log, and practises dispatching tags and deciding planting site requests.
+    To make one: Authentication → Users → Add user (a separate email, Auto
+    Confirm), put that email in section 4 of the file, run it again. The
+    violet banner tells them what stays with the real PGENRO account. Then
+    run `supabase/training_seed.sql` again for the new mock data: 1,110 trees
+    and 81 tags across Siniloan (the same 150 as before), the six cities and
+    the 4th district — Cavinti, Famy, Kalayaan, Luisiana, Lumban, Mabitac,
+    Magdalena, Majayjay, Paete, Pagsanjan, Pakil, Pangil, Pila, Santa Cruz and
+    Santa Maria. It is 840 KB: paste it whole into the SQL editor (it takes a
+    while), or run it with psql.
+36. **Bamboo stands, 22 October** — run `supabase/bamboo_stands.sql`. The
+    drawing tool has "Bamboo stand" beside NAMRIA's twelve classes, and the
+    area form suggests it when three or more of the points inside — at least
+    half — are bamboo clumps (kawayan tinik, kawayan kiling, giant bamboo,
+    bolo, buho …), naming the species found. A field officer tags a clump as
+    one point with its species, as any tree. Not tree cover: no growth rate,
+    no carbon, not a natural area for the CBI.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
@@ -547,7 +581,9 @@ Suggested order at the end.
    photo (about 200 KB once optimised). Use a photo the people in it agreed to
    (RA 10173), e.g. PGENRO's own event photos.
 
-2. **The public Tree Database with a hero, trees in the background.** *Has:*
+2. **Done 22 October.** ~~The public Tree Database with a hero, trees in the
+   background.~~ The aerial forest photo (`src/assets/Aerial.jpg`, 14 MB,
+   shrunk to 174 KB). *Was:* The public Tree Database with a hero, trees in the background. *Has:*
    a plain page title. *Would take:* a hero like About's. *Verdict:* **cosmetic,
    light, low priority.** Consistency is worth having, but it adds nothing a
    visitor learns. Do it with item 4, when the page gets its photos anyway.
@@ -560,7 +596,10 @@ Suggested order at the end.
    light.** No new data, no new query; it makes the database local, which is
    what makes it ours rather than a copy of RISE.
 
-4. **Photos in the Tree Database — a virtual brochure.** *Has:* the photos of
+4. **Done 22 October (step 34).** ~~Photos in the Tree Database — a virtual
+   brochure.~~ Cover, strip, thumbnails in the list (Cloudinary `w_`
+   sizes); field officers' photos only; PGENRO chooses the cover and hides
+   photos. *Was:* Photos in the Tree Database — a virtual brochure. *Has:* the photos of
    every tagged tree on Cloudinary (main, leaves, bark, fruits), already shown
    on the map's tree panel. *Would take:* a cover photo per species (the best
    of its verified trees, or one PGENRO chooses) and a strip of leaf, bark and
@@ -592,7 +631,8 @@ Suggested order at the end.
    rather than a second way to dispatch. Start stamping "captured by" soon:
    every week without it is a week of trees nobody can credit.
 
-6. **Bamboo in the drawing tool.** *Has:* the 12 NAMRIA land cover classes, no
+6. **Done 22 October (step 36).** ~~Bamboo in the drawing tool.~~ *Was:*
+   Bamboo in the drawing tool. *Has:* the 12 NAMRIA land cover classes, no
    bamboo; bamboo is left out of carbon on purpose (Chave's equation is for
    trees); the area form already **suggests a class from the trees inside**
    (`coverSuggestion.js`). *Would take:* a "Bamboo stand" class (light); the
@@ -606,7 +646,8 @@ Suggested order at the end.
    Useful for the FLUP (riverbank and slope protection, livelihood). Not for
    carbon: that would need a bamboo equation the system does not have.
 
-7. **Residents join events; attendance confirmed on site; counted for the CBI.**
+7. **Parked — an option, not a priority (22 October).** Residents join
+   events; attendance confirmed on site; counted for the CBI.
    *Has:* events with a venue pin, the LGU, and planting sites PGENRO approved
    (an event made from one); residents' accounts and their Community page.
    *Would take:* "Join" on an event (a table of who joined); the event shown on
@@ -626,7 +667,10 @@ Suggested order at the end.
    points.** *Verdict:* **helpful for engagement and for the reports, medium to
    heavy; not a CBI lever.** Worth doing after items 1 and 5.
 
-8. **Mock data for the cities and District 4, and a PGENRO training account.**
+8. **Done 22 October (step 35).** ~~Mock data for the cities and District 4,
+   and a PGENRO training account.~~ The PGENRO trainee is walled the other
+   way too: nothing it does reaches the live system (see step 35). *Was:*
+   Mock data for the cities and District 4, and a PGENRO training account.
    *Has:* the training wall (every trainee row walled off), and dummy data for
    **Siniloan only** (150 trees, 20 barangays, from
    `tools/make-training-seed.mjs`). *Would take:* the generator run for the six
@@ -657,8 +701,8 @@ Suggested order at the end.
    PGENRO's and a Data Protection Officer's review before it goes up. The
    deployment notes are below.
 
-**Suggested order:** 9 (before handover) → 5 (start stamping "captured by") →
-1 → 3 and 4 together (with 2) → 8 (before training the offices) → 6 → 7.
+**Where it stands (22 October):** 1, 2, 3, 4, 5, 6, 8 and 9 done; 7 parked as an
+option, not a priority.
 
 ## Before handing the system to IT (deployment notes, 22 October)
 
@@ -681,7 +725,9 @@ Suggested order at the end.
   URL = the live domain; redirect URLs: the domain's `/community`,
   `/public-map` and the password-reset page. Without it, sign-in links and
   Google return to the wrong place.
-- **Database:** run steps 32 and 33; then `health_check.sql` — every check true.
+- **Database:** run step 32 (`inbox.sql` and `satellite.sql` again — the
+  health check of 22 October still missed them), step 33 again, and steps
+  34–36; then `health_check.sql` — every check true.
 - **Edge Functions** deployed: `identify-tree`, `improve-report`,
   `rise-extract`, `ai-key-test`, `manage-account`, `send-reply`,
   `satellite-snapshot` (and its cron job). Then remove `GEMINI_API_KEY` from the

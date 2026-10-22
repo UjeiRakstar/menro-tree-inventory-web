@@ -173,7 +173,22 @@ returns bigint language sql stable security definer set search_path = public as 
   select lgu_psgc from public.profiles where id = auth.uid() and status = 'active';
 $$;
 
+-- PGENRO, acting for real. A PGENRO training account (training_sandbox.sql,
+-- pgenro_training.sql) is not: every live power — accounts, codes, write-ups,
+-- news, layers, settings — asks this, and refuses a trainee without having to
+-- name them. is_training is read through to_jsonb: this file runs before the
+-- sandbox adds the column.
 create or replace function public.is_pgenro()
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(public.my_role() = 'pgenro', false)
+     and not coalesce((select (to_jsonb(p) ->> 'is_training')::boolean
+                       from public.profiles p where p.id = auth.uid()), false);
+$$;
+
+-- PGENRO's province-wide view of a table behind the training wall: the real
+-- PGENRO, or a training one. The wall decides which rows; this, whose LGUs.
+-- Only ever used on walled tables, where a trainee sees training rows alone.
+create or replace function public.sees_as_pgenro()
 returns boolean language sql stable security definer set search_path = public as $$
   select coalesce(public.my_role() = 'pgenro', false);
 $$;
@@ -203,7 +218,7 @@ $$;
 do $$
 declare f text;
 begin
-  foreach f in array array['my_role()', 'my_lgu()', 'is_pgenro()',
+  foreach f in array array['my_role()', 'my_lgu()', 'is_pgenro()', 'sees_as_pgenro()',
                            'is_lgu_admin_of(bigint)', 'is_active_account()',
                            'is_menro_admin()']
   loop
@@ -239,7 +254,7 @@ create index if not exists activity_log_lgu_idx on public.activity_log (lgu_psgc
 alter table public.activity_log enable row level security;
 drop policy if exists "pgenro reads the whole log" on public.activity_log;
 create policy "pgenro reads the whole log" on public.activity_log
-  for select to authenticated using (public.is_pgenro());
+  for select to authenticated using (public.sees_as_pgenro());
 drop policy if exists "lgu admins read their lgu's log" on public.activity_log;
 create policy "lgu admins read their lgu's log" on public.activity_log
   for select to authenticated using (public.is_lgu_admin_of(lgu_psgc));

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { SUGGESTION_RULES, describeTrees, isDipterocarp, suggestCover } from './coverSuggestion.js';
+import { SUGGESTION_RULES, describeTrees, isBamboo, isDipterocarp, suggestCover } from './coverSuggestion.js';
 import { NAMRIA_CLASSES, maiCoverOf, noRateReason } from './namriaCover.js';
+import { guessCover } from './areaBatch.js';
 
 const tree = (species, extra = {}) => ({ species, ...extra });
 const many = (count, make) => Array.from({ length: count }, (_, i) => make(i));
@@ -77,6 +78,36 @@ describe('NAMRIA classes', () => {
     expect(noRateReason('grassland')).toMatch(/not a rate of zero/);
     expect(noRateReason('built-up')).toMatch(/not tree cover/);
     expect(noRateReason('open-forest')).toBe('');
-    expect(NAMRIA_CLASSES).toHaveLength(12);
+    // NAMRIA's twelve, and Green Tag's bamboo stand (22 October).
+    expect(NAMRIA_CLASSES).toHaveLength(13);
+    expect(NAMRIA_CLASSES.filter((cls) => cls.namria !== false)).toHaveLength(12);
+    expect(noRateReason('bamboo-stand')).toMatch(/Bamboo stand is not tree cover/);
+  });
+});
+
+describe('a bamboo stand (22 October)', () => {
+  const kawayan = (i) => tree('Kawayan tinik', { scientific_name: 'Bambusa blumeana', id: i });
+  it('is suggested from a few clumps, which say more than a few trees', () => {
+    const result = suggestCover([...many(3, kawayan), tree('Giant bamboo', { scientific_name: 'Dendrocalamus asper' }), tree('Narra')]);
+    expect(result.classId).toBe('bamboo-stand');
+    expect(result.reason).toBe(
+      '4 bamboo clumps of 5 tagged points — a bamboo stand: Kawayan tinik (Bambusa blumeana), Giant bamboo (Dendrocalamus asper).'
+    );
+  });
+
+  it('knows bamboo by its local names and its genus', () => {
+    expect(isBamboo(tree('Bolo'))).toBe(true);
+    expect(isBamboo(tree('Kawayan kiling'))).toBe(true);
+    expect(isBamboo(tree('Unknown', { scientific_name: 'Gigantochloa levis' }))).toBe(true);
+    expect(isBamboo(tree('Narra', { scientific_name: 'Pterocarpus indicus' }))).toBe(false);
+  });
+
+  it('is not suggested from two clumps, nor where bamboo is a minority', () => {
+    expect(suggestCover([...many(2, kawayan)]).classId).toBeNull();
+    expect(suggestCover([...many(3, kawayan), ...many(12, (i) => tree(`Species ${i % 6}`))]).classId).not.toBe('bamboo-stand');
+  });
+
+  it('comes in from a spreadsheet as bamboo', () => {
+    expect(guessCover('Kawayan / bamboo stand')).toBe('bamboo-stand');
   });
 });
