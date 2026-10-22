@@ -1,5 +1,5 @@
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 const auth = vi.hoisted(() => ({ profile: null }));
 vi.mock('../../context/AuthContext.jsx', () => ({ useAuth: () => auth }));
@@ -30,15 +30,25 @@ const TREES = [
 ];
 
 const PERMITS = [
-  { id: 'p1', tree_id: 'a', client_name: 'Maria Santos', reason: 'Road widening', created_at: '2026-10-01T08:00:00Z' },
-  { id: 'p2', tree_id: 'c', client_name: 'Jose Reyes', reason: 'Leaning over a house', created_at: '2026-10-05T08:00:00Z' },
-  { id: 'p3', tree_id: 'b', client_name: 'Liza Cruz', reason: 'Construction', created_at: '2026-09-01T08:00:00Z' },
+  { id: 'p1', tree_id: 'a', lgu_psgc: SCZ, client_name: 'Maria Santos', reason: 'Road widening', created_at: '2026-10-01T08:00:00Z' },
+  { id: 'p2', tree_id: 'c', lgu_psgc: PILA, client_name: 'Jose Reyes', reason: 'Leaning over a house', created_at: '2026-10-05T08:00:00Z' },
+  { id: 'p3', tree_id: 'b', lgu_psgc: SCZ, client_name: 'Liza Cruz', reason: 'Construction', created_at: '2026-09-01T08:00:00Z' },
 ];
 
-function renderBoard() {
+/** Where the board has sent the page, for the redirects. */
+function Where() {
+  const { pathname, search } = useLocation();
+  return <p data-testid="where">{pathname + search}</p>;
+}
+
+function renderBoard(path = '/action-board') {
   return render(
-    <MemoryRouter>
-      <ActionBoard />
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/action-board" element={<ActionBoard />} />
+        <Route path="*" element={<Where />} />
+      </Routes>
+      <Where />
     </MemoryRouter>
   );
 }
@@ -152,10 +162,9 @@ describe('the province overview', () => {
     expect(screen.queryByRole('button', { name: /Dispatch|Re-assign|Issue permit/ })).not.toBeInTheDocument();
   });
 
-  it('has moved off the Action Board, which says where it went', async () => {
+  it('is not on the Action Board', async () => {
     renderBoard();
-    expect(await screen.findByText(/Read-only/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'BioDashboard' })).toHaveAttribute('href', '/biodiversity-dashboard');
+    await screen.findByRole('tab', { name: 'Permit logs' });
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument();
   });
 });
@@ -195,40 +204,66 @@ describe('one LGU’s summary, on its office’s BioDashboard', () => {
   });
 });
 
+describe('PGENRO’s Action Board (22 October)', () => {
+  it('has the permit logs, field officers, accounts and climate plans as its tabs', async () => {
+    renderBoard();
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent.replace('!', ''))).toEqual(['Permit logs', 'Field officers', 'Accounts', 'Climate plans']);
+    expect(screen.getByRole('tab', { name: 'Permit logs' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: /Planting site requests/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the tab in the address, so a link opens it', async () => {
+    renderBoard('/action-board?tab=climate-plans');
+    expect(await screen.findByRole('tab', { name: 'Climate plans' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /^Field officers/ }));
+    expect(screen.getAllByTestId('where')[0]).toHaveTextContent('/action-board?tab=officers');
+  });
+
+  it('sends the old planting site requests link to Trees, where they are now', async () => {
+    renderBoard('/action-board?tab=requests');
+    await waitFor(() => expect(screen.getAllByTestId('where')[0]).toHaveTextContent('/inventory?tab=requests'));
+  });
+
+  it('marks the tabs with something waiting: a field officer to approve, a plan to check', async () => {
+    supabaseMock.setResponse('profiles:select', (record) =>
+      record.filters.some(([column]) => column === 'is_approved')
+        ? { data: [{ id: 'f1' }, { id: 'f2' }], error: null }
+        : { data: [{ id: 'm1', role: 'lgu_admin', status: 'active', lgu_psgc: SCZ }], error: null }
+    );
+    supabaseMock.setResponse('lccap_submissions:select', { data: [{ id: 'l1' }], error: null });
+    renderBoard();
+    expect(await screen.findByLabelText('2 field officers are waiting for approval')).toBeInTheDocument();
+    expect(screen.getByLabelText('1 climate plan is waiting to be checked')).toBeInTheDocument();
+  });
+});
+
 describe('the permit logs', () => {
   async function openPermits() {
     renderBoard();
-    // The permit logs are the Action Board's first tab now.
-    fireEvent.click(await screen.findByRole('tab', { name: 'Permit logs' }));
-    await screen.findAllByRole('table');
+    // The permits page is the Action Board's first tab now (22 October).
+    await screen.findByRole('heading', { name: 'Permit Logs' });
   }
 
-  it('groups every LGU’s permits under it', async () => {
+  it('lists every LGU’s permits under it, each opened when wanted', async () => {
     await openPermits();
-    expect(screen.getByRole('table', { name: 'Permits — Santa Cruz' })).toHaveTextContent('Maria Santos');
-    expect(screen.getByRole('table', { name: 'Permits — Santa Cruz' })).toHaveTextContent('Liza Cruz');
-    expect(screen.getByRole('table', { name: 'Permits — Pila' })).toHaveTextContent('Jose Reyes');
+    fireEvent.click(await screen.findByRole('button', { name: /Santa Cruz/ }));
+    const santaCruz = screen.getByRole('region', { name: 'Santa Cruz' });
+    expect(santaCruz).toHaveTextContent('Maria Santos');
+    expect(santaCruz).toHaveTextContent('Liza Cruz');
+    fireEvent.click(screen.getByRole('button', { name: /Pila/ }));
+    expect(screen.getByRole('region', { name: 'Pila' })).toHaveTextContent('Jose Reyes');
+    // The report by year, quarter, month or dates is there too.
+    expect(screen.getByRole('button', { name: /Report/ })).toBeInTheDocument();
   });
 
   it('reads every permit and acts on none: no archive, no restore (18 October)', async () => {
     await openPermits();
-    expect(screen.getByRole('table', { name: 'Permits — Pila' })).toHaveTextContent('Jose Reyes');
-    expect(screen.queryByRole('button', { name: /Archive|Restore/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: /Show archived/ })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /Pila/ }));
+    expect(screen.getByRole('region', { name: 'Pila' })).toHaveTextContent('Jose Reyes');
+    expect(screen.queryByRole('button', { name: /^(Archive|Restore) the permit/ })).not.toBeInTheDocument();
     expect(supabaseMock.supabase.rpc).not.toHaveBeenCalledWith('archive_permit', expect.anything());
   });
-
-  it('downloads a report for the dates chosen', async () => {
-    await openPermits();
-    const form = screen.getByRole('form', { name: 'Permit report' });
-    fireEvent.change(within(form).getByLabelText('From'), { target: { value: '2026-10-01' } });
-    fireEvent.click(within(form).getByRole('button', { name: /Download Excel report/ }));
-
-    // ExcelJS arrives on the click, which can take a while on a busy machine.
-    expect(await screen.findByText(/Report downloaded: 2 permits/, {}, { timeout: 25000 })).toBeInTheDocument();
-    expect(saveAsSpy).toHaveBeenCalledTimes(1);
-    expect(saveAsSpy.mock.calls[0][1]).toMatch(/^permits-by-lgu-\d{4}-\d{2}-\d{2}\.xlsx$/);
-  }, 30000);
 });
 
 describe('the super admin (18 October)', () => {
@@ -236,10 +271,10 @@ describe('the super admin (18 October)', () => {
     auth.profile = { ...PGENRO_ADMIN, is_super_admin: true };
     supabaseMock.supabase.rpc.mockResolvedValue({ data: null, error: null });
     renderBoard();
-    fireEvent.click(await screen.findByRole('tab', { name: 'Permit logs' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pila/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Archive the permit for Jose Reyes' }));
     await waitFor(() => expect(supabaseMock.supabase.rpc).toHaveBeenCalledWith('archive_permit', { p_id: 'p2', p_archived: true }));
     expect(await screen.findByRole('button', { name: 'Restore the permit for Jose Reyes' })).toBeInTheDocument();
-    expect(screen.getByRole('table', { name: 'Permits — Pila' })).toHaveTextContent('Archived');
+    expect(screen.getByRole('region', { name: 'Pila' })).toHaveTextContent('Archived');
   });
 });

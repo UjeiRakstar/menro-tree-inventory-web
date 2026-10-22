@@ -43,7 +43,7 @@ describe('a climate plan’s checks and badges', () => {
 
   it('counts in the CBI among the LGU’s plans', () => {
     const table = cbiTable({ climatePlan: planBadges([VERIFIED], SCZ, 2026) });
-    expect(table.rows.find((r) => r.name.startsWith('Policies and plans')).value).toBe(
+    expect(table.rows.find((r) => r.name.startsWith('20. Biodiversity-related responses to climate change')).value).toBe(
       'eLCCAP 2024–2032, verified by PGENRO; submitted to the Climate Change Commission'
     );
   });

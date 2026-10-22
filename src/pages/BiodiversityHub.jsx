@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { loadWoodDensities, withWoodDensities } from '../lib/woodDensities.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
@@ -19,6 +19,9 @@ const PIE_COLORS = ['#16a34a', '#dc2626', '#f97316', '#eab308', '#06b6d4'];
 // PGENRO's forester keeps the RISE write-ups; nobody else opens the tab, so
 // nobody else downloads it.
 const SpeciesLibrary = lazy(() => import('../components/pgenro/SpeciesLibrary.jsx'));
+// PGENRO decides the planting site requests here (22 October; they were on
+// its Action Board).
+const PlantingRequests = lazy(() => import('../components/PlantingRequests.jsx'));
 
 export default function BiodiversityHub() {
   const { profile, lgu } = useAuth();
@@ -26,7 +29,12 @@ export default function BiodiversityHub() {
   const officeLgu = officeLguOf(profile);
   const [trees, setTrees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('inventory');
+  // ?tab=requests opens PGENRO's planting site requests (the header links there).
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => (forester && searchParams.get('tab') === 'requests' ? 'requests' : 'inventory'));
+  useEffect(() => {
+    if (forester && searchParams.get('tab') === 'requests') setActiveTab('requests');
+  }, [forester, searchParams]);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [search, setSearch] = useState('');
@@ -197,7 +205,11 @@ export default function BiodiversityHub() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Biodiversity</h1>
-          <p className="mt-1 text-slate-600 text-sm">Tree inventory, carbon sink analytics, and DENR reporting.</p>
+          <p className="mt-1 text-slate-600 text-sm">
+            {forester
+              ? 'Tree inventory, the planting site requests to decide, and the species library.'
+              : 'Tree inventory, carbon sink analytics, and DENR reporting.'}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -221,10 +233,18 @@ export default function BiodiversityHub() {
           className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'inventory' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           🌳 Inventory
         </button>
-        <button onClick={() => setActiveTab('analytics')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'analytics' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          📊 Carbon Sink & Biodiversity
-        </button>
+        {/* PGENRO's carbon and biodiversity are on its BioDashboard (22 October). */}
+        {forester ? (
+          <button onClick={() => setActiveTab('requests')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'requests' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            🌱 Planting site requests
+          </button>
+        ) : (
+          <button onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'analytics' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            📊 Carbon Sink & Biodiversity
+          </button>
+        )}
         {forester && (
           <button onClick={() => setActiveTab('species')}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === 'species' ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
@@ -237,7 +257,11 @@ export default function BiodiversityHub() {
         <Suspense fallback={<p className="text-sm text-slate-500">Loading species…</p>}>
           <SpeciesLibrary trees={trees} />
         </Suspense>
-      ) : activeTab === 'inventory' ? (
+      ) : activeTab === 'requests' && forester ? (
+        <Suspense fallback={<p className="text-sm text-slate-500">Loading the requests…</p>}>
+          <PlantingRequests decides />
+        </Suspense>
+      ) : activeTab === 'inventory' || forester ? (
         <>
           {/* Search */}
           <div className="relative max-w-sm">

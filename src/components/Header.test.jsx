@@ -130,12 +130,16 @@ describe('Header, for whoever is signed in', () => {
     expect(await screen.findByRole('button', { name: 'PGENRO Laguna · Super admin — account menu' })).toBeInTheDocument();
   });
 
-  it('gives PGENRO the Accounts page', async () => {
+  it('keeps PGENRO’s office work on its Action Board, not in the seal’s menu (22 October)', async () => {
     supabaseMock.signInAs(PGENRO_ADMIN);
     renderHeader();
     await screen.findByAltText('PGENRO Laguna');
     openMenu();
-    expect(screen.getByRole('link', { name: /Accounts/ })).toHaveAttribute('href', '/accounts');
+    for (const name of [/Accounts/, /Field officers/, /Permit logs/, /Climate plans/, /Planting site requests/]) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('link', { name: /Inbox/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /News & Events/ })).toHaveAttribute('href', '/news');
   });
 
   it('does not offer an LGU admin the Accounts page', async () => {
@@ -203,6 +207,22 @@ describe('the badges', () => {
     await waitFor(() => expect(supabaseMock.writesTo('trees', 'select')).toHaveLength(1));
     expect(supabaseMock.writesTo('map_area_proposals', 'select')).toHaveLength(0);
     expect(screen.queryByLabelText(/proposal/)).not.toBeInTheDocument();
+  });
+
+  it('marks PGENRO’s Action Board for what is on it — officers and plans — never the offices’ hazards (22 October)', async () => {
+    supabaseMock.signInAs(PGENRO_ADMIN);
+    supabaseMock.setResponse('trees:select', { data: [hazard('t1', 403426001), hazard('t2', 403426002)], error: null });
+    supabaseMock.setResponse('profiles:select', (record) =>
+      record.filters.some(([column]) => column === 'is_approved') ? { data: [{ id: 'p1' }], error: null } : { data: [], error: null }
+    );
+    supabaseMock.setResponse('lccap_submissions:select', { data: [{ id: 'l1' }, { id: 'l2' }], error: null });
+    supabaseMock.setResponse('map_areas:select', { data: [{ id: 'r1' }], error: null });
+    renderHeader();
+    expect(
+      await within(mainNav()).findByLabelText('1 field officer is waiting for approval; 2 climate plans are waiting to be checked')
+    ).toHaveTextContent('!');
+    expect(within(mainNav()).getByLabelText('1 planting site request is waiting for a decision')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/hazard/)).not.toBeInTheDocument();
   });
 
   it('shows nothing when nothing needs the office', async () => {

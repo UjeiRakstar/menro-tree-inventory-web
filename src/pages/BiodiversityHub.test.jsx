@@ -74,3 +74,30 @@ describe('the inventory, for the province (21 October)', () => {
     expect(screen.queryByLabelText('Trees by city and municipality')).not.toBeInTheDocument();
   });
 });
+
+describe('PGENRO’s Trees (22 October)', () => {
+  it('has the planting site requests to decide, and not the carbon charts, which are on the BioDashboard', async () => {
+    auth.profile = PGENRO_ADMIN;
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Planting site requests/ }));
+    expect(await screen.findByRole('region', { name: 'Planting site requests' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Carbon Sink/ })).not.toBeInTheDocument();
+  });
+
+  it('opens on the requests from ?tab=requests, as the old links had them', async () => {
+    auth.profile = PGENRO_ADMIN;
+    render(
+      <MemoryRouter initialEntries={['/inventory?tab=requests']}>
+        <BiodiversityHub />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('region', { name: 'Planting site requests' })).toBeInTheDocument();
+  });
+
+  it('leaves an LGU office its carbon tab, and no requests here', async () => {
+    auth.profile = SANTA_CRUZ_ADMIN;
+    renderPage();
+    expect(await screen.findByRole('button', { name: /Carbon Sink/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Planting site requests/ })).not.toBeInTheDocument();
+  });
+});

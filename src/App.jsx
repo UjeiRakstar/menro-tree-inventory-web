@@ -26,7 +26,6 @@ const PublicDashboard = lazy(() => import('./pages/public/PublicDashboard.jsx'))
 const PublicMap = lazy(() => import('./pages/public/PublicMap.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Activate = lazy(() => import('./pages/Activate.jsx'));
-const Accounts = lazy(() => import('./pages/pgenro/Accounts.jsx'));
 const MapLayersPage = lazy(() => import('./pages/pgenro/MapLayersPage.jsx'));
 const MenroMap = lazy(() => import('./pages/MenroMap.jsx'));
 const BiodiversityHub = lazy(() => import('./pages/BiodiversityHub.jsx'));
@@ -38,7 +37,6 @@ const PermitsLog = lazy(() => import('./pages/PermitsLog.jsx'));
 const OfficeBioDashboard = lazy(() => import('./pages/OfficeBioDashboard.jsx'));
 const Inbox = lazy(() => import('./pages/Inbox.jsx'));
 const NewsPage = lazy(() => import('./pages/pgenro/NewsPage.jsx'));
-const ClimatePlans = lazy(() => import('./pages/pgenro/ClimatePlans.jsx'));
 const ContactPage = lazy(() => import('./pages/public/ContactPage.jsx'));
 const CommunityPage = lazy(() => import('./pages/public/CommunityPage.jsx'));
 const Onboarding = lazy(() => import('./pages/onboarding/Onboarding.jsx'));
@@ -182,6 +180,16 @@ function BareShell() {
   );
 }
 
+/**
+ * A page PGENRO now has as a tab of its Action Board (22 October): PGENRO is
+ * taken there; an office keeps the page, where it has one.
+ */
+function OnPgenroBoard({ tab, children = null }) {
+  const { profile } = useAuth();
+  if (isPgenro(profile)) return <Navigate to={`/action-board?tab=${tab}`} replace />;
+  return children ?? <NotFound />;
+}
+
 /** PGENRO's pages. Anyone else gets the same Not Found an unknown page would. */
 function PgenroOnly({ children }) {
   const { profile } = useAuth();
@@ -248,17 +256,17 @@ function AppRoutes() {
       </Route>
 
       <Route element={<ProtectedRoute />}>
-        <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
+        <Route path="accounts" element={<OnPgenroBoard tab="accounts" />} />
         <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
         <Route path="news" element={<EventsPage><NewsPage /></EventsPage>} />
-        <Route path="climate-plans" element={<PgenroOnly><ClimatePlans /></PgenroOnly>} />
+        <Route path="climate-plans" element={<OnPgenroBoard tab="climate-plans" />} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="map" element={<MenroMap />} />
         <Route path="settings" element={<Settings />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />
-        <Route path="arborists" element={<ManageArborists />} />
-        <Route path="permits" element={<OwnPermitsLog />} />
+        <Route path="arborists" element={<OnPgenroBoard tab="officers"><ManageArborists /></OnPgenroBoard>} />
+        <Route path="permits" element={<OnPgenroBoard tab="permits"><OwnPermitsLog /></OnPgenroBoard>} />
         <Route path="biodiversity-dashboard" element={<OfficeBioDashboard />} />
         <Route path="*" element={<NotFound />} />
       </Route>

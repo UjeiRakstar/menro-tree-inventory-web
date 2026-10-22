@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, FileText, Inbox as InboxIcon, Layers, Leaf, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, ShieldCheck, Sprout, Users } from 'lucide-react';
+import { ChevronDown, FileText, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, Sprout, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -13,15 +13,17 @@ import santaCruzLogo from '../assets/Santa Cruz Logo.png';
 /**
  * The four places an office goes every day, in the order of the mockup.
  *
- * "Trees" is the inventory list. The field officers, the permit log and —
- * for PGENRO — the accounts are reached from the office's seal on the right:
- * they are visited, not lived in, and four tabs read faster than seven.
+ * "Trees" is the inventory list. An office reaches its field officers and
+ * permit log from its seal on the right: they are visited, not lived in, and
+ * four tabs read faster than seven. PGENRO's field officers, accounts, permit
+ * logs and climate plans are tabs of its Action Board, and its planting site
+ * requests are on Trees (22 October).
  */
 const NAV_ITEMS = [
   { to: '/biodiversity-dashboard', label: 'BioDashboard' },
-  { to: '/action-board', label: 'Action Board', badge: 'actions' },
+  { to: '/action-board', label: 'Action Board', badge: 'board' },
   { to: '/map', label: 'Map' },
-  { to: '/inventory', label: 'Trees' },
+  { to: '/inventory', label: 'Trees', badge: 'trees' },
 ];
 
 /**
@@ -102,18 +104,51 @@ export default function Header() {
     // PGENRO decides planting site requests; an office answers a declined one.
     withRequests: pgenro ? 'waiting' : lguAdmin ? 'declined' : null,
     withInbox: pgenro || lguAdmin,
+    // PGENRO dispatches nothing: the hazards are each office's (22 October).
+    withHazards: !pgenro,
+    withPlans: pgenro,
   });
-  // The seal's "!" is everything waiting on this office's say-so.
-  const waiting = attention.approvals + attention.proposals + attention.requests + attention.inbox;
+
+  // The tabs' "!" (22 October). An office's Action Board: hazards to
+  // dispatch. PGENRO's: field officers to approve and plans to check, which
+  // are its tabs now; and on Trees, the planting site requests to decide.
+  const tabAlerts = pgenro
+    ? {
+        board: {
+          count: attention.approvals + attention.plans,
+          label: [
+            attention.approvals > 0 &&
+              `${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`,
+            attention.plans > 0 && `${attention.plans} climate ${attention.plans === 1 ? 'plan is' : 'plans are'} waiting to be checked`,
+          ]
+            .filter(Boolean)
+            .join('; '),
+        },
+        trees: {
+          count: attention.requests,
+          label: `${attention.requests} planting site ${attention.requests === 1 ? 'request is' : 'requests are'} waiting for a decision`,
+        },
+      }
+    : {
+        board: {
+          count: attention.actions,
+          label: `${attention.actions} ${attention.actions === 1 ? 'hazard needs' : 'hazards need'} dispatching`,
+        },
+        trees: { count: 0, label: '' },
+      };
+
+  // The seal's "!" is everything waiting on this office's say-so that its
+  // menu opens. PGENRO's officers, plans and requests are on the tabs.
+  const waiting = pgenro ? attention.inbox : attention.approvals + attention.proposals + attention.requests + attention.inbox;
   const waitingLabel = [
-    attention.approvals > 0 &&
+    !pgenro &&
+      attention.approvals > 0 &&
       `${attention.approvals} field ${attention.approvals === 1 ? 'officer is' : 'officers are'} waiting for approval`,
     attention.proposals > 0 &&
       `${attention.proposals} PGENRO ${attention.proposals === 1 ? 'proposal is' : 'proposals are'} waiting for a decision`,
-    attention.requests > 0 &&
-      (pgenro
-        ? `${attention.requests} planting site ${attention.requests === 1 ? 'request is' : 'requests are'} waiting for a decision`
-        : `${attention.requests} planting site ${attention.requests === 1 ? 'request was' : 'requests were'} declined`),
+    !pgenro &&
+      attention.requests > 0 &&
+      `${attention.requests} planting site ${attention.requests === 1 ? 'request was' : 'requests were'} declined`,
     attention.inbox > 0 && `${attention.inbox} unread ${attention.inbox === 1 ? 'message' : 'messages'} in the inbox`,
   ]
     .filter(Boolean)
@@ -182,12 +217,7 @@ export default function Header() {
           {NAV_ITEMS.map(({ to, label, badge }) => (
             <NavLink key={to} to={to} className={tab}>
               {label}
-              {badge === 'actions' && (
-                <Badge
-                  count={attention.actions}
-                  label={`${attention.actions} ${attention.actions === 1 ? 'hazard needs' : 'hazards need'} dispatching`}
-                />
-              )}
+              {badge && <Badge count={tabAlerts[badge].count} label={tabAlerts[badge].label} />}
             </NavLink>
           ))}
         </nav>
@@ -227,11 +257,7 @@ export default function Header() {
                 {NAV_ITEMS.map(({ to, label, badge }) => (
                   <NavLink key={to} to={to} className={menuItem}>
                     <span className="flex-1">{label}</span>
-                    {badge === 'actions' && attention.actions > 0 && (
-                      <span className="rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white">
-                        {attention.actions}
-                      </span>
-                    )}
+                    {badge && tabAlerts[badge].count > 0 && <MenuAlert label={tabAlerts[badge].label} />}
                   </NavLink>
                 ))}
               </nav>
@@ -250,13 +276,17 @@ export default function Header() {
                     Settings
                   </NavLink>
                 )}
-                <NavLink to="/arborists" className={menuItem}>
-                  <Users size={16} aria-hidden="true" className="text-slate-500" />
-                  <span className="flex-1">Field officers</span>
-                  {attention.approvals > 0 && (
-                    <MenuAlert label={`${attention.approvals} waiting for approval`} />
-                  )}
-                </NavLink>
+                {/* PGENRO's field officers, accounts, permit logs and climate
+                    plans are tabs of its Action Board (22 October). */}
+                {!pgenro && (
+                  <NavLink to="/arborists" className={menuItem}>
+                    <Users size={16} aria-hidden="true" className="text-slate-500" />
+                    <span className="flex-1">Field officers</span>
+                    {attention.approvals > 0 && (
+                      <MenuAlert label={`${attention.approvals} waiting for approval`} />
+                    )}
+                  </NavLink>
+                )}
                 {attention.proposals > 0 && (
                   <NavLink to={`/map?area=${encodeURIComponent(attention.firstProposalArea)}`} className={menuItem}>
                     <MapPinned size={16} aria-hidden="true" className="text-slate-500" />
@@ -264,35 +294,23 @@ export default function Header() {
                     <MenuAlert label={`${attention.proposals} to decide`} />
                   </NavLink>
                 )}
-                {(pgenro || lguAdmin) && (
+                {lguAdmin && (
                   <NavLink to="/action-board?tab=requests" className={menuItem}>
                     <Sprout size={16} aria-hidden="true" className="text-slate-500" />
                     <span className="flex-1">Planting site requests</span>
-                    {attention.requests > 0 && (
-                      <MenuAlert label={`${attention.requests} ${pgenro ? 'to decide' : 'declined'}`} />
-                    )}
+                    {attention.requests > 0 && <MenuAlert label={`${attention.requests} declined`} />}
                   </NavLink>
                 )}
-                <NavLink to="/permits" className={menuItem}>
-                  <FileText size={16} aria-hidden="true" className="text-slate-500" />
-                  Permit logs
-                </NavLink>
-                {pgenro && (
-                  <NavLink to="/accounts" className={menuItem}>
-                    <ShieldCheck size={16} aria-hidden="true" className="text-slate-500" />
-                    Accounts
+                {!pgenro && (
+                  <NavLink to="/permits" className={menuItem}>
+                    <FileText size={16} aria-hidden="true" className="text-slate-500" />
+                    Permit logs
                   </NavLink>
                 )}
                 {(pgenro || (lguAdmin && !profile?.is_training)) && (
                   <NavLink to="/news" className={menuItem}>
                     <Megaphone size={16} aria-hidden="true" className="text-slate-500" />
                     {pgenro ? 'News & Events' : 'Events'}
-                  </NavLink>
-                )}
-                {pgenro && (
-                  <NavLink to="/climate-plans" className={menuItem}>
-                    <Leaf size={16} aria-hidden="true" className="text-slate-500" />
-                    Climate plans
                   </NavLink>
                 )}
                 {pgenro && (

@@ -29,15 +29,28 @@ export const lguOfTree = (tree) => {
  *              those waiting for its decision; for an office, its own that
  *              PGENRO declined, to correct or withdraw. Only when `withRequests`.
  *   inbox      the office's unread messages (inbox.sql). Only when `withInbox`.
+ *   plans      climate plans waiting for PGENRO to check (lccap.sql). Only
+ *              when `withPlans`.
+ *
+ * `withHazards` false leaves the hazards out: PGENRO's (22 October), whose
+ * Action Board has none — dispatching is each MENRO / CENRO's — so a "!" for
+ * them pointed at nothing it could open.
  *
  * An LGU account counts its own LGU only: the database already narrows the
  * field officers it can see, and the hazards are narrowed here. Counted again
  * on every page change, so a dispatch or an approval clears its badge by the
  * time the next page opens.
  */
-export function useAttention({ lguPsgc = null, withProposals = false, withRequests = null, withInbox = false } = {}) {
+export function useAttention({
+  lguPsgc = null,
+  withProposals = false,
+  withRequests = null,
+  withInbox = false,
+  withHazards = true,
+  withPlans = false,
+} = {}) {
   const { pathname } = useLocation();
-  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null, requests: 0, inbox: 0 });
+  const [counts, setCounts] = useState({ actions: 0, approvals: 0, proposals: 0, firstProposalArea: null, requests: 0, inbox: 0, plans: 0 });
   // Bumped when a proposal is made or decided, so the "!" changes live
   // (supabase/live_updates.sql) rather than on the next page.
   const [tick, setTick] = useState(0);
@@ -74,8 +87,8 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [trees, pending, proposals, requests, inbox] = await Promise.all([
-        everyRow(() => supabase.from('trees').select('*')),
+      const [trees, pending, proposals, requests, inbox, plans] = await Promise.all([
+        withHazards ? everyRow(() => supabase.from('trees').select('*')) : Promise.resolve({ data: [], error: null }),
         supabase
           .from('profiles')
           .select('id')
@@ -101,6 +114,9 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
         withInbox
           ? supabase.from('inbox_messages').select('id').is('read_at', null).is('archived_at', null)
           : Promise.resolve({ data: [], error: null }),
+        withPlans
+          ? supabase.from('lccap_submissions').select('id').eq('status', 'pending')
+          : Promise.resolve({ data: [], error: null }),
       ]);
       if (cancelled) return;
 
@@ -114,12 +130,13 @@ export function useAttention({ lguPsgc = null, withProposals = false, withReques
         firstProposalArea: open[0]?.area_id ?? null,
         requests: requests.error || !Array.isArray(requests.data) ? 0 : requests.data.length,
         inbox: inbox.error || !Array.isArray(inbox.data) ? 0 : inbox.data.length,
+        plans: plans.error || !Array.isArray(plans.data) ? 0 : plans.data.length,
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [pathname, lguPsgc, withProposals, withRequests, withInbox, tick]);
+  }, [pathname, lguPsgc, withProposals, withRequests, withInbox, withHazards, withPlans, tick]);
 
   return counts;
 }

@@ -76,7 +76,7 @@ export function linkOf(message) {
   if (link.kind === 'news' && link.id) return { to: `/about#news-${link.id}`, label: 'See it on the website' };
   // A climate plan (lccap.sql): PGENRO checks it; the LGU's office sees it in Settings.
   if (link.kind === 'lccap') {
-    return message.office === 'pgenro' ? { to: '/climate-plans', label: 'Check it' } : { to: '/settings', label: 'See it in Settings' };
+    return message.office === 'pgenro' ? { to: '/action-board?tab=climate-plans', label: 'Check it' } : { to: '/settings', label: 'See it in Settings' };
   }
   return null;
 }

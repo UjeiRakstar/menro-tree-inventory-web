@@ -42,10 +42,10 @@ describe('the CBI’s projects, policies, partnerships and outreach', () => {
 
   it('fills the CBI table’s governance rows, the budget still outside', () => {
     const table = cbiTable({ events: cbiEventCounts(POSTS, { lgu: 403426000, year: 2026 }), year: 2026 });
-    const row = (start) => table.rows.find((r) => r.name.startsWith(start));
-    expect(row('Outreach').value).toBe('1 in 2026: CBI Training');
-    expect(row('Agencies').value).toBe('1 in 2026: MOA with UPLB');
-    expect(row('Biodiversity projects').value).toBe('None posted for 2026');
-    expect(row('Budget').value).toBe('Outside this system');
+    const row = (part) => table.rows.find((r) => r.name.includes(part));
+    expect(row('27. Outreach').value).toBe('1 in 2026: CBI Training');
+    expect(row('24. Partnerships').value).toBe('1 in 2026: MOA with UPLB');
+    expect(row('25. Biodiversity projects').value).toBe('None posted for 2026');
+    expect(row('16. Budget').value).toBe('Outside this system');
   });
 });

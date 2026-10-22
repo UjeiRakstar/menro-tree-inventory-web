@@ -482,6 +482,10 @@ stayed online** after the area was deleted or its PDF replaced.
 
 ## Asked for on 14 October, not built yet
 
+- **PGENRO passing an office's event on (parked 22 October).** A MENRO /
+  CENRO's event goes to PGENRO's inbox and its own (inbox.sql). Parked: a
+  way for PGENRO to send that event on to other MENRO / CENRO offices.
+
 - **The field app's tree identification change** is committed (`1eb809e` on
   the field app's branch). `flutter test` there needs CMake installed (dartcv4
   builds OpenCV); on this PC it does not run.

@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
-import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download, FileBarChart } from 'lucide-react';
+import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download, FileBarChart, Archive, RotateCcw, MapPin } from 'lucide-react';
 import CertificatePrint from '../components/CertificatePrint.jsx';
 import PermitReport from '../components/PermitReport.jsx';
 import { groupPermits } from '../lib/permitReport.js';
 import { saveAs } from 'file-saver';
 import { useAuth } from '../context/AuthContext.jsx';
-import { inOfficeLgu } from '../lib/roles.js';
+import { inOfficeLgu, isSuperAdmin } from '../lib/roles.js';
 import { lguOfPermitRow } from '../lib/permitLogs.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 
@@ -18,12 +19,20 @@ const LGU_LABEL = new Map(MUNICIPALITY_LIST.map((item) => [item.psgc, item.label
 const lguLabelOf = (permit) => LGU_LABEL.get(lguOfPermitRow(permit, LGU_BY_NAME)) ?? null;
 
 /**
- *   lgu  the office's LGU code — only its permits are listed; undefined for
- *        PGENRO. The database fences them too (permits_fence.sql); this keeps
- *        the list right before that file is run.
+ *   lgu       the office's LGU code — only its permits are listed; undefined
+ *             for PGENRO. The database fences them too (permits_fence.sql);
+ *             this keeps the list right before that file is run.
+ *   embedded  shown as a tab of the Action Board (22 October): its title is
+ *             the tab's, a level down.
+ *
+ * The super admin alone archives and restores a permit (super_admin.sql); an
+ * archived permit stays in the list, marked. Everyone else only reads them.
  */
-export default function PermitsLog({ lgu = undefined }) {
+export default function PermitsLog({ lgu = undefined, embedded = false }) {
   const { profile } = useAuth();
+  const canArchive = isSuperAdmin(profile);
+  const [busyId, setBusyId] = useState(null);
+  const [notice, setNotice] = useState(null);
   // The letterhead's LGU, by the office's code; PGENRO's file is the province's.
   const officeLgu = lgu ? MUNICIPALITY_LIST.find((item) => item.psgc === Number(lgu)) ?? null : null;
   const [permits, setPermits] = useState([]);
@@ -102,6 +111,21 @@ export default function PermitsLog({ lgu = undefined }) {
   // Reset page when filters change
   useEffect(() => { setCurrentPage(1); }, [search, filterBarangay, dateFrom, dateTo]);
 
+  async function setArchived(permit, archived) {
+    setBusyId(permit.id);
+    setNotice(null);
+    const { error } = await supabase.rpc('archive_permit', { p_id: String(permit.id), p_archived: archived });
+    setBusyId(null);
+    if (error) {
+      setNotice({ ok: false, text: error.message });
+      return;
+    }
+    setPermits((current) =>
+      current.map((row) => (row.id === permit.id ? { ...row, archived_at: archived ? new Date().toISOString() : null } : row))
+    );
+    setNotice({ ok: true, text: `Permit for ${permit.client_name || 'this client'} ${archived ? 'archived' : 'restored'}.` });
+  }
+
   function handlePrint(permit) {
     setPrintPermit(permit);
     setTimeout(() => { window.print(); setPrintPermit(null); }, 300);
@@ -160,6 +184,7 @@ export default function PermitsLog({ lgu = undefined }) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Docs</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">Cert</th>
+                  <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
@@ -167,8 +192,13 @@ export default function PermitsLog({ lgu = undefined }) {
                   const urls = Array.isArray(permit.requirements_urls) ? permit.requirements_urls : [];
                   const status = permit.status || 'Pending';
                   return (
-                    <tr key={permit.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-2 text-sm font-medium text-slate-900">{permit.client_name || '—'}</td>
+                    <tr key={permit.id} className={permit.archived_at ? 'bg-slate-50 text-slate-400' : 'hover:bg-slate-50'}>
+                      <td className="px-4 py-2 text-sm font-medium text-slate-900">
+                        {permit.client_name || '—'}
+                        {permit.archived_at && (
+                          <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600">Archived</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-sm text-slate-700">{permit.contact_info || '—'}</td>
                       <td className="px-4 py-2 text-sm text-slate-700 max-w-[140px] truncate" title={permit.address}>{permit.address || '—'}</td>
                       <td className="px-4 py-2 text-xs text-slate-500">
@@ -206,6 +236,28 @@ export default function PermitsLog({ lgu = undefined }) {
                           <Printer size={10} /> Print
                         </button>
                       </td>
+                      <td className="whitespace-nowrap px-4 py-2 text-right text-sm">
+                        {permit.tree_id && (
+                          <Link
+                            to={`/map?tree=${encodeURIComponent(permit.tree_id)}`}
+                            className="mr-3 inline-flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800"
+                          >
+                            <MapPin size={12} aria-hidden="true" /> Tree
+                          </Link>
+                        )}
+                        {canArchive && (
+                          <button
+                            type="button"
+                            disabled={busyId === permit.id}
+                            onClick={() => setArchived(permit, !permit.archived_at)}
+                            aria-label={`${permit.archived_at ? 'Restore' : 'Archive'} the permit for ${permit.client_name || 'this client'}`}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {permit.archived_at ? <RotateCcw size={12} aria-hidden="true" /> : <Archive size={12} aria-hidden="true" />}
+                            {permit.archived_at ? 'Restore' : 'Archive'}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -218,8 +270,16 @@ export default function PermitsLog({ lgu = undefined }) {
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Permit Logs</h1>
-          <p className="mt-1 text-slate-600 text-sm">All walk-in and system-generated cutting permits.</p>
+          {embedded ? (
+            <h2 className="text-lg font-semibold text-slate-900">Permit Logs</h2>
+          ) : (
+            <h1 className="text-2xl font-semibold text-slate-900">Permit Logs</h1>
+          )}
+          <p className="mt-1 text-slate-600 text-sm">
+            {lgu === undefined
+              ? 'Every city and municipality’s walk-in and system-generated cutting permits. Each is its MENRO / CENRO’s record.'
+              : 'All walk-in and system-generated cutting permits.'}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -249,6 +309,10 @@ export default function PermitsLog({ lgu = undefined }) {
         lguOf={lguLabelOf}
         preparedBy={profile?.full_name || ''}
       />
+
+      {notice && (
+        <p role={notice.ok ? 'status' : 'alert'} className={`text-sm ${notice.ok ? 'text-green-800' : 'text-red-700'}`}>{notice.text}</p>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
