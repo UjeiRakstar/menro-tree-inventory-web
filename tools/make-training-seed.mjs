@@ -208,6 +208,9 @@ function seedTown(town) {
     .filter((tree) => tree.has_cutting_permit)
     .map((tree) => ({
       tree_id: tree.id,
+      // Written here: from the SQL editor, stamp_permit_lgu() keeps what it is
+      // given, and a permit with no LGU is no trainee office's to see.
+      lgu_psgc: lgu.psgc,
       client_name: pick(CLIENTS),
       contact_info: `09${Math.floor(100000000 + random() * 899999999)}`,
       reason: pick(REASONS),
