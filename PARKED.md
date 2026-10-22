@@ -386,7 +386,7 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     accounts.sql, training_sandbox.sql and inbox.sql). An LGU files its LCCAP
     or eLCCAP — the plan, its years, the CCC's Certificate of Receipt if it has
     it — in Settings or at its first sign-in; PGENRO checks it under Climate
-    plans (menu) and verifies or returns it with a note, each side told in its
+    plans (an Action Board tab since 22 October) and verifies or returns it with a note, each side told in its
     Inbox. Verified: "LCCAP on file" (while its years run) and "Submitted to
     the CCC" (with the receipt) on the BioDashboard and the map's city panel,
     each opening its document, and a row in the CBI table. Until it runs, the
@@ -404,7 +404,7 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     MENRO / CENRO posts its own LGU's events under Events in its menu — sent
     to PGENRO's inbox and its own, not to every office. The form asks for the
     event's purpose, not its CBI credit; a city's panel on the map shows its
-    CBI points (7 of the 23 indicators the system can score). Until it runs,
+    CBI points (9 of the Singapore Index Handbook's 28 indicators, 2021). Until it runs,
     events save without their pin.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
@@ -413,7 +413,7 @@ allow and refuse — 15 suites, 642 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is
-read-only: paste it in the SQL editor any time. Each row says whether a part
+read-only, and covers steps 1–31 (22 October): paste it in the SQL editor any time. Each row says whether a part
 is in (tables, row level security, triggers, the restrictive rules,
 functions, storage buckets) and names what is missing, then reads out the
 counts worth watching.
