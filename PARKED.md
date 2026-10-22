@@ -510,6 +510,165 @@ check jurisdiction** — any verifier who knew a tag's id could publish another
 LGU's tag or a training one, and "adopt" any tree. And **old area documents
 stayed online** after the area was deleted or its PDF replaced.
 
+## Asked for on 22 October — paunti-unti, one at a time (not built)
+
+Parked as asked: none of this is coded. Each item says what the system already
+has, what it would take, and an honest verdict on whether it earns its place.
+Suggested order at the end.
+
+1. **Get Involved → the Community page, with a hero and the sign-up as the call
+   to action.** *Has:* the About page's "Get Involved!" goes to the public map;
+   the Community page has the Google sign-in and the leaderboard, but no hero
+   or explanation. *Would take:* the button pointed at `/community`; a hero
+   like About's (a photo of people doing community conservation) and a short
+   section on why the community matters — conservation, promotion, tree
+   planting, IEC, tagging; the sign-up button made the main action. After
+   Google: Supabase's Google sign-in is a full-page redirect, not a pop-up, so
+   there is no window to close — instead the sign-in returns straight to the
+   map with **Tag a tree** already open (`/public-map?tag=1`), which is the same
+   effect. *Verdict:* **helpful, light.** It turns a vague button into a funnel
+   that ends in a tag — the data the system exists for. The only weight is the
+   photo (about 200 KB once optimised). Use a photo the people in it agreed to
+   (RA 10173), e.g. PGENRO's own event photos.
+
+2. **The public Tree Database with a hero, trees in the background.** *Has:*
+   a plain page title. *Would take:* a hero like About's. *Verdict:* **cosmetic,
+   light, low priority.** Consistency is worth having, but it adds nothing a
+   visitor learns. Do it with item 4, when the page gets its photos anyway.
+
+3. **Where each species is tagged — by LGU for the public, by barangay for an
+   office.** *Has:* every tree's LGU and barangay already, in the data the page
+   loads. *Would take:* a "Where it grows here" list in each species' card
+   (LGU or barangay with counts), and perhaps a small map. *Verdict:* **helpful,
+   light.** No new data, no new query; it makes the database local, which is
+   what makes it ours rather than a copy of RISE.
+
+4. **Photos in the Tree Database — a virtual brochure.** *Has:* the photos of
+   every tagged tree on Cloudinary (main, leaves, bark, fruits), already shown
+   on the map's tree panel. *Would take:* a cover photo per species (the best
+   of its verified trees, or one PGENRO chooses) and a strip of leaf, bark and
+   fruit photos; Cloudinary's resizing in the address (`w_400`) so a list of
+   thumbnails stays small. *Verdict:* **helpful, medium.** It is the single
+   thing that makes the database a brochure. Two cautions: only verified trees'
+   photos (a resident's untrusted photo should not illustrate a species), and
+   PGENRO should be able to hide a photo that shows a person or a house.
+
+5. **The inventory table restructured** — Photo | Species | Barangay (office) /
+   LGU (PGENRO) | DBH | Total height | Health | Date | Tagged by — and, for an
+   office, Assigned to, Dispatch, Archive. *Has:* photo, species, DBH, both
+   heights, date; the hazard flags (leaning, powerline, decay, roots) that make
+   **Health**; `assigned_to` (an email, to show as the officer's name); the
+   dispatch dialog on the Action Board; `source` (community or field).
+   *Missing:* **who captured a tree** — the field app saves no "captured by"
+   (`tree_model.dart` has no such field), so "Tagged by: officer's name" needs
+   a column the database stamps on every new tree; trees already saved stay
+   "field officer, name unknown" (the activity log may recover some). **No tree
+   archive exists**: a delete would take its carbon, CBI and permit history
+   with it, so it should be an **archive with a reason** (like permits), never
+   a delete. *Verdict:* **helpful, medium — the most useful item here for the
+   offices.** Health in green/red with the warnings on a click is a quick win.
+   Dispatch from Trees duplicates the Action Board's: reuse the same dialog
+   rather than a second way to dispatch. Start stamping "captured by" soon:
+   every week without it is a week of trees nobody can credit.
+
+6. **Bamboo in the drawing tool.** *Has:* the 12 NAMRIA land cover classes, no
+   bamboo; bamboo is left out of carbon on purpose (Chave's equation is for
+   trees); the area form already **suggests a class from the trees inside**
+   (`coverSuggestion.js`). *Would take:* a "Bamboo stand" class (light); the
+   field officer tags the clump as a point with its species — *Bambusa
+   blumeana* (kawayan tinik), *B. vulgaris* (kawayan kiling), *Dendrocalamus
+   asper* (giant bamboo), *Gigantochloa levis* (bolo) and the like — and when an
+   office draws an area around such points, the form suggests "Bamboo stand"
+   and lists the species found, as it does for trees. A point cannot give an
+   area by itself; the office still draws the outline. *Verdict:* **useful,
+   light to medium, not too much** — it fits the existing suggestion exactly.
+   Useful for the FLUP (riverbank and slope protection, livelihood). Not for
+   carbon: that would need a bamboo equation the system does not have.
+
+7. **Residents join events; attendance confirmed on site; counted for the CBI.**
+   *Has:* events with a venue pin, the LGU, and planting sites PGENRO approved
+   (an event made from one); residents' accounts and their Community page.
+   *Would take:* "Join" on an event (a table of who joined); the event shown on
+   the resident's Community page with directions (a link to Google Maps from
+   the pin), landmarks and a contact person (two new event fields); and on the
+   day, a **Check in** button that reads the phone's location once and confirms
+   it is within the site during the event's hours. *Honest limits:* a web page
+   **cannot detect a phone on site by itself** — the resident has to open the
+   page and press Check in; automatic detection needs a native app tracking
+   location, which residents do not have and which RA 10173 would make heavy.
+   A location can be faked, which is acceptable for engagement, not for an
+   audit. *The CBI, honestly:* the Handbook's Indicator 27 counts **events**,
+   not attendees (attendance is "extra information" it invites, no points);
+   Indicator 28 counts community **scientists** (people contributing records),
+   which attending a planting is not. So attendance would appear in the
+   biodiversity report as participation, but **would not raise the CBI
+   points.** *Verdict:* **helpful for engagement and for the reports, medium to
+   heavy; not a CBI lever.** Worth doing after items 1 and 5.
+
+8. **Mock data for the cities and District 4, and a PGENRO training account.**
+   *Has:* the training wall (every trainee row walled off), and dummy data for
+   **Siniloan only** (150 trees, 20 barangays, from
+   `tools/make-training-seed.mjs`). *Would take:* the generator run for the six
+   cities and the 4th district's LGUs — to confirm, the 4th district is Cavinti,
+   Famy, Kalayaan, Luisiana, Lumban, Mabitac, Magdalena, Majayjay, Paete,
+   Pagsanjan, Pakil, Pangil, Pila, Santa Cruz, Santa Maria and Siniloan — at
+   50–100 trees each (about 1,000–2,000 rows: small); each trainee office sees
+   its own LGU's mock data. A **PGENRO training account** seeing every LGU's
+   mock data needs the training policies widened for one role: medium, and it
+   touches the security rules, so it needs the SQL test suites extended with
+   it. *Verdict:* **helpful — for training the offices and for the defense
+   demo — medium.** No cost to the live system: the rows sit behind the
+   training wall and `training_purge.sql` removes them.
+
+9. **Deployment, the public disclaimer and the privacy clause.** *Has:*
+   `public/privacy.html` (updated 21 October); the planning-purposes line on
+   every sheet and report; consent on residents' sign-in and data requests.
+   *Missing:* a **Terms of Use / Disclaimer** page — the map is for planning, not
+   a survey or title; figures are estimates with stated sources; species
+   identification by AI may be wrong; community content is checked before it
+   is shown; no warranty; the RISE write-ups are DENR-ERDB's — linked from the
+   footer and the sign-up. *Verdict:* **necessary, light** — the text needs
+   PGENRO's and a Data Protection Officer's review before it goes up. The
+   deployment notes are below.
+
+**Suggested order:** 9 (before handover) → 5 (start stamping "captured by") →
+1 → 3 and 4 together (with 2) → 8 (before training the offices) → 6 → 7.
+
+## Before handing the system to IT (deployment notes, 22 October)
+
+- **Push and merge.** The web branch `feat/ui-overhaul-phase-2-4` is 156
+  commits ahead of GitHub and not merged into `main`; push it, open a pull
+  request, merge. The field app's branch likewise, after the phone test.
+- **What stays out of Git:** `.env` (ignored); the Copernicus instance ID (in
+  the database); the service role key, `GEMINI_API_KEY`, `BREVO_API_KEY` (Supabase
+  secrets). Hand these to IT separately, never in a commit or a chat.
+- **Hosting.** Any static host (Vercel, Netlify, the province's own server):
+  build `npm ci && npm run build`, publish `dist/`, Node 20 or later. Every
+  path must fall back to `index.html` (a single-page app): `/map`,
+  `/tree-database` and the rest give "not found" without that rule. The repo
+  has no host config yet — add the one for the host chosen. Environment
+  values: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
+  `VITE_CLOUDINARY_CLOUD_NAME`.
+- **Supabase for the live address.** Authentication → URL Configuration: Site
+  URL = the live domain; redirect URLs: the domain's `/community`,
+  `/public-map` and the password-reset page. Without it, sign-in links and
+  Google return to the wrong place.
+- **Database:** run step 32; then `health_check.sql` — every check true.
+- **Edge Functions** deployed: `identify-tree`, `improve-report`,
+  `rise-extract`, `ai-key-test`, `manage-account`, `send-reply`,
+  `satellite-snapshot` (and its cron job). Then remove `GEMINI_API_KEY` from the
+  field app's `.env` and rebuild it.
+- **Copernicus:** the configuration's bounds stay on Laguna; the instance ID
+  is re-entered on Map layers if the configuration changes.
+- **Before going live:** `npm run test` and `npm run test:sql` pass; `npm audit
+  fix` for the React Router advisory (a minor update), then the tests again;
+  the Terms of Use page (item 9 above); the field app tested on a phone.
+- **Free-tier limits to watch:** Supabase (database 500 MB, storage 1 GB,
+  5 GB egress a month — the satellite tiles are read from storage), Cloudinary
+  credits, Copernicus 30,000 requests a month, Gemini quota per LGU key.
+- **Handover documents:** `CAPSTONE_SPECS.md` (the system), `PARKED.md` (the
+  runbook, steps 1–32, and what is deferred), `supabase/RUNBOOK.md`.
+
 ## Asked for on 14 October, not built yet
 
 - ~~PGENRO passing an office's event on~~ — done 22 October (step 32).
