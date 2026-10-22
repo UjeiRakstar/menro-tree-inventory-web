@@ -385,6 +385,21 @@ export function areaPermission(profile, feature) {
   return null;
 }
 
+/**
+ * Whether the account may make an event on an area (22 October): a tree
+ * planting site PGENRO designated — approved, saved — for PGENRO, or for the
+ * MENRO / CENRO of the LGU it is in. Never a training account: its events
+ * would go public. The database decides in the end (inbox.sql).
+ */
+export function canMakeEventAt(profile, feature) {
+  const props = feature?.properties;
+  if (!props?.saved || props.kind !== 'planting-site' || (props.approval ?? 'approved') !== 'approved') return false;
+  if (profile?.is_training) return false;
+  const role = roleOf(profile);
+  if (role === ROLES.PGENRO) return true;
+  return role === ROLES.LGU_ADMIN && Number(profile?.lgu_psgc) === Number(props.lguPsgc);
+}
+
 /** The fields a proposal changes, in words, for the MENRO deciding on it. */
 const PROPOSAL_FIELDS = [
   ['name', 'Name'],

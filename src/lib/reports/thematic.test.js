@@ -140,7 +140,11 @@ describe('the biodiversity report', () => {
     });
     const cbi = report.tables.find((t) => t.key === 'cbi');
     expect(cbi.rows[0].value).toBe('12 ha of tree cover mapped (0% of the area)');
-    expect(cbi.rows.at(-1).value).toBe('Outside this system');
+    expect(cbi.rows.at(-2).value).toBe('Outside this system');
+    // Points on the index's bands where the system has the measure: 0.3% tree cover is none.
+    expect(cbi.rows[0].points).toBe('0');
+    expect(cbi.rows.find((r) => r.name === 'Budget for biodiversity').points).toBe('');
+    expect(cbi.rows.at(-1).value).toMatch(/^\d+ of 16, from 4 of the index’s 23 indicators$/);
     const text = Object.fromEntries(report.sections.map((s) => [s.key, s.text]));
     expect(text.composition).toMatch(/^6 trees of 4 species have been tagged in Santa Cruz/);
     expect(text.diversity).toMatch(/H′ = 1\.33/);

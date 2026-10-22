@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { CircleMarker, GeoJSON, MapContainer, Polygon, TileLayer, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
+  LAGUNA_BOUNDS,
+  LAGUNA_PROVINCE,
+  OUTSIDE_LAGUNA_MASK,
   boundsOfMunicipality,
   containsPoint,
   maskOutsideMunicipality,
@@ -17,25 +20,28 @@ function ClickToPin({ onPick }) {
 }
 
 /**
- * Pick one point inside one LGU — where its hall is.
+ * Pick one point inside one LGU — where its hall is, or where an event is
+ * held. With no LGU, anywhere in Laguna. `focus` (Leaflet bounds) opens it
+ * closer in, on a planting site an event is made from.
  *
  * Everything outside the LGU is covered over, as on the office map, and a
  * click there is refused with a sentence rather than silently ignored.
  * Satellite by default: a hall is easier to find from above than on a street
  * map, where it is a label among labels.
  */
-export default function PinPicker({ municipality, value, onChange, placeLabel }) {
+export default function PinPicker({ municipality, value, onChange, placeLabel, focus = null, verb = 'stands' }) {
   const [basemapId, setBasemapId] = useState('satellite');
   const [notice, setNotice] = useState('');
-  const feature = municipalityNamed(municipality);
-  const bounds = boundsOfMunicipality(municipality);
-  const mask = maskOutsideMunicipality(municipality);
+  const feature = municipality ? municipalityNamed(municipality) : LAGUNA_PROVINCE.features[0];
+  const bounds = focus ?? (municipality ? boundsOfMunicipality(municipality) : LAGUNA_BOUNDS);
+  const mask = municipality ? maskOutsideMunicipality(municipality) : OUTSIDE_LAGUNA_MASK;
+  const placeName = municipality ? feature?.properties.municipality_label : 'Laguna';
 
   if (!feature || !bounds) return null;
 
   function pick(point) {
     if (!containsPoint(feature.geometry, point)) {
-      setNotice(`That is outside ${feature.properties.municipality_label}.`);
+      setNotice(`That is outside ${placeName}.`);
       return;
     }
     setNotice('');
@@ -73,7 +79,7 @@ export default function PinPicker({ municipality, value, onChange, placeLabel })
         </div>
       </div>
       <p className="mt-2 text-xs text-slate-500" aria-live="polite">
-        {notice || (value ? `${placeLabel} pinned. Click elsewhere to move it.` : `Click the map where the ${placeLabel} stands.`)}
+        {notice || (value ? `${placeLabel} pinned. Click elsewhere to move it.` : `Click the map where the ${placeLabel} ${verb}.`)}
       </p>
     </div>
   );

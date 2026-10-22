@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, CalendarDays, ClipboardPaste, ImagePlus, List, Loader2, Megaphone, Pencil, Trash2, X } from 'lucide-react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Archive, ArchiveRestore, CalendarDays, ClipboardPaste, ImagePlus, List, Loader2, MapPin, Megaphone, Pencil, Trash2, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
+import { useAuthIfAny } from '../../context/AuthContext.jsx';
+import { ROLES, roleOf } from '../../lib/roles.js';
+import { boundsOf } from '../../lib/lagunaBoundaries.js';
+import { centroidOf } from '../../lib/areaGeometry.js';
 import {
   CBI_CREDITS,
   EVENT_KINDS,
+  PURPOSE_OF_KIND,
   MAX_NEWS_PHOTOS,
   NEWS_BUCKET,
   newsProblems,
@@ -19,16 +24,21 @@ import {
 import NewsCalendar from './NewsCalendar.jsx';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 
+const PinPicker = lazy(() => import('../../components/map/PinPicker.jsx'));
+
 // The event (21 October): a first day, then a last day or "one day only"; its
-// kind; the LGU it is for (blank: all of Laguna); and its credit to the CBI.
+// kind; the LGU it is for (blank: all of Laguna); and its purpose, which is
+// what it counts for in the CBI. Where (22 October): the venue pinned on the
+// map, and the planting site an event is made from.
 const EMPTY = {
   title: '', event_date: '', event_end_date: '', one_day: true, event_kind: '', lgu_psgc: '', cbi_credit: '',
-  venue: '', body: '', when: 'now', publish_at: '',
+  venue: '', pin: null, map_area_id: null, body: '', when: 'now', publish_at: '',
 };
 /** The form's dates as the post keeps them: a one-day event has no last day. */
 const eventDates = (form) => ({ ...form, event_end_date: form.one_day ? '' : form.event_end_date });
 /** PostgREST's "no such column": inbox.sql has not been run again since 21 October. */
-const needsEventColumns = (message) => /event_end_date|event_kind|cbi_credit|lgu_psgc/.test(message ?? '');
+const needsEventColumns = (message) => /event_end_date|event_kind|cbi_credit|lgu_psgc|venue_lat|venue_lng|map_area_id/.test(message ?? '');
+const pinText = ([lat, lng]) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 const FILTERS = [
   ['all', 'All'],
   ['scheduled', 'Scheduled'],
@@ -71,8 +81,17 @@ function imagesOf(items) {
  * from anywhere, pasted with Ctrl+V while this page is open.
  */
 export default function NewsPage() {
+  // A MENRO / CENRO posts its own LGU's events; PGENRO posts for everyone.
+  const profile = useAuthIfAny()?.profile ?? null;
+  const ownLgu =
+    roleOf(profile) === ROLES.LGU_ADMIN ? MUNICIPALITY_LIST.find((lgu) => lgu.psgc === Number(profile?.lgu_psgc)) ?? null : null;
+  const office = Boolean(ownLgu);
+  const blank = useMemo(() => (ownLgu ? { ...EMPTY, lgu_psgc: String(ownLgu.psgc), event_kind: 'other' } : EMPTY), [ownLgu]);
   const [posts, setPosts] = useState(null);
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState(blank);
+  const [pinning, setPinning] = useState(false);
+  // Opened from a planting site on the map: its bounds, to open the pin map on it.
+  const [focus, setFocus] = useState(null);
   // Editing a post: its photos already online, kept until removed.
   const [editing, setEditing] = useState(null);
   const [kept, setKept] = useState([]);
@@ -95,11 +114,50 @@ export default function NewsPage() {
       const { data, error } = await supabase.from('news_posts').select('*').order('created_at', { ascending: false });
       if (cancelled) return;
       if (error) setOutcome({ ok: false, text: /does not exist|Could not find the table/i.test(error.message) ? 'News & Events needs supabase/inbox.sql, which has not been run yet.' : error.message });
-      setPosts(Array.isArray(data) ? data : []);
+      const all = Array.isArray(data) ? data : [];
+      // An office keeps its own here; the rest are on the home page.
+      setPosts(office ? all.filter((post) => post.created_by === profile?.id) : all);
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [office]);
+
+  // "Create an event here", from a planting site PGENRO designated: a tree
+  // planting on that site, pinned at its middle (/news?area=…).
+  useEffect(() => {
+    const areaId = new URLSearchParams(window.location.search).get('area');
+    if (!areaId) return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('map_areas')
+        .select('id, name, barangay, municipality, geometry, kind')
+        .eq('id', areaId)
+        .maybeSingle();
+      if (cancelled || !data || Array.isArray(data)) return;
+      const lgu = MUNICIPALITY_LIST.find((item) => item.name === data.municipality);
+      if (ownLgu && lgu?.psgc !== ownLgu.psgc) return;
+      const middle = data.geometry ? centroidOf(data.geometry) : null;
+      setForm({
+        ...blank,
+        title: `Tree planting at ${data.name}`,
+        event_kind: 'tree-planting',
+        one_day: true,
+        lgu_psgc: lgu ? String(lgu.psgc) : blank.lgu_psgc,
+        cbi_credit: PURPOSE_OF_KIND['tree-planting'],
+        venue: [data.name, data.barangay].filter(Boolean).join(', '),
+        pin: middle,
+        map_area_id: data.id,
+      });
+      setFocus(data.geometry ? boundsOf(data.geometry) : null);
+      window.history.replaceState(window.history.state, '', window.location.pathname);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const room = MAX_NEWS_PHOTOS - kept.length;
@@ -127,6 +185,8 @@ export default function NewsPage() {
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), [previews]);
 
   const problems = newsProblems(eventDates(form), photos);
+  // An office posts events, each with its day.
+  if (office && !form.event_date) problems.event_date = 'Give the day of the event.';
   if (!problems.photos && kept.length + photos.length > MAX_NEWS_PHOTOS) problems.photos = `At most ${MAX_NEWS_PHOTOS} photos.`;
   // A published post stays published; a new or scheduled one can be scheduled.
   const canSchedule = !editing || newsStatus(editing) === 'scheduled';
@@ -150,6 +210,8 @@ export default function NewsPage() {
       lgu_psgc: item.lgu_psgc ? String(item.lgu_psgc) : '',
       cbi_credit: item.cbi_credit ?? '',
       venue: item.venue ?? '',
+      pin: Number.isFinite(item.venue_lat) && Number.isFinite(item.venue_lng) ? [item.venue_lat, item.venue_lng] : null,
+      map_area_id: item.map_area_id ?? null,
       body: item.body ?? '',
       when: scheduled ? 'schedule' : 'now',
       publish_at: scheduled ? toLocalInput(item.publish_at) : '',
@@ -165,13 +227,15 @@ export default function NewsPage() {
   function startOn(day) {
     stopEdit();
     const at = new Date(`${day}T08:00`);
-    setForm({ ...EMPTY, when: at > new Date() ? 'schedule' : 'now', publish_at: at > new Date() ? `${day}T08:00` : '' });
+    setForm({ ...blank, when: at > new Date() ? 'schedule' : 'now', publish_at: at > new Date() ? `${day}T08:00` : '' });
     formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }
 
   function stopEdit() {
     setEditing(null);
-    setForm(EMPTY);
+    setForm(blank);
+    setFocus(null);
+    setPinning(false);
     setKept([]);
     setPhotos([]);
     setTried(false);
@@ -199,6 +263,9 @@ export default function NewsPage() {
             event_kind: form.event_kind || null,
             lgu_psgc: form.lgu_psgc ? Number(form.lgu_psgc) : null,
             cbi_credit: form.cbi_credit || null,
+            venue_lat: form.pin ? form.pin[0] : null,
+            venue_lng: form.pin ? form.pin[1] : null,
+            map_area_id: form.map_area_id || null,
           }).filter(([key, value]) => value !== null || (editing && key in editing))
         ),
         photos: [...kept, ...uploaded],
@@ -220,7 +287,9 @@ export default function NewsPage() {
             ? `Saved. ${publishedWhen({ ...row })}.`
             : newsStatus(editing) !== 'scheduled'
               ? 'Saved. The home page shows the change; the newsletter already sent is not sent again.'
-              : 'Saved, and published: every MENRO / CENRO has it in their inbox, and it is on the home page.',
+              : office
+                ? 'Saved, and published: PGENRO has it in its inbox, and it is on the home page.'
+                : 'Saved, and published: every MENRO / CENRO has it in their inbox, and it is on the home page.',
         });
       } else {
         const { data, error } = await supabase.from('news_posts').insert(row).select().single();
@@ -229,12 +298,16 @@ export default function NewsPage() {
         setOutcome({
           ok: true,
           text: scheduling
-            ? `${publishedWhen({ ...row })}. It goes to every MENRO / CENRO and onto the home page then.`
-            : 'Posted. Every MENRO / CENRO has it in their inbox, and it is on the home page.',
+            ? `${publishedWhen({ ...row })}. It goes to ${office ? 'PGENRO' : 'every MENRO / CENRO'} and onto the home page then.`
+            : office
+              ? 'Posted. PGENRO has it in its inbox, and it is on the home page.'
+              : 'Posted. Every MENRO / CENRO has it in their inbox, and it is on the home page.',
         });
       }
       setEditing(null);
-      setForm(EMPTY);
+      setForm(blank);
+      setFocus(null);
+      setPinning(false);
       setKept([]);
       setPhotos([]);
       setTried(false);
@@ -243,7 +316,7 @@ export default function NewsPage() {
       setOutcome({
         ok: false,
         text: needsEventColumns(failure.message)
-          ? 'The event’s days, kind and CBI credit need supabase/inbox.sql to be run again (step 28).'
+          ? 'The event’s days, kind, purpose and map pin need supabase/inbox.sql to be run again (step 31).'
           : `${editing ? 'Not saved' : 'Not posted'}: ${failure.message}`,
       });
     } finally {
@@ -288,8 +361,9 @@ export default function NewsPage() {
           <Megaphone size={24} className="text-green-700" aria-hidden="true" /> News &amp; Events
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Each post goes to every MENRO / CENRO&apos;s inbox as a newsletter, and onto the home page — now, or at the time you
-          schedule. Archive one to take it off the home page and keep it.
+          {office
+            ? `${ownLgu.label}’s events: each goes onto the home page and to PGENRO’s inbox — now, or at the time you schedule. Archive one to take it off the home page and keep it.`
+            : 'Each post goes to every MENRO / CENRO’s inbox as a newsletter, and onto the home page — now, or at the time you schedule. Archive one to take it off the home page and keep it.'}
         </p>
       </div>
 
@@ -314,18 +388,27 @@ export default function NewsPage() {
               onChange={(event) => {
                 const kind = EVENT_KINDS.find((k) => k.id === event.target.value);
                 // A tree planting is usually one day; a training may run longer.
-                setForm((current) => ({ ...current, event_kind: event.target.value, one_day: kind ? kind.oneDay : current.one_day }));
+                // Its usual purpose comes with it, unless one was chosen.
+                setForm((current) => ({
+                  ...current,
+                  event_kind: event.target.value,
+                  one_day: kind ? kind.oneDay : current.one_day,
+                  cbi_credit:
+                    !current.cbi_credit || current.cbi_credit === PURPOSE_OF_KIND[current.event_kind]
+                      ? PURPOSE_OF_KIND[event.target.value] ?? ''
+                      : current.cbi_credit,
+                }));
               }}
               className={input}
             >
-              <option value="">Not an event (news)</option>
+              {!office && <option value="">Not an event (news)</option>}
               {EVENT_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}
             </select>
           </label>
           <label className="block text-sm">
             <span className="font-semibold text-slate-700">Held for</span>
-            <select value={form.lgu_psgc} onChange={set('lgu_psgc')} className={input}>
-              <option value="">All of Laguna</option>
+            <select value={form.lgu_psgc} onChange={set('lgu_psgc')} className={input} disabled={office}>
+              {!office && <option value="">All of Laguna</option>}
               {MUNICIPALITY_LIST.map((lgu) => <option key={lgu.psgc} value={lgu.psgc}>{lgu.label}</option>)}
             </select>
           </label>
@@ -348,24 +431,53 @@ export default function NewsPage() {
               </label>
             )}
           </div>
+          <div className="text-sm">
+            <label className="block">
+              <span className="font-semibold text-slate-700">Venue</span>
+              <input value={form.venue} onChange={set('venue')} className={input} />
+            </label>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+              {form.pin ? (
+                <>
+                  <span className="inline-flex items-center gap-1 font-semibold text-green-800">
+                    <MapPin size={12} aria-hidden="true" /> Pinned at {pinText(form.pin)}
+                  </span>
+                  <button type="button" onClick={() => setForm((c) => ({ ...c, pin: null }))} className="underline">
+                    Remove the pin
+                  </button>
+                </>
+              ) : (
+                <span>Not pinned on the map.</span>
+              )}
+              <button type="button" onClick={() => setPinning((open) => !open)} aria-expanded={pinning}
+                className="font-semibold text-green-800 underline">
+                {pinning ? 'Close the map' : form.pin ? 'Move it on the map' : 'Pin it on the map'}
+              </button>
+            </p>
+            {form.map_area_id && (
+              <p className="mt-0.5 text-xs text-slate-500">Held on a tree planting site PGENRO designated.</p>
+            )}
+          </div>
           <label className="block text-sm">
-            <span className="font-semibold text-slate-700">Venue</span>
-            <input value={form.venue} onChange={set('venue')} className={input} />
-          </label>
-          <label className="block text-sm">
-            <span className="font-semibold text-slate-700">Counts toward the CBI as</span>
+            <span className="font-semibold text-slate-700">Purpose</span>
             <select value={form.cbi_credit} onChange={set('cbi_credit')} className={input}>
-              <option value="">Not for the CBI</option>
+              <option value="">None of these</option>
               {CBI_CREDITS.map((credit) => <option key={credit.id} value={credit.id}>{credit.label}</option>)}
             </select>
           </label>
         </div>
-        {form.cbi_credit && (
-          <p className="text-xs text-slate-500">
-            City Biodiversity Index, governance and management:{' '}
-            {CBI_CREDITS.find((credit) => credit.id === form.cbi_credit)?.indicator.toLowerCase()} — counted in the biodiversity report of{' '}
-            {form.lgu_psgc ? MUNICIPALITY_LIST.find((lgu) => String(lgu.psgc) === form.lgu_psgc)?.label : 'Laguna'} for the event&apos;s year.
-          </p>
+        {pinning && (
+          <Suspense fallback={<p className="text-xs text-slate-500">Loading the map…</p>}>
+            <PinPicker
+              key={`${form.lgu_psgc}-${focus ? 'site' : 'lgu'}`}
+              municipality={form.lgu_psgc ? MUNICIPALITY_LIST.find((lgu) => String(lgu.psgc) === form.lgu_psgc)?.name : null}
+              focus={focus}
+              value={form.pin}
+              onChange={(point) => setForm((c) => ({ ...c, pin: point }))}
+              placeLabel="venue"
+              verb="is"
+            />
+          </Suspense>
         )}
         {canSchedule ? (
           <fieldset className="rounded-xl bg-slate-50 p-3">

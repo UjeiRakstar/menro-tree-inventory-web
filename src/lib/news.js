@@ -32,13 +32,45 @@ export const eventKindLabel = (id) => EVENT_KINDS.find((kind) => kind.id === id)
 /**
  * What an event counts as toward the City Biodiversity Index — the Singapore
  * Index's governance and management indicators, as TB 2018-02 adopts them.
+ * The form asks only for the event's purpose, in these words (22 October):
+ * the index is counted quietly, from the purpose, in the reports and the
+ * city panel (src/lib/cbiPoints.js).
  */
 export const CBI_CREDITS = Object.freeze([
-  { id: 'outreach', label: 'Outreach or public awareness event', indicator: 'Outreach and public awareness events held a year' },
-  { id: 'partnership', label: 'Partnership', indicator: 'Agencies, companies, NGOs, academic and international organisations partnered with' },
-  { id: 'project', label: 'Project or programme', indicator: 'Biodiversity projects and programmes carried out a year' },
-  { id: 'policy', label: 'Policy or plan', indicator: 'Policies, rules and plans for biodiversity' },
+  { id: 'outreach', label: 'Public awareness or outreach', indicator: 'Outreach and public awareness events held a year' },
+  { id: 'partnership', label: 'Partnership with an agency, company, NGO or school', indicator: 'Agencies, companies, NGOs, academic and international organisations partnered with' },
+  { id: 'project', label: 'Biodiversity project or programme', indicator: 'Biodiversity projects and programmes carried out a year' },
+  { id: 'policy', label: 'Policy, ordinance or plan', indicator: 'Policies, rules and plans for biodiversity' },
 ]);
+
+/** The purpose a kind of event usually has, filled in when the kind is chosen. */
+export const PURPOSE_OF_KIND = Object.freeze({
+  training: 'outreach',
+  forum: 'outreach',
+  conference: 'outreach',
+  seminar: 'outreach',
+  orientation: 'outreach',
+  'tree-planting': 'project',
+  'clean-up': 'outreach',
+});
+
+let cbiEvents = null;
+
+/**
+ * Every published post's purpose, day and LGU — what the city panel counts
+ * its CBI events from. Read once a page; null when News & Events cannot be
+ * read (inbox.sql not run again since 21 October).
+ */
+export function loadCbiEvents() {
+  cbiEvents ??= Promise.resolve(supabase.from('news_posts').select('id, title, event_date, lgu_psgc, cbi_credit'))
+    .then(({ data, error }) => (error ? null : Array.isArray(data) ? data : []))
+    .catch(() => null);
+  return cbiEvents;
+}
+
+export function forgetCbiEvents() {
+  cbiEvents = null;
+}
 
 /**
  * How many events of each CBI credit a place held in a year: its own, and the
@@ -75,6 +107,18 @@ export function newsProblems(post, photos = []) {
  */
 export function whenAndWhere(post) {
   return [eventDays(post), post.venue].filter(Boolean).join(' · ');
+}
+
+/**
+ * Where a pinned event is, on the public map (/map?at=…&place=…), or null for
+ * one with no pin.
+ */
+export function venueMapLink(post) {
+  const lat = Number(post?.venue_lat);
+  const lng = Number(post?.venue_lng);
+  if (post?.venue_lat == null || post?.venue_lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const params = new URLSearchParams({ at: `${lat.toFixed(6)},${lng.toFixed(6)}`, place: post.venue || post.title || '' });
+  return `/map?${params}`;
 }
 
 /** An event's day, or its first and last, day first as the newsletter has it (inbox.sql). */

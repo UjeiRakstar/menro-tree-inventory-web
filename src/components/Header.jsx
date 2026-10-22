@@ -283,10 +283,10 @@ export default function Header() {
                     Accounts
                   </NavLink>
                 )}
-                {pgenro && (
+                {(pgenro || (lguAdmin && !profile?.is_training)) && (
                   <NavLink to="/news" className={menuItem}>
                     <Megaphone size={16} aria-hidden="true" className="text-slate-500" />
-                    News &amp; Events
+                    {pgenro ? 'News & Events' : 'Events'}
                   </NavLink>
                 )}
                 {pgenro && (

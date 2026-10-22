@@ -212,6 +212,44 @@ for (const [what, values] of [
   ok(`${what} is refused`, Boolean(refused.error), refused.error ?? 'accepted');
 }
 
+// An event's pin, its planting site, and a MENRO / CENRO's own events (22 October).
+const site = (await db.query(`select id from public.map_areas where name = 'Labuin Riverbank'`)).rows[0].id;
+const pinned = await run(PG, `insert into public.news_posts (title, event_date, event_kind, lgu_psgc, venue, venue_lat, venue_lng, map_area_id)
+  values ('Planting at Labuin', '2026-12-05', 'tree-planting', ${SCZ}, 'Labuin Riverbank', 14.28, 121.41, '${site}') returning map_area_id`);
+ok('an event is pinned on the map, on the planting site it is held at', pinned.error === null && pinned.rows[0].map_area_id === site, pinned.error ?? '');
+const halfPin = await run(PG, `insert into public.news_posts (title, venue_lat) values ('Half a pin', 14.28)`);
+ok('…a pin is a latitude and a longitude, both', Boolean(halfPin.error), halfPin.error ?? 'accepted');
+
+const before = await count(`select count(*) n from public.inbox_messages where kind = 'news'`);
+const ownEvent = await run(SCZ_ADMIN, `insert into public.news_posts (title, event_date, event_kind, lgu_psgc, venue, venue_lat, venue_lng)
+  values ('Santa Cruz Clean-up', '2026-12-12', 'clean-up', ${SCZ}, 'Pagsawitan', 14.27, 121.42) returning id, created_by`);
+ok('a MENRO / CENRO posts an event for its own LGU', ownEvent.error === null && ownEvent.rows[0].created_by === SCZ_ADMIN, ownEvent.error ?? '');
+const sentTo = (await db.query(`select office from public.inbox_messages where kind = 'news' and subject = 'Santa Cruz Clean-up' order by office`)).rows.map((r) => r.office);
+ok('…sent to PGENRO and its own inbox, not to every office',
+  sentTo.join() === [String(SCZ), 'pgenro'].sort().join() && (await count(`select count(*) n from public.inbox_messages where kind = 'news'`)) === before + 2,
+  JSON.stringify(sentTo));
+ok('…and the public sees it', ((await run(null, `select title from public.news_posts`, [], 'anon')).rows ?? []).some((r) => r.title === 'Santa Cruz Clean-up'));
+for (const [what, sql] of [
+  ['for another LGU', `insert into public.news_posts (title, event_date, event_kind, lgu_psgc) values ('Theirs', '2026-12-12', 'forum', ${KAL})`],
+  ['for all of Laguna', `insert into public.news_posts (title, event_date, event_kind) values ('Province', '2026-12-12', 'forum')`],
+  ['news that is not an event', `insert into public.news_posts (title, lgu_psgc) values ('Just news', ${SCZ})`],
+]) {
+  const refused = await run(SCZ_ADMIN, sql);
+  ok(`a MENRO / CENRO cannot post ${what}`, Boolean(refused.error), refused.error ?? 'accepted');
+}
+const editsOwn = await run(SCZ_ADMIN, `update public.news_posts set venue = 'Pagsawitan Falls' where title = 'Santa Cruz Clean-up' returning id`);
+ok('…edits its own', editsOwn.error === null && editsOwn.rows.length === 1, editsOwn.error ?? '');
+const editsPgenro = await run(SCZ_ADMIN, `update public.news_posts set venue = 'Mine now' where title = 'Planting at Labuin' returning id`);
+ok('…but not PGENRO’s, even for its LGU', Boolean(editsPgenro.error) || editsPgenro.rows.length === 0);
+const otherOffice = await run(KAL_ADMIN, `delete from public.news_posts where title = 'Santa Cruz Clean-up' returning id`);
+ok('…nor another office another’s', Boolean(otherOffice.error) || otherOffice.rows.length === 0);
+await db.exec(`update public.profiles set is_training = true where id = '${KAL_ADMIN}'`).catch(async () => {
+  await db.exec(`alter table public.profiles add column if not exists is_training boolean not null default false; update public.profiles set is_training = true where id = '${KAL_ADMIN}'`);
+});
+const trainee = await run(KAL_ADMIN, `insert into public.news_posts (title, event_date, event_kind, lgu_psgc) values ('Practice', '2026-12-12', 'forum', ${KAL})`);
+ok('a training account posts no event', Boolean(trainee.error), trainee.error ?? 'accepted');
+await db.exec(`update public.profiles set is_training = false where id = '${KAL_ADMIN}'`);
+
 // ---- lccap.sql: each LGU's climate plan, checked by PGENRO (21 October) -------------------
 await db.exec(`do $$ begin
   if to_regprocedure('public.in_training()') is null then

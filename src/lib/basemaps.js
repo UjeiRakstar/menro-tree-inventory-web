@@ -40,6 +40,8 @@ export const basemapById = (id) => BASEMAPS.find((b) => b.id === id) ?? BASEMAPS
  * get. Web Mercator tile arithmetic, the same as Leaflet's.
  */
 export function thumbnailTile(basemap, [lat, lng], zoom = 13) {
+  // A base map that covers only part of the world picks a tile it has.
+  if (basemap.thumbnailFor) return basemap.thumbnailFor([lat, lng], zoom);
   const n = 2 ** zoom;
   const x = Math.floor(((lng + 180) / 360) * n);
   const latRad = (lat * Math.PI) / 180;

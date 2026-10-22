@@ -55,6 +55,75 @@ function FigureRow({ metric, value, note = '' }) {
   );
 }
 
+const oneDecimal = (value) => (Math.round(value * 10) / 10).toLocaleString('en-US');
+
+/**
+ * A city's points toward the City Biodiversity Index (src/lib/cbiPoints.js):
+ * the total over the indicators the system could score, then each of them,
+ * with four dots for its points. An indicator it has no measure for says so,
+ * rather than scoring a zero.
+ */
+function CbiPoints({ cbi }) {
+  return (
+    <section className="mt-5" aria-label="City Biodiversity Index points">
+      <h3 className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        City Biodiversity Index
+        <InfoHint
+          label="What the CBI points mean"
+          text="Points on the Singapore Index on Cities’ Biodiversity, 0 to 4 for each indicator, worked out by Green Tag from the city’s tagged trees, mapped land cover and the events it posted this year. The full index has 23 indicators; the rest come from the city’s own records."
+          size={13}
+        />
+      </h3>
+      <div className="mt-1.5 rounded-xl border border-slate-200">
+        <p className="flex items-baseline justify-between gap-3 border-b border-slate-100 px-3 py-2.5">
+          <span className="text-[11px] font-semibold text-slate-600">
+            CBI points
+            <span className="block text-[10px] font-normal text-slate-400">
+              {cbi.scored > 0 ? `from ${cbi.scored} of the 23 indicators` : 'nothing to score yet'}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="text-xl font-bold leading-none text-green-800">{cbi.points}</span>
+            <span className="ml-1 text-[11px] text-slate-400">of {cbi.of}</span>
+          </span>
+        </p>
+        <ul className="divide-y divide-slate-100">
+          {cbi.indicators.map((indicator) => (
+            <li key={indicator.id} className="flex items-start justify-between gap-3 px-3 py-2">
+              <span className="min-w-0 text-[11px] leading-snug text-slate-600">
+                <span className="text-slate-400">{indicator.no}.</span> {indicator.name}
+                <span className="block text-[10px] text-slate-400">
+                  {indicator.value === null
+                    ? indicator.id === 'invasive'
+                      ? 'No tree of known origin yet'
+                      : ['project', 'partnership', 'outreach'].includes(indicator.id)
+                        ? 'Events not readable yet'
+                        : 'No land cover mapped yet'
+                    : indicator.unit
+                      ? `${oneDecimal(indicator.value)}${indicator.unit}`
+                      : `${indicator.value} this year`}
+                </span>
+              </span>
+              {indicator.points === null ? (
+                <span className="shrink-0 text-[11px] font-semibold text-slate-300">—</span>
+              ) : (
+                <span className="flex shrink-0 items-center gap-1.5" aria-label={`${indicator.points} of 4 points`}>
+                  <span className="flex gap-0.5" aria-hidden="true">
+                    {[1, 2, 3, 4].map((dot) => (
+                      <span key={dot} className={`h-1.5 w-1.5 rounded-full ${dot <= indicator.points ? 'bg-green-600' : 'bg-slate-200'}`} />
+                    ))}
+                  </span>
+                  <span className="w-3 text-right text-[12px] font-bold tabular-nums text-slate-800">{indicator.points}</span>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 /**
  * Where the trees are within this city or municipality.
  *
@@ -128,6 +197,8 @@ export default function AreaDetailPanel({
   placeKind = null,
   facts = [],
   showBarangays = true,
+  // A city's CBI points (cbiPoints()), or null — municipalities and barangays have none.
+  cbi = null,
 }) {
   const [collapsed, setCollapsed] = useState(false);
   // Mount off-screen, then slide in on the next frame.
@@ -252,6 +323,8 @@ export default function AreaDetailPanel({
               </section>
             ))}
           </div>
+
+          {cbi && <CbiPoints cbi={cbi} />}
 
           {/* Where they stand within it */}
           {showBarangays && (

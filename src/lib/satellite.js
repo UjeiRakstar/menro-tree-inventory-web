@@ -1,4 +1,4 @@
-import { LAGUNA_BOUNDS, LAGUNA_PROVINCE } from './lagunaBoundaries.js';
+import { LAGUNA_BOUNDS, LAGUNA_PROVINCE, containsPoint } from './lagunaBoundaries.js';
 
 /**
  * The cloud-free satellite base map, kept in the system (supabase/satellite.sql).
@@ -478,6 +478,32 @@ export function requestsThisMonth(snapshots, now = new Date()) {
 const longDate = (iso) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' });
 
+/**
+ * The stored tile nearest a place, at a zoom, whose middle is on Laguna's
+ * ground: the place itself when it is, otherwise the closest that is — the
+ * middle of the province is in Laguna de Bay, black in the snapshot.
+ */
+export function nearestStoredTile(centre, z) {
+  const province = LAGUNA_PROVINCE.features[0].geometry;
+  const onGround = ({ x, y }) => {
+    const [top, left] = tileCorner(z, x, y);
+    const [bottom, right] = tileCorner(z, x + 1, y + 1);
+    return containsPoint(province, [(top + bottom) / 2, (left + right) / 2]);
+  };
+  const tiles = (snapshotTiles({ min: z, max: SATELLITE_ZOOMS.max })[z] ?? []).filter(onGround);
+  const at = tileAt(centre, z);
+  let best = null;
+  let bestDistance = Infinity;
+  for (const tile of tiles) {
+    const distance = (tile.x - at.x) ** 2 + (tile.y - at.y) ** 2;
+    if (distance < bestDistance) {
+      best = tile;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 /** The live snapshot as a base map, in the shape of src/lib/basemaps.js. */
 export function satelliteBasemap(supabase, snapshot) {
   if (!snapshot?.id) return null;
@@ -494,5 +520,11 @@ export function satelliteBasemap(supabase, snapshot) {
     maxNativeZoom: snapshot.max_zoom ?? SATELLITE_ZOOMS.max,
     imagery: true,
     imageryTo: snapshot.imagery_to,
+    // Its picture in the base map picker: a tile it has, near the place.
+    thumbnailFor: (centre, zoom) => {
+      const z = Math.min(Math.max(zoom, snapshot.min_zoom ?? SATELLITE_ZOOMS.min), snapshot.max_zoom ?? SATELLITE_ZOOMS.max);
+      const tile = nearestStoredTile(centre, z);
+      return tile ? `${data.publicUrl}/${tile.z}/${tile.x}/${tile.y}.jpg` : '';
+    },
   };
 }

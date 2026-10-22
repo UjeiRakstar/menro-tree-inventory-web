@@ -9,7 +9,7 @@ import TrainingBanner from './components/TrainingBanner.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import { accessFor, isPgenro, needsOnboarding, officeLguOf } from './lib/roles.js';
+import { ROLES, accessFor, isPgenro, needsOnboarding, officeLguOf, roleOf } from './lib/roles.js';
 
 /**
  * Every page but the landing one is fetched when it is first opened.
@@ -188,6 +188,16 @@ function PgenroOnly({ children }) {
   return isPgenro(profile) ? children : <NotFound />;
 }
 
+/**
+ * News & Events: PGENRO's, and a MENRO / CENRO's own events (22 October). Not
+ * a training account's: what is posted there goes public.
+ */
+function EventsPage({ children }) {
+  const { profile } = useAuth();
+  const office = roleOf(profile) === ROLES.LGU_ADMIN && !['locked', 'archived'].includes(profile?.status) && !profile?.is_training;
+  return isPgenro(profile) || office ? children : <NotFound />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -240,7 +250,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="accounts" element={<PgenroOnly><Accounts /></PgenroOnly>} />
         <Route path="map-layers" element={<PgenroOnly><MapLayersPage /></PgenroOnly>} />
-        <Route path="news" element={<PgenroOnly><NewsPage /></PgenroOnly>} />
+        <Route path="news" element={<EventsPage><NewsPage /></EventsPage>} />
         <Route path="climate-plans" element={<PgenroOnly><ClimatePlans /></PgenroOnly>} />
         <Route path="inbox" element={<Inbox />} />
         <Route path="map" element={<MenroMap />} />

@@ -397,10 +397,19 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     Take a new snapshot: about 406 Copernicus requests and a few minutes, with
     the tab open. It goes on every map as "Sentinel-2", beside Esri's
     satellite, and on the map sheet. A stopped one carries on where it stopped.
+31. **Events on the map, 22 October** — run `supabase/inbox.sql` again.
+    An event's venue can be pinned on the map (the home page links to it);
+    a tree planting can be made from a planting site PGENRO designated
+    ("Create a tree planting event here" in the site's panel); and a
+    MENRO / CENRO posts its own LGU's events under Events in its menu — sent
+    to PGENRO's inbox and its own, not to every office. The form asks for the
+    event's purpose, not its CBI credit; a city's panel on the map shows its
+    CBI points (7 of the 23 indicators the system can score). Until it runs,
+    events save without their pin.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 15 suites, 630 checks — the final check query on its
+allow and refuse — 15 suites, 642 checks — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is

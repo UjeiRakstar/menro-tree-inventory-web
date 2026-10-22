@@ -15,7 +15,8 @@
 --
 --   notice    PGENRO set a tree planting site, or approved an office's
 --             request: every MENRO / CENRO is told, with View on map.
---   news      PGENRO posted News & Events: a newsletter to every office.
+--   news      PGENRO posted News & Events: a newsletter to every office. A
+--             MENRO / CENRO's own event goes to PGENRO and to itself.
 --   rise      a tree was saved under a species the RISE library has no
 --             profile for: PGENRO is told, once per species.
 --   contact   the public's contact form, to the office the visitor chose.
@@ -175,6 +176,27 @@ alter table public.news_posts add constraint news_posts_event_check check (
   and (cbi_credit is null or cbi_credit in ('outreach', 'partnership', 'project', 'policy'))
 );
 
+-- Where (22 October): the venue pinned on the map, and the PGENRO-designated
+-- tree planting site an event is held on, when it is made from one.
+alter table public.news_posts
+  add column if not exists venue_lat   double precision,
+  add column if not exists venue_lng   double precision,
+  add column if not exists map_area_id uuid;
+
+alter table public.news_posts drop constraint if exists news_posts_venue_check;
+alter table public.news_posts add constraint news_posts_venue_check check (
+  (venue_lat is null) = (venue_lng is null)
+  and (venue_lat is null or (venue_lat between -90 and 90 and venue_lng between -180 and 180))
+);
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'news_posts_map_area_fkey') then
+    alter table public.news_posts add constraint news_posts_map_area_fkey
+      foreign key (map_area_id) references public.map_areas (id) on delete set null;
+  end if;
+end $$;
+
 alter table public.news_posts drop constraint if exists news_posts_title_check;
 alter table public.news_posts add constraint news_posts_title_check
   check (length(trim(title)) between 1 and 200 and jsonb_typeof(photos) = 'array');
@@ -217,6 +239,31 @@ create policy "pgenro posts the news" on public.news_posts
   using (public.is_pgenro() and public.is_active_account())
   with check (public.is_pgenro() and public.is_active_account());
 
+-- A MENRO / CENRO posts its own LGU's events (22 October) — an event, with a
+-- day, for its own city or municipality; never news for the province, and
+-- never from a training account. It edits and removes only its own.
+-- Whether the account signed in is a training one (training_sandbox.sql's
+-- column; false where that has not run).
+create or replace function public.is_training_account()
+returns boolean language sql stable security definer set search_path = public as $f$
+  select coalesce((select (to_jsonb(p) ->> 'is_training')::boolean from public.profiles p where p.id = auth.uid()), false);
+$f$;
+revoke all on function public.is_training_account() from public;
+grant execute on function public.is_training_account() to authenticated;
+
+drop policy if exists "an office posts its own events" on public.news_posts;
+create policy "an office posts its own events" on public.news_posts
+  for all to authenticated
+  using (created_by = auth.uid() and public.is_lgu_admin_of(lgu_psgc) and public.is_active_account())
+  with check (
+    created_by = auth.uid()
+    and public.is_lgu_admin_of(lgu_psgc)
+    and public.is_active_account()
+    and event_kind is not null
+    and event_date is not null
+    and not public.is_training_account()
+  );
+
 grant select on public.news_posts to anon, authenticated;
 grant insert, update, delete on public.news_posts to authenticated;
 
@@ -226,12 +273,32 @@ create or replace function public.deliver_news_post(p_id uuid)
 returns boolean language plpgsql security definer set search_path = public as $$
 declare
   p public.news_posts%rowtype;
+  v_from_office boolean;
+  v_body text;
 begin
   select * into p from public.news_posts
   where id = p_id and sent_at is null and archived_at is null and publish_at <= now()
   for update skip locked;
   if not found then
     return false;
+  end if;
+  v_from_office := exists (select 1 from public.profiles where id = p.created_by and role = 'lgu_admin');
+  v_body := concat_ws(E'\n\n',
+      nullif(trim(concat_ws(' · ',
+        case
+          when p.event_date is null then null
+          when p.event_end_date is null or p.event_end_date = p.event_date then to_char(p.event_date, 'FMDD FMMonth YYYY')
+          else to_char(p.event_date, 'FMDD FMMonth YYYY') || ' to ' || to_char(p.event_end_date, 'FMDD FMMonth YYYY')
+        end,
+        nullif(p.venue, ''))), ''),
+      nullif(p.body, ''));
+  if v_from_office then
+    -- An office's own event: PGENRO is told, and the office keeps a copy.
+    insert into public.inbox_messages (kind, office, subject, body, link, source_id)
+    select 'news', office, p.title, v_body, jsonb_build_object('kind', 'news', 'id', p.id), p.id::text
+    from unnest(array['pgenro', p.lgu_psgc::text]) as office;
+    update public.news_posts set sent_at = now() where id = p.id;
+    return true;
   end if;
   perform public.notify_offices(
     'news',
@@ -460,6 +527,11 @@ union all
 select 'an event has its days, its kind and its CBI credit',
        exists (select 1 from information_schema.columns where table_name = 'news_posts' and column_name = 'cbi_credit')
        and exists (select 1 from pg_constraint where conname = 'news_posts_event_check'),
+       ''
+union all
+select 'an event has its pin, and a MENRO / CENRO posts its own',
+       exists (select 1 from information_schema.columns where table_name = 'news_posts' and column_name = 'venue_lat')
+       and exists (select 1 from pg_policies where tablename = 'news_posts' and policyname = 'an office posts its own events'),
        ''
 union all
 select 'News & Events can be scheduled and archived',

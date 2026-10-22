@@ -4,6 +4,8 @@ import { officialName } from '../psgc.js';
 import { buildGhgReport } from './ghg.js';
 import { CBI_CREDITS, cbiEventCounts } from '../news.js';
 import { planBadges, planKindLabel } from '../lccap.js';
+import { originOf } from '../treeOrigin.js';
+import { CBI_INDICATORS, pointsOn } from '../cbiPoints.js';
 
 /**
  * The thematic reports (Round C, 18 October): soil; hazards and climate;
@@ -298,19 +300,8 @@ export function climateTable(climate) {
 
 // ---- Biodiversity ---------------------------------------------------------------------
 
-/**
- * Each tree's origin in the categories of BMB Technical Bulletin 2018-02's
- * vegetation structure: endemic, native / indigenous, exotic — with invasive
- * exotics apart, because they are the ones to replace.
- */
-export function originOf(tree) {
-  const word = `${tree?.species_type ?? ''} ${tree?.biodiversity_status ?? ''}`.toLowerCase();
-  if (word.includes('invasive')) return 'invasive';
-  if (word.includes('endemic')) return 'endemic';
-  if (word.includes('introduced') || word.includes('exotic')) return 'exotic';
-  if (word.includes('native') || word.includes('indigenous')) return 'native';
-  return 'unrecorded';
-}
+// Each tree's origin (endemic, native, exotic, invasive): src/lib/treeOrigin.js.
+export { originOf };
 const ORIGIN_LABELS = { endemic: 'Endemic', native: 'Native / indigenous', exotic: 'Exotic (introduced)', invasive: 'Invasive', unrecorded: 'Not recorded' };
 
 /**
@@ -405,21 +396,32 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
   const coverHa = (landCover?.rows ?? []).filter((row) => row.treeCover).reduce((t, r) => t + r.areaHa, 0);
   const origin = compositionTable(trees).counts;
   const known = trees.length - origin.unrecorded;
+  // Points on the index's own bands (src/lib/cbiPoints.js), where the system has the measure.
+  const mapped = Boolean(landCover?.rows?.length);
+  const scoreOf = (id, value) => {
+    const indicator = CBI_INDICATORS.find((i) => i.id === id);
+    return value === null || !Number.isFinite(value) ? null : pointsOn(indicator, value);
+  };
+  const percentOf = (part, whole) => (whole > 0 ? (part / whole) * 100 : null);
+  const CREDIT_INDICATOR = { outreach: 'outreach', partnership: 'partnership', project: 'project' };
   const rows = [
     {
       name: 'Proportion of natural areas',
       value: coverHa ? `${hectares(coverHa)} ha of tree cover mapped (${pct(coverHa, placeAreaHa)} of the area)` : 'No tree-cover land cover mapped yet',
       from: 'Land cover the office has mapped',
+      points: scoreOf('natural', mapped ? percentOf(coverHa, placeAreaHa) : null),
     },
     {
       name: 'Proportion of protected natural areas',
       value: protectedHa ? `${hectares(protectedHa)} ha designated (${pct(protectedHa, placeAreaHa)})` : 'None designated in the system yet',
       from: 'Areas saved with a legal designation and its document',
+      points: scoreOf('protected', mapped || protectedHa ? percentOf(protectedHa, placeAreaHa) : null),
     },
     {
       name: 'Proportion of invasive alien species (trees)',
       value: known ? `${n(origin.invasive)} of ${n(known)} trees of known origin (${pct(origin.invasive, known)})` : 'No origin recorded yet',
       from: 'The tree inventory',
+      points: scoreOf('invasive', known ? percentOf(origin.invasive, known) : null),
     },
     {
       name: 'Native biodiversity — trees',
@@ -430,6 +432,12 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
       name: 'Climate regulation — carbon storage',
       value: carbon?.co2T ? `${hectares(carbon.co2T)} t CO₂ in ${n(carbon.measured)} measured trees` : 'No tree measured for carbon yet',
       from: 'Chave et al. 2014, on diameter and total height',
+    },
+    {
+      name: 'Climate regulation — tree canopy cover',
+      value: mapped ? `${pct(coverHa, placeAreaHa)} of the area under mapped tree cover` : 'No land cover mapped yet',
+      from: 'Land cover the office has mapped',
+      points: scoreOf('canopy', mapped ? percentOf(coverHa, placeAreaHa) : null),
     },
     {
       name: 'Participation — citizen science',
@@ -452,7 +460,8 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
           : held.length
             ? `${n(held.length)} in ${year}: ${listOf(held.slice(0, 3).map((post) => post.title))}${held.length > 3 ? ', and more' : ''}`
             : `None posted for ${year}`,
-        from: 'News & Events, credited to the CBI',
+        from: 'News & Events, by each event’s purpose',
+        points: events && CREDIT_INDICATOR[credit.id] ? scoreOf(CREDIT_INDICATOR[credit.id], held.length) : null,
       };
     }),
     {
@@ -464,6 +473,15 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
     },
     { name: 'Budget for biodiversity', value: 'Outside this system', from: 'The LGU’s own records' },
   ];
+  const scored = rows.filter((row) => Number.isInteger(row.points));
+  rows.push({
+    name: 'CBI points, of the indicators scored here',
+    value: scored.length
+      ? `${scored.reduce((t, r) => t + r.points, 0)} of ${scored.length * 4}, from ${scored.length} of the index’s 23 indicators`
+      : 'None scored yet',
+    from: 'Green Tag, on the bands of the Singapore Index User’s Manual (2014)',
+    points: null,
+  });
   return {
     key: 'cbi',
     title: 'Toward the City Biodiversity Index',
@@ -471,9 +489,10 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
     columns: [
       { key: 'name', label: 'Indicator', kind: 'text' },
       { key: 'value', label: 'What the system shows', kind: 'text' },
+      { key: 'points', label: 'Points (0–4)', kind: 'text' },
       { key: 'from', label: 'From', kind: 'text' },
     ],
-    rows,
+    rows: rows.map((row) => ({ ...row, points: Number.isInteger(row.points) ? String(row.points) : '' })),
   };
 }
 

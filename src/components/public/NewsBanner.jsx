@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Megaphone } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Megaphone } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
-import { newsStatus, publishDueNews, publishTimeOf, whenAndWhere } from '../../lib/news.js';
+import { newsStatus, publishDueNews, publishTimeOf, venueMapLink, whenAndWhere } from '../../lib/news.js';
 
 /** How long each photo of a post shows before the next fades in. */
 export const PHOTO_SECONDS = 5;
@@ -99,6 +99,12 @@ export default function NewsBanner({ limit = 6 }) {
               <p className="flex items-center gap-2 text-sm font-semibold text-lime-200">
                 <CalendarDays size={16} aria-hidden="true" /> {whenAndWhere(post)}
               </p>
+            )}
+            {venueMapLink(post) && (
+              <a href={venueMapLink(post)}
+                className="inline-flex items-center gap-1.5 self-start text-sm font-bold text-lime-300 underline underline-offset-4 hover:text-lime-200">
+                <MapPin size={15} aria-hidden="true" /> See it on the map
+              </a>
             )}
             <h3 className="text-2xl font-extrabold leading-tight sm:text-4xl">{post.title}</h3>
             {post.body && (

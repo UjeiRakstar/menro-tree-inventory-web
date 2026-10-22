@@ -1,5 +1,9 @@
 import { render, screen, cleanup, fireEvent, within, act, waitFor } from '@testing-library/react';
 
+// Who is signed in: PGENRO unless a test says a MENRO / CENRO.
+const auth = vi.hoisted(() => ({ value: null }));
+vi.mock('../../context/AuthContext.jsx', () => ({ useAuthIfAny: () => auth.value }));
+
 vi.mock('../../supabaseClient.js', async () => {
   const { supabaseMock } = await import('../../test/supabaseMock.js');
   return { supabase: supabaseMock.supabase };
@@ -20,6 +24,8 @@ const OLD = {
 
 beforeEach(() => {
   supabaseMock.reset();
+  auth.value = null;
+  window.history.replaceState(null, '', '/news');
   // jsdom makes no object URLs; the previews need one each.
   URL.createObjectURL = vi.fn(() => 'blob:preview');
   URL.revokeObjectURL = vi.fn();
@@ -172,8 +178,8 @@ describe('scheduling, archiving and the calendar (19 October)', () => {
   });
 });
 
-describe('an event’s days, kind and CBI credit (21 October)', () => {
-  it('runs over several days, for one LGU, and counts toward its CBI', async () => {
+describe('an event’s days, kind and purpose (21 October)', () => {
+  it('runs over several days, for one LGU, with a purpose — and never says CBI', async () => {
     render(<NewsPage />);
     // The posts already made are in the list before anything is posted.
     await screen.findByText('Earth Hour');
@@ -185,8 +191,9 @@ describe('an event’s days, kind and CBI credit (21 October)', () => {
     fill(form, 'First day', '2026-11-23');
     fill(form, 'Last day', '2026-11-25');
     fill(form, 'Held for', '403426000');
-    fill(form, 'Counts toward the CBI as', 'outreach');
-    expect(within(form).getByText(/outreach and public awareness events held a year — counted in the biodiversity report of Santa Cruz/)).toBeInTheDocument();
+    // A training's usual purpose comes with it; the index is counted quietly.
+    expect(within(form).getByLabelText('Purpose')).toHaveValue('outreach');
+    expect(form).not.toHaveTextContent(/CBI|Biodiversity Index/);
     fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
 
     expect(await screen.findByRole('status')).toHaveTextContent('Every MENRO / CENRO has it');
@@ -210,7 +217,18 @@ describe('an event’s days, kind and CBI credit (21 October)', () => {
     const [insert] = supabaseMock.writesTo('news_posts', 'insert');
     expect(insert.payload).toMatchObject({ event_kind: 'tree-planting', event_date: '2026-11-08' });
     expect(insert.payload).not.toHaveProperty('event_end_date');
-    expect(insert.payload).not.toHaveProperty('cbi_credit');
+    // A tree planting is a biodiversity project, unless PGENRO says otherwise.
+    expect(insert.payload.cbi_credit).toBe('project');
+    expect(insert.payload).not.toHaveProperty('venue_lat');
+  });
+
+  it('keeps a purpose chosen by hand when the kind changes', async () => {
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Kind of event', 'forum');
+    fill(form, 'Purpose', 'partnership');
+    fill(form, 'Kind of event', 'seminar');
+    expect(within(form).getByLabelText('Purpose')).toHaveValue('partnership');
   });
 
   it('will not have a last day before the first', async () => {
@@ -223,5 +241,76 @@ describe('an event’s days, kind and CBI credit (21 October)', () => {
     fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
     expect(await within(form).findByText('The last day cannot be before the first.')).toBeInTheDocument();
     expect(supabaseMock.writesTo('news_posts', 'insert')).toHaveLength(0);
+  });
+});
+
+describe('where an event is held (22 October)', () => {
+  it('is made from a planting site PGENRO designated: a tree planting there, pinned at its middle', async () => {
+    window.history.replaceState(null, '', '/news?area=site-1');
+    supabaseMock.setResponse('map_areas:select', {
+      data: {
+        id: 'site-1', name: 'Labuin Riverbank', barangay: 'Labuin', municipality: 'Santa Cruz', kind: 'planting-site',
+        geometry: { type: 'Polygon', coordinates: [[[121.41, 14.28], [121.42, 14.28], [121.42, 14.29], [121.41, 14.29], [121.41, 14.28]]] },
+      },
+      error: null,
+    });
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    expect(await within(form).findByDisplayValue('Tree planting at Labuin Riverbank')).toBeInTheDocument();
+    expect(within(form).getByLabelText('Kind of event')).toHaveValue('tree-planting');
+    expect(within(form).getByLabelText('Held for')).toHaveValue('403426000');
+    expect(within(form).getByLabelText('Venue')).toHaveValue('Labuin Riverbank, Labuin');
+    expect(within(form).getByText(/Pinned at 14\.28/)).toBeInTheDocument();
+    expect(within(form).getByText('Held on a tree planting site PGENRO designated.')).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+
+    fill(form, 'Date', '2026-12-05');
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
+    await screen.findByRole('status');
+    const [insert] = supabaseMock.writesTo('news_posts', 'insert');
+    expect(insert.payload).toMatchObject({ event_kind: 'tree-planting', cbi_credit: 'project', map_area_id: 'site-1', lgu_psgc: 403426000 });
+    expect(insert.payload.venue_lat).toBeCloseTo(14.285, 3);
+    expect(insert.payload.venue_lng).toBeCloseTo(121.415, 3);
+  });
+
+  it('keeps an event’s pin when it is edited, and takes it off when asked', async () => {
+    supabaseMock.setResponse('news_posts:select', { data: [{ ...OLD, venue_lat: 14.28, venue_lng: 121.41 }], error: null });
+    render(<NewsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Earth Hour' }));
+    const form = screen.getByRole('form', { name: 'Edit the post' });
+    expect(within(form).getByText('Pinned at 14.28000, 121.41000')).toBeInTheDocument();
+    fireEvent.click(within(form).getByRole('button', { name: 'Remove the pin' }));
+    fireEvent.click(within(form).getByRole('button', { name: 'Save the changes' }));
+    await waitFor(() => expect(supabaseMock.writesTo('news_posts', 'update')).toHaveLength(1));
+    expect(supabaseMock.writesTo('news_posts', 'update')[0].payload).toMatchObject({ venue_lat: null, venue_lng: null });
+  });
+});
+
+describe('a MENRO / CENRO’s own events (22 October)', () => {
+  const MENRO = { id: 'menro-scz', role: 'lgu_admin', lgu_psgc: 403426000, status: 'active' };
+  beforeEach(() => {
+    auth.value = { profile: MENRO };
+    supabaseMock.setResponse('news_posts:select', {
+      data: [OLD, { ...OLD, id: 'mine', title: 'Our Clean-up', created_by: 'menro-scz', lgu_psgc: 403426000 }],
+      error: null,
+    });
+  });
+
+  it('posts events for its own city or municipality only, and lists its own', async () => {
+    render(<NewsPage />);
+    expect(await screen.findByText('Our Clean-up')).toBeInTheDocument();
+    expect(screen.queryByText('Earth Hour')).not.toBeInTheDocument();
+    const form = screen.getByRole('form', { name: 'New post' });
+    expect(within(form).getByLabelText('Held for')).toBeDisabled();
+    expect(within(form).getByLabelText('Held for')).toHaveValue('403426000');
+    expect(within(within(form).getByLabelText('Kind of event')).queryByText('Not an event (news)')).not.toBeInTheDocument();
+
+    fill(form, 'Title', 'Coastal Clean-up');
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send/ }));
+    expect(await within(form).findByText('Give the day of the event.')).toBeInTheDocument();
+    fill(form, /^Date/, '2026-12-12');
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send/ }));
+    expect(await screen.findByRole('status')).toHaveTextContent('PGENRO has it in its inbox');
+    expect(supabaseMock.writesTo('news_posts', 'insert')[0].payload).toMatchObject({ lgu_psgc: 403426000, event_kind: 'other' });
   });
 });

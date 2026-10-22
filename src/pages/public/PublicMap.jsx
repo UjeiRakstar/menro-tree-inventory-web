@@ -11,11 +11,12 @@ import {
   useMapEvents,
   Circle,
   ImageOverlay,
+  Tooltip,
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Crosshair, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Printer, Smartphone, X } from 'lucide-react';
+import { CalendarPlus, Crosshair, Layers as LayersIcon, ListTree, Loader2, Locate, PencilRuler, Printer, Smartphone, X } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import {
   LAGUNA_BOUNDS,
@@ -34,10 +35,12 @@ import { PIN_FILL, PIN_MEANING, URGENCY, mostUrgent, pinColorOf } from '../../li
 import { boundsOfCluster, clusterPins } from '../../lib/clusterPins.js';
 import { PIN_COLOR } from '../../lib/pinColor.js';
 import { EMPTY_SHAPE, undoLast } from '../../lib/drawing.js';
-import { areaPermission, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
+import { areaPermission, canMakeEventAt, documentFolderOf, emptyAreaForm, formFromRow, geometryToShape } from '../../lib/mapAreas.js';
 import { boundsOfShape, shapeFromGeometry } from '../../lib/areaImport.js';
 import { ROLES, roleOf, isSuperAdmin } from '../../lib/roles.js';
-import { centroidOf } from '../../lib/areaGeometry.js';
+import { centroidOf, geometryAreaM2, toHectares } from '../../lib/areaGeometry.js';
+import { cbiPoints } from '../../lib/cbiPoints.js';
+import { cbiEventCounts, loadCbiEvents } from '../../lib/news.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
 import { useMapLayers } from '../../hooks/useMapLayers.js';
@@ -1321,6 +1324,33 @@ export function TreeMap({
   );
   const areaTotals = useMemo(() => summarise(areaTrees), [areaTrees]);
 
+  // A city's points toward the City Biodiversity Index, worked out from what
+  // the system holds (src/lib/cbiPoints.js). Cities only.
+  const selectedCity = useMemo(
+    () => MUNICIPALITY_LIST.find((lgu) => lgu.name === selectedLgu && lgu.isCity) ?? null,
+    [selectedLgu]
+  );
+  const [eventPosts, setEventPosts] = useState(null);
+  useEffect(() => {
+    if (!selectedCity) return undefined;
+    let live = true;
+    loadCbiEvents().then((posts) => live && setEventPosts(posts));
+    return () => {
+      live = false;
+    };
+  }, [selectedCity]);
+  const cityCbi = useMemo(() => {
+    if (!selectedCity) return null;
+    const feature = municipalityNamed(selectedCity.name);
+    return cbiPoints({
+      trees: areaTrees,
+      areas: savedAreas.features,
+      municipality: selectedCity.name,
+      placeAreaHa: feature ? toHectares(geometryAreaM2(feature.geometry)) : 0,
+      events: eventPosts ? cbiEventCounts(eventPosts, { lgu: selectedCity.psgc }) : null,
+    });
+  }, [selectedCity, areaTrees, savedAreas.features, eventPosts]);
+
   // ---- A barangay, opened from its name ----------------------------------------
   const barangayTrees = useMemo(
     () =>
@@ -1813,6 +1843,21 @@ export function TreeMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetTreeId, loading]);
 
+  // An event's venue, from News & Events, as ?at=lat,lng&place=…: fly there
+  // and pin it, for anyone.
+  const venueAt = searchParams.get('at');
+  const [venuePin, setVenuePin] = useState(null);
+  useEffect(() => {
+    if (!venueAt) return;
+    const [lat, lng] = venueAt.split(',').map(Number);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      setVenuePin({ position: [lat, lng], label: searchParams.get('place') || 'The venue' });
+      setPointTarget({ position: [lat, lng], zoom: 17 });
+    }
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venueAt]);
+
   // The header's "Proposals from PGENRO" sends an area here as ?area=…: open
   // it, where the proposal waits, once the saved areas are in.
   const targetAreaId = admin ? searchParams.get('area') : null;
@@ -2114,6 +2159,18 @@ export function TreeMap({
           <PictureOverlay key={surveyLayer.id} layer={surveyLayer} kind={survey} />
         )}
 
+        {/* An event's venue, opened from News & Events */}
+        {venuePin && (
+          <CircleMarker
+            center={venuePin.position}
+            radius={10}
+            pathOptions={{ color: '#ffffff', weight: 3, fillColor: '#166534', fillOpacity: 1 }}
+            eventHandlers={{ click: () => setVenuePin(null) }}
+          >
+            <Tooltip permanent direction="top" offset={[0, -10]}>{venuePin.label}</Tooltip>
+          </CircleMarker>
+        )}
+
         {/* The barangays of the LGU in focus */}
         {layers.barangays && (fence || selectedLgu) && (
           <BarangayLayer
@@ -2276,6 +2333,7 @@ export function TreeMap({
           logo={logoFor(selectedLgu)}
           totals={areaTotals}
           barangays={areaBarangays}
+          cbi={cityCbi}
           onClose={clearSelectedLgu}
           onCollapsedChange={setAreaPanelCollapsed}
           onRequestData={() => setRequestOpen(true)}
@@ -2309,6 +2367,16 @@ export function TreeMap({
                   savedAreas.reload();
                 }}
               />
+              )}
+              {/* A tree planting on this site: the event form, filled in from it. */}
+              {canMakeEventAt(profile, selectedSite) && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/news?area=${encodeURIComponent(selectedSite.properties.id)}`)}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-green-700 px-3 py-2 text-sm font-bold text-white hover:bg-green-800"
+                >
+                  <CalendarPlus size={14} aria-hidden="true" /> Create a tree planting event here
+                </button>
               )}
               {/* A sheet of this one area, with the survey layer shown now. */}
               <button
