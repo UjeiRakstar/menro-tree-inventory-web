@@ -39,7 +39,10 @@ import { areaPermission, canMakeEventAt, documentFolderOf, emptyAreaForm, formFr
 import { boundsOfShape, shapeFromGeometry } from '../../lib/areaImport.js';
 import { ROLES, roleOf, isSuperAdmin } from '../../lib/roles.js';
 import { centroidOf, geometryAreaM2, toHectares } from '../../lib/areaGeometry.js';
-import { cbiPoints } from '../../lib/cbiPoints.js';
+import { areaFigures, cbiPoints } from '../../lib/cbiPoints.js';
+import { loadCommunityCounts } from '../../lib/community.js';
+import { loadVerifiedPlans, planBadges } from '../../lib/lccap.js';
+import { lguFacts } from '../../lib/psgc.js';
 import { cbiEventCounts, loadCbiEvents } from '../../lib/news.js';
 import { parentTileOnError } from '../../lib/tileFallback.js';
 import { useMapAreas } from '../../hooks/useMapAreas.js';
@@ -1331,10 +1334,15 @@ export function TreeMap({
     [selectedLgu]
   );
   const [eventPosts, setEventPosts] = useState(null);
+  const [verifiedPlans, setVerifiedPlans] = useState(null);
+  const [cityCommunity, setCityCommunity] = useState(null);
   useEffect(() => {
     if (!selectedCity) return undefined;
     let live = true;
+    setCityCommunity(null);
     loadCbiEvents().then((posts) => live && setEventPosts(posts));
+    loadVerifiedPlans().then((plans) => live && setVerifiedPlans(plans));
+    loadCommunityCounts(selectedCity.psgc).then((counts) => live && setCityCommunity(counts));
     return () => {
       live = false;
     };
@@ -1344,12 +1352,14 @@ export function TreeMap({
     const feature = municipalityNamed(selectedCity.name);
     return cbiPoints({
       trees: areaTrees,
-      areas: savedAreas.features,
-      municipality: selectedCity.name,
+      areas: areaFigures(savedAreas.features, selectedCity.name),
       placeAreaHa: feature ? toHectares(geometryAreaM2(feature.geometry)) : 0,
+      population: lguFacts(selectedCity.psgc)?.population2024 ?? 0,
       events: eventPosts ? cbiEventCounts(eventPosts, { lgu: selectedCity.psgc }) : null,
+      communityScientists: cityCommunity ? Number(cityCommunity.taggers) : null,
+      climatePlan: Array.isArray(verifiedPlans) ? planBadges(verifiedPlans, selectedCity.psgc) : null,
     });
-  }, [selectedCity, areaTrees, savedAreas.features, eventPosts]);
+  }, [selectedCity, areaTrees, savedAreas.features, eventPosts, verifiedPlans, cityCommunity]);
 
   // ---- A barangay, opened from its name ----------------------------------------
   const barangayTrees = useMemo(

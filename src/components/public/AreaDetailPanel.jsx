@@ -5,6 +5,7 @@ import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import { BarChart3, ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
 import { METRIC_PAIRS, formatFigure } from '../../lib/dashboardMetrics.js';
 import InfoHint from './InfoHint.jsx';
+import { describeIndicator } from '../../lib/cbiPoints.js';
 
 /** In step with the slide class below, and with the tree panel's. */
 const SLIDE_MS = 300;
@@ -55,8 +56,6 @@ function FigureRow({ metric, value, note = '' }) {
   );
 }
 
-const oneDecimal = (value) => (Math.round(value * 10) / 10).toLocaleString('en-US');
-
 /**
  * A city's points toward the City Biodiversity Index (src/lib/cbiPoints.js):
  * the total over the indicators the system could score, then each of them,
@@ -70,7 +69,7 @@ function CbiPoints({ cbi }) {
         City Biodiversity Index
         <InfoHint
           label="What the CBI points mean"
-          text="Points on the Singapore Index on Cities’ Biodiversity, 0 to 4 for each indicator, worked out by Green Tag from the city’s tagged trees, mapped land cover and the events it posted this year. The full index has 23 indicators; the rest come from the city’s own records."
+          text="Points on the Singapore Index on Cities’ Biodiversity, 0 to 4 for each indicator, worked out by Green Tag from the city’s tagged trees, mapped land cover, verified climate plan, residents tagging trees and the events it posted this year. The full index (Singapore Index Handbook, 2021) has 28 indicators and 112 points; the rest come from the city’s own records. Projects, events and community scientists are counted per million residents (PSA 2024)."
           size={13}
         />
       </h3>
@@ -79,7 +78,7 @@ function CbiPoints({ cbi }) {
           <span className="text-[11px] font-semibold text-slate-600">
             CBI points
             <span className="block text-[10px] font-normal text-slate-400">
-              {cbi.scored > 0 ? `from ${cbi.scored} of the 23 indicators` : 'nothing to score yet'}
+              {cbi.scored > 0 ? `from ${cbi.scored} of the 28 indicators` : 'nothing to score yet'}
             </span>
           </span>
           <span className="shrink-0 text-right">
@@ -92,17 +91,7 @@ function CbiPoints({ cbi }) {
             <li key={indicator.id} className="flex items-start justify-between gap-3 px-3 py-2">
               <span className="min-w-0 text-[11px] leading-snug text-slate-600">
                 <span className="text-slate-400">{indicator.no}.</span> {indicator.name}
-                <span className="block text-[10px] text-slate-400">
-                  {indicator.value === null
-                    ? indicator.id === 'invasive'
-                      ? 'No tree of known origin yet'
-                      : ['project', 'partnership', 'outreach'].includes(indicator.id)
-                        ? 'Events not readable yet'
-                        : 'No land cover mapped yet'
-                    : indicator.unit
-                      ? `${oneDecimal(indicator.value)}${indicator.unit}`
-                      : `${indicator.value} this year`}
-                </span>
+                <span className="block text-[10px] text-slate-400">{describeIndicator(indicator)}</span>
               </span>
               {indicator.points === null ? (
                 <span className="shrink-0 text-[11px] font-semibold text-slate-300">—</span>

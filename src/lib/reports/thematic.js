@@ -1,11 +1,11 @@
 import { FLUP_ELEVATION_CLASSES, FLUP_SLOPE_CLASSES } from '../layers/terrain.js';
 import { listOf } from '../reportWriter.js';
-import { officialName } from '../psgc.js';
+import { lguFacts, officialName, provinceFacts } from '../psgc.js';
 import { buildGhgReport } from './ghg.js';
 import { CBI_CREDITS, cbiEventCounts } from '../news.js';
 import { planBadges, planKindLabel } from '../lccap.js';
 import { originOf } from '../treeOrigin.js';
-import { CBI_INDICATORS, pointsOn } from '../cbiPoints.js';
+import { cbiPoints, invasiveShare } from '../cbiPoints.js';
 
 /**
  * The thematic reports (Round C, 18 October): soil; hazards and climate;
@@ -392,36 +392,53 @@ export function compositionTable(trees = []) {
  * Index, adopted by TB 2018-02), and what it cannot — said plainly, so no
  * reader takes a gap for a zero.
  */
-export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, carbon = null, communityTags = 0, participation = null, events = null, climatePlan = null, year = new Date().getFullYear() }) {
-  const coverHa = (landCover?.rows ?? []).filter((row) => row.treeCover).reduce((t, r) => t + r.areaHa, 0);
-  const origin = compositionTable(trees).counts;
-  const known = trees.length - origin.unrecorded;
-  // Points on the index's own bands (src/lib/cbiPoints.js), where the system has the measure.
-  const mapped = Boolean(landCover?.rows?.length);
-  const scoreOf = (id, value) => {
-    const indicator = CBI_INDICATORS.find((i) => i.id === id);
-    return value === null || !Number.isFinite(value) ? null : pointsOn(indicator, value);
+export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeAreaHa = 0, population = 0, carbon = null, communityTags = 0, participation = null, events = null, climatePlan = null, year = new Date().getFullYear() }) {
+  const landRows = landCover?.rows ?? [];
+  const areas = {
+    mapped: landRows.length > 0,
+    naturalHa: landRows.filter((row) => row.natural).reduce((t, r) => t + r.areaHa, 0),
+    canopyHa: landRows.filter((row) => row.treeCover).reduce((t, r) => t + r.areaHa, 0),
+    protectedHa,
   };
-  const percentOf = (part, whole) => (whole > 0 ? (part / whole) * 100 : null);
+  // Points on the Handbook's own bands (src/lib/cbiPoints.js), where the system has the measure.
+  const cbi = cbiPoints({
+    trees,
+    areas,
+    placeAreaHa,
+    population,
+    events,
+    communityScientists: participation ? Number(participation.taggers ?? participation.residents) : null,
+    climatePlan,
+  });
+  const scored = Object.fromEntries(cbi.indicators.map((indicator) => [indicator.id, indicator]));
+  const named = (id, name) => `${scored[id].no}. ${name ?? scored[id].name}`;
+  const pointsOf = (id) => scored[id].points;
+  const species = invasiveShare(trees);
+  const origin = compositionTable(trees).counts;
+  const perMillion = (id) => (scored[id].value === null ? '' : `; ${n(Math.round(scored[id].value))} per million residents`);
   const CREDIT_INDICATOR = { outreach: 'outreach', partnership: 'partnership', project: 'project' };
   const rows = [
     {
-      name: 'Proportion of natural areas',
-      value: coverHa ? `${hectares(coverHa)} ha of tree cover mapped (${pct(coverHa, placeAreaHa)} of the area)` : 'No tree-cover land cover mapped yet',
-      from: 'Land cover the office has mapped',
-      points: scoreOf('natural', mapped ? percentOf(coverHa, placeAreaHa) : null),
+      name: named('natural'),
+      value: areas.mapped
+        ? `${hectares(areas.naturalHa)} ha of natural land cover mapped (${pct(areas.naturalHa, placeAreaHa)} of the area)`
+        : 'No land cover mapped yet',
+      from: 'Land cover the office has mapped: forest, mangrove, brush, grassland, marsh, inland water',
+      points: pointsOf('natural'),
     },
     {
-      name: 'Proportion of protected natural areas',
+      name: named('protected'),
       value: protectedHa ? `${hectares(protectedHa)} ha designated (${pct(protectedHa, placeAreaHa)})` : 'None designated in the system yet',
       from: 'Areas saved with a legal designation and its document',
-      points: scoreOf('protected', mapped || protectedHa ? percentOf(protectedHa, placeAreaHa) : null),
+      points: pointsOf('protected'),
     },
     {
-      name: 'Proportion of invasive alien species (trees)',
-      value: known ? `${n(origin.invasive)} of ${n(known)} trees of known origin (${pct(origin.invasive, known)})` : 'No origin recorded yet',
+      name: named('invasive', 'Proportion of invasive alien species (tree species)'),
+      value: species
+        ? `${n(species.invasive)} invasive of ${n(species.invasive + species.native)} native and invasive species (${pct(species.invasive, species.invasive + species.native)})`
+        : 'No species of known origin yet',
       from: 'The tree inventory',
-      points: scoreOf('invasive', known ? percentOf(origin.invasive, known) : null),
+      points: pointsOf('invasive'),
     },
     {
       name: 'Native biodiversity — trees',
@@ -429,63 +446,65 @@ export function cbiTable({ trees = [], landCover = null, protectedHa = 0, placeA
       from: 'The tree inventory',
     },
     {
+      name: named('canopy'),
+      value: areas.mapped ? `${pct(areas.canopyHa, placeAreaHa)} of the area under mapped tree cover` : 'No land cover mapped yet',
+      from: 'Land cover the office has mapped',
+      points: pointsOf('canopy'),
+    },
+    {
       name: 'Climate regulation — carbon storage',
       value: carbon?.co2T ? `${hectares(carbon.co2T)} t CO₂ in ${n(carbon.measured)} measured trees` : 'No tree measured for carbon yet',
       from: 'Chave et al. 2014, on diameter and total height',
     },
     {
-      name: 'Climate regulation — tree canopy cover',
-      value: mapped ? `${pct(coverHa, placeAreaHa)} of the area under mapped tree cover` : 'No land cover mapped yet',
-      from: 'Land cover the office has mapped',
-      points: scoreOf('canopy', mapped ? percentOf(coverHa, placeAreaHa) : null),
+      name: named('climate'),
+      value: climatePlan
+        ? `${planKindLabel(climatePlan.plan.plan_kind)} ${climatePlan.plan.term_start}–${climatePlan.plan.term_end}, verified by PGENRO${climatePlan.toCcc ? '; submitted to the Climate Change Commission' : ''}`
+        : 'None verified for this year',
+      from: 'The LGU’s plan, filed and checked in Green Tag (a plan developed; carrying it out is the LGU’s to show)',
+      points: pointsOf('climate'),
     },
+    // Partnerships, projects, outreach and policies: the events posted in
+    // News & Events for the place, by each one's purpose.
+    ...CBI_CREDITS.map((credit) => {
+      const held = events?.[credit.id] ?? [];
+      const id = CREDIT_INDICATOR[credit.id];
+      return {
+        name: id ? named(id) : credit.indicator,
+        value: !events
+          ? 'Not counted yet'
+          : held.length
+            ? `${n(held.length)} in ${year}${id && id !== 'partnership' ? perMillion(id) : ''}: ${listOf(held.slice(0, 3).map((post) => post.title))}${held.length > 3 ? ', and more' : ''}`
+            : `None posted for ${year}`,
+        from: 'News & Events, by each event’s purpose',
+        points: id ? pointsOf(id) : null,
+      };
+    }),
     {
-      name: 'Participation — citizen science',
+      name: named('community'),
       value: participation
-        ? `${n(participation.residents)} ${participation.residents === 1 ? 'resident' : 'residents'} signed in with Google and tagged trees here; ` +
+        ? `${n(participation.residents)} ${participation.residents === 1 ? 'resident' : 'residents'} signed in with Google and tagged trees here${perMillion('community')}; ` +
           `${n(participation.verified_tags)} of their ${n(participation.tags)} tags verified in the field`
         : `${n(communityTags)} community tags verified into the inventory`,
       from: participation
         ? 'Green Tag residents’ accounts, counted where they tagged (community_counts)'
         : 'The public map’s tagging, confirmed in the field',
+      points: pointsOf('community'),
     },
-    // Projects, policies, partnerships and outreach: the events PGENRO posted
-    // in News & Events for the place, credited to the CBI (21 October).
-    ...CBI_CREDITS.map((credit) => {
-      const held = events?.[credit.id] ?? [];
-      return {
-        name: credit.indicator,
-        value: !events
-          ? 'Not counted yet'
-          : held.length
-            ? `${n(held.length)} in ${year}: ${listOf(held.slice(0, 3).map((post) => post.title))}${held.length > 3 ? ', and more' : ''}`
-            : `None posted for ${year}`,
-        from: 'News & Events, by each event’s purpose',
-        points: events && CREDIT_INDICATOR[credit.id] ? scoreOf(CREDIT_INDICATOR[credit.id], held.length) : null,
-      };
-    }),
-    {
-      name: 'Policies and plans — climate change action plan',
-      value: climatePlan
-        ? `${planKindLabel(climatePlan.plan.plan_kind)} ${climatePlan.plan.term_start}–${climatePlan.plan.term_end}, verified by PGENRO${climatePlan.toCcc ? '; submitted to the Climate Change Commission' : ''}`
-        : 'None verified for this year',
-      from: 'The LGU’s plan, filed and checked in Green Tag',
-    },
-    { name: 'Budget for biodiversity', value: 'Outside this system', from: 'The LGU’s own records' },
+    { name: '16. Budget allocated to biodiversity', value: 'Outside this system', from: 'The LGU’s own records' },
   ];
-  const scored = rows.filter((row) => Number.isInteger(row.points));
   rows.push({
     name: 'CBI points, of the indicators scored here',
-    value: scored.length
-      ? `${scored.reduce((t, r) => t + r.points, 0)} of ${scored.length * 4}, from ${scored.length} of the index’s 23 indicators`
+    value: cbi.scored
+      ? `${cbi.points} of ${cbi.of}, from ${cbi.scored} of the index’s 28 indicators`
       : 'None scored yet',
-    from: 'Green Tag, on the bands of the Singapore Index User’s Manual (2014)',
+    from: 'Green Tag, on the bands of the Handbook on the Singapore Index on Cities’ Biodiversity (2021)',
     points: null,
   });
   return {
     key: 'cbi',
     title: 'Toward the City Biodiversity Index',
-    note: 'Indicators of the Singapore Index on Cities’ Biodiversity (Chan et al. 2014), as adopted by TB 2018-02.',
+    note: 'Indicators of the Singapore Index on Cities’ Biodiversity (Handbook, 2021: 28 indicators, 112 points), as adopted by TB 2018-02. Projects, events and community scientists per million residents (PSA 2024).',
     columns: [
       { key: 'name', label: 'Indicator', kind: 'text' },
       { key: 'value', label: 'What the system shows', kind: 'text' },
@@ -778,6 +797,7 @@ export function buildThemeReport(kind, ctx) {
         landCover: byKey.landCover,
         protectedHa: ctx.protectedHa ?? 0,
         placeAreaHa: ctx.placeAreaHa ?? 0,
+        population: (ctx.place ? lguFacts(ctx.place.psgc) : provinceFacts())?.population2024 ?? 0,
         carbon: byKey.carbon?.totals ?? null,
         communityTags: ctx.communityTags ?? 0,
         participation: ctx.participation ?? null,

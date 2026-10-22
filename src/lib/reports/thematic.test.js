@@ -134,17 +134,17 @@ describe('the biodiversity report', () => {
     const report = buildThemeReport('biodiversity', {
       place: { label: 'Santa Cruz', psgc: 403426000 },
       trees: TREES,
-      tables: { landCover: { rows: [{ areaHa: 12, treeCover: true }, { areaHa: 5, treeCover: false }] } },
+      tables: { landCover: { rows: [{ areaHa: 12, treeCover: true, natural: true }, { areaHa: 5, treeCover: false, natural: false }] } },
       placeAreaHa: 3718,
       communityTags: 4,
     });
     const cbi = report.tables.find((t) => t.key === 'cbi');
-    expect(cbi.rows[0].value).toBe('12 ha of tree cover mapped (0% of the area)');
+    expect(cbi.rows[0]).toMatchObject({ name: '1. Proportion of natural areas', value: '12 ha of natural land cover mapped (0% of the area)' });
     expect(cbi.rows.at(-2).value).toBe('Outside this system');
-    // Points on the index's bands where the system has the measure: 0.3% tree cover is none.
+    // Points on the Handbook's bands where the system has the measure: 0.3% natural area is none.
     expect(cbi.rows[0].points).toBe('0');
-    expect(cbi.rows.find((r) => r.name === 'Budget for biodiversity').points).toBe('');
-    expect(cbi.rows.at(-1).value).toMatch(/^\d+ of 16, from 4 of the index’s 23 indicators$/);
+    expect(cbi.rows.find((r) => r.name === '16. Budget allocated to biodiversity').points).toBe('');
+    expect(cbi.rows.at(-1).value).toMatch(/^\d+ of 16, from 4 of the index’s 28 indicators$/);
     const text = Object.fromEntries(report.sections.map((s) => [s.key, s.text]));
     expect(text.composition).toMatch(/^6 trees of 4 species have been tagged in Santa Cruz/);
     expect(text.diversity).toMatch(/H′ = 1\.33/);
@@ -158,8 +158,10 @@ describe('the biodiversity report', () => {
       trees: TREES,
       participation: { residents: 12, taggers: 12, tags: 40, verified_tags: 31 },
     });
-    const row = report.tables.find((t) => t.key === 'cbi').rows.find((r) => r.name === 'Participation — citizen science');
-    expect(row.value).toBe('12 residents signed in with Google and tagged trees here; 31 of their 40 tags verified in the field');
+    const row = report.tables.find((t) => t.key === 'cbi').rows.find((r) => r.name === '28. Community science');
+    // Per million of Santa Cruz's people (PSA 2024), as Indicator 28 counts them.
+    expect(row.value).toMatch(/^12 residents signed in with Google and tagged trees here; \d+ per million residents; 31 of their 40 tags verified in the field$/);
+    expect(row.points).toMatch(/^[0-4]$/);
     expect(row.from).toMatch(/counted where they tagged/);
   });
 });

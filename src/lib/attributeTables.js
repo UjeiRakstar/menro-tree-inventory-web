@@ -4,6 +4,7 @@ import { annualCo2Kg, carbonDioxideKg, CO2_PER_CARBON } from './treeCarbon.js';
 import { addTableSheet, createWorkbook, officeOf, workbookBlob } from './workbookLook.js';
 import { barangayFacts, PSGC_EDITION } from './psgc.js';
 import { namriaClassById } from './namriaCover.js';
+import { isNaturalClass } from './cbiPoints.js';
 
 /**
  * The attribute tables behind a map sheet (decided 17 October) — what the
@@ -268,6 +269,8 @@ export function landCoverTable(areas = []) {
       cover: area.properties.coverLabel ?? null,
       // Not a column: whether the class is tree cover, for the CBI's natural areas.
       treeCover: Boolean(namriaClassById(area.properties.namriaClass)?.treeCover),
+      // Nor this: whether it is a natural ecosystem, for the CBI's Indicator 1.
+      natural: isNaturalClass(area.properties.namriaClass),
       designated: Boolean(area.properties.designation),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
