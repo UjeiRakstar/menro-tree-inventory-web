@@ -474,6 +474,17 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     Magdalena, Majayjay, Paete, Pagsanjan, Pakil, Pangil, Pila, Santa Cruz and
     Santa Maria. It is 840 KB: paste it whole into the SQL editor (it takes a
     while), or run it with psql.
+    **23 October:** the seed now has every town's areas too (1.18 MB): each
+    city its planting sites and what its CBI reads from the map — protected
+    forest, forest, brush, grassland, marsh, water, orchards (natural areas,
+    protected areas, canopy); each municipality its planting sites and its
+    Forest Land Use Plan cover — protected forest, forest land, brush and
+    grassland to reforest, agroforest, a bamboo stand with its clumps, rice,
+    a creek, the poblacion. Every town has a planting site its office asked
+    for, for a PGENRO trainee to decide. Designations point at
+    /training/practice-document.html, never a real document. Run
+    training_seed.sql again for them, and training_purge.sql's new version
+    when the batch is done.
 36. **Bamboo stands, 22 October** — run `supabase/bamboo_stands.sql`. The
     drawing tool has "Bamboo stand" beside NAMRIA's twelve classes, and the
     area form suggests it when three or more of the points inside — at least

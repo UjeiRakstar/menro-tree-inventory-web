@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Practice Document — Green Tag Training</title>
+  <!--
+    The document behind every designation in the training data
+    (tools/make-training-seed.mjs): a protected area, forest land, a Forest
+    Land Use Plan zone. A designation needs a document (map_areas.sql,
+    decision 7), and practice areas must not point at a real one.
+  -->
+  <style>
+    :root { --violet: #7c3aed; --ink: #0f172a; --muted: #475569; --line: #e2e8f0; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { background: var(--violet); color: #fff; padding: 20px 16px; }
+    header p { margin: 0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+    header h1 { margin: 0; font-size: 22px; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    main { padding: 24px 16px 48px; }
+    section { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+    .muted { color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p>Green Tag · Training mode</p>
+      <h1>Practice document</h1>
+    </div>
+  </header>
+  <main class="wrap">
+    <section>
+      <p>
+        This is <strong>not a real document</strong>. It stands in for the proclamation, land classification map or
+        Forest Land Use Plan behind a designated area in the training data, so trainees can see how a designation
+        and its document appear on the map.
+      </p>
+      <p>
+        In the real system, a protected area, forest land, a zoning area or a Forest Land Use Plan zone is saved
+        only with its actual document — the proclamation, the DENR land classification map, the ordinance or the
+        approved plan — uploaded by the office.
+      </p>
+      <p class="muted">The practice areas, and this link, are cleared with the rest of the training data.</p>
+    </section>
+  </main>
+</body>
+</html>

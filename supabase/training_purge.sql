@@ -11,12 +11,16 @@
 -- The training ACCOUNTS are left alone, so one batch can carry on another
 -- day. To close them too, uncomment section 3.
 
--- 1. The trees' activity-log entries go with them, below; pausing the logger
---    keeps the deletes themselves from writing 150 entries to the real log.
+-- 1. The trees' and areas' activity-log entries go with them, below; pausing
+--    the loggers keeps the deletes themselves from writing hundreds of
+--    entries to the real log.
 do $$
 begin
   if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
     alter table public.trees disable trigger log_tree_changes;
+  end if;
+  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
+    alter table public.map_areas disable trigger log_map_area_changes;
   end if;
 end $$;
 
@@ -38,6 +42,9 @@ do $$
 begin
   if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
     alter table public.trees enable trigger log_tree_changes;
+  end if;
+  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
+    alter table public.map_areas enable trigger log_map_area_changes;
   end if;
 end $$;
 
@@ -66,13 +73,21 @@ select 'no training permits left', not exists (select 1 from public.permits wher
 union all
 select 'no trainee arborists left', not exists (select 1 from public.arborists where is_training), ''
 union all
+-- Through query_to_xml, and only once there is a table to read.
+select 'no training areas left',
+       case when exists (select 1 from information_schema.columns
+                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
+            then (xpath('/row/n/text()', query_to_xml(
+                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text = '0'
+            else true end, ''
+union all
 select 'no training entries left in the activity log',
        not exists (select 1 from public.activity_log where is_training), ''
 union all
 select 'real trees untouched', true, (select count(*) from public.trees)::text || ' trees'
 union all
 select 'the activity log is running again',
-       not exists (select 1 from pg_trigger where tgname = 'log_tree_changes' and tgenabled = 'D'), ''
+       not exists (select 1 from pg_trigger where tgname in ('log_tree_changes', 'log_map_area_changes') and tgenabled = 'D'), ''
 union all
 select 'READ: training accounts still open', null,
        coalesce((select string_agg(email, ', ' order by email) from public.profiles

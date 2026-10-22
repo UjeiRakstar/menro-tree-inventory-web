@@ -431,6 +431,29 @@ check('is_pgenro() is the real PGENRO only',
   (await as(PGENRO, 'authenticated', () => one(`select public.is_pgenro() v`))).v === true &&
   (await as(PG_TRAINEE, 'authenticated', () => one(`select public.is_pgenro() v`))).v === false);
 
+// ---- The training seed's areas (23 October) ----------------------------------------------------------
+const realLogBefore = await count(`select count(*) n from public.activity_log where not is_training`);
+const seedOut = await asEditor(SQL('training_seed.sql'));
+const seedRows = seedOut[seedOut.length - 1].rows;
+const seededAreas = Number(SQL('training_seed.sql').match(/--\s+(\d+) areas on the map/)[1]);
+check('the training seed puts every town’s areas on the map — every one within the rules on areas',
+  seedRows.find((r) => r.check === 'training areas')?.ok === true && seededAreas > 200 &&
+  (await count(`select count(*) n from public.map_areas where is_training and notes = 'Practice data for training.'`)) === seededAreas,
+  seedRows.map((r) => `${r.check}=${r.ok} (${r.detail})`).join('; ').slice(0, 400));
+check('…without a line in the real activity log', (await count(`select count(*) n from public.activity_log where not is_training`)) === realLogBefore);
+const kinds = await one(`select count(*) filter (where kind = 'planting-site' and approval = 'requested') requested,
+  count(*) filter (where designation = 'protected-area') protected, count(*) filter (where cover_class = 'bamboo-stand') bamboo,
+  count(distinct lgu_psgc) towns from public.map_areas where is_training and notes = 'Practice data for training.'`);
+check('…planting sites to decide, protected forest, bamboo stands, in 22 towns',
+  Number(kinds.requested) === 22 && Number(kinds.protected) === 22 && Number(kinds.bamboo) === 16 && Number(kinds.towns) === 22, JSON.stringify(kinds));
+check('the public and the real PGENRO see none of them',
+  (await as(null, 'anon', () => count(`select count(*) n from public.map_areas where notes = 'Practice data for training.'`))) === 0 &&
+  (await as(PGENRO, 'authenticated', () => count(`select count(*) n from public.map_areas where notes = 'Practice data for training.'`))) === 0);
+const seededRequest = await one(`select id from public.map_areas where is_training and approval = 'requested' and notes = 'Practice data for training.' limit 1`);
+check('a training PGENRO sees every town’s, and decides a seeded request',
+  (await as(PG_TRAINEE, 'authenticated', () => count(`select count(*) n from public.map_areas where notes = 'Practice data for training.'`))) === seededAreas &&
+  (await as(PG_TRAINEE, 'authenticated', () => fails(() => db.query(`select public.decide_planting_request($1, true)`, [seededRequest.id])))) === null);
+
 const reMap = await asEditor(SQL('map_areas.sql'));
 check('running map_areas.sql again does not make requests public',
   reMap[reMap.length - 1].rows.every((r) => r.ok !== false) &&

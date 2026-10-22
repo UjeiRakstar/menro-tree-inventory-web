@@ -206,7 +206,7 @@ const tTrees = await as(TRAINEE, 'authenticated', () => db.query(`select id from
 check('a trainee sees the training trees of every town and no real ones',
   tTrees.rows.length === SEEDED && SEEDED > 1000 && !tTrees.rows.some((r) => r.id.startsWith('real')), String(tTrees.rows.length));
 check('…Siniloan’s 150 among them, as before',
-  (await as(TRAINEE, 'authenticated', () => count(`select count(*) n from public.trees where municipality = 'Siniloan'`))) === 150);
+  (await as(TRAINEE, 'authenticated', () => count(`select count(*) n from public.trees where municipality = 'Siniloan' and tree_id not like '%-B%'`))) === 150);
 const tTags = await as(TRAINEE, 'authenticated', () => count(`select count(*) n from public.pending_trees`));
 check('…the 12 training tags', tTags === 12, String(tTags));
 const tArb = await as(TRAINEE, 'authenticated', () => db.query(`select email from public.arborists`));

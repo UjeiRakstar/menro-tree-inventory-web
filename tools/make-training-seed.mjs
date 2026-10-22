@@ -13,13 +13,17 @@
  * in the town centre, fewer up in the forest barangays. The mix is made to
  * give a trainee something to do — hazards nobody has been sent to, hazards
  * already dispatched, permits issued, Code 2 and Code 3 stems, tags from the
- * public waiting for a field check.
+ * public waiting for a field check. Since 23 October every town also has its
+ * areas on the map: planting sites, and the land cover its City Biodiversity
+ * Index (a city) or its Forest Land Use Plan (a municipality) works with.
  *
  * The random numbers are seeded, so running this twice writes the same file.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ringAreaM2 } from '../src/lib/areaGeometry.js';
+import { suggestCover } from '../src/lib/coverSuggestion.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -253,12 +257,234 @@ const pendingTags = seeded.flatMap((t) => t.tags);
 
 const arborists = ARBORISTS.map((a) => ({ ...a, status: 'Active', is_training: true }));
 
+// ---- The areas: planting sites and land cover, town by town (23 October) -----
+// After the trees and tags, so they come out of the random numbers as before.
+//
+// A city gets what its City Biodiversity Index reads from the map: natural
+// areas (forest, brush, grassland, marsh, water — Indicator 1), a protected
+// one with its document (Indicator 8), tree canopy (Indicator 11), and its
+// planting sites. A municipality gets what its Forest Land Use Plan works
+// with: protected forest, forest land, brush and grassland to reforest,
+// agroforest in the production zone, a bamboo stand on the riverbank, the
+// farms and the town centre, and its planting sites. Each town has one
+// planting site PGENRO set, one more, and one its office has asked for, for a
+// trainee PGENRO to decide.
+//
+// The sizes are shares of the town's land, as far as its barangays allow:
+// big areas go in the big upland barangays, the town centre in a small one.
+
+/** The practice document behind every designation: public/training/practice-document.html. */
+const PRACTICE_DOCUMENT = '/training/practice-document.html';
+
+const RECOMMENDED = {
+  upland: [
+    { common: 'Narra', scientific: 'Pterocarpus indicus', why: 'Native hardwood; the national tree' },
+    { common: 'Molave', scientific: 'Vitex parviflora', why: 'Native, takes the drier slopes' },
+    { common: 'Kalumpit', scientific: 'Terminalia microcarpa', why: 'Native fruit tree for wildlife' },
+    { common: 'Ipil', scientific: 'Intsia bijuga', why: 'Native hardwood, deep-rooted on slopes' },
+  ],
+  riverbank: [
+    { common: 'Bani', scientific: 'Pongamia pinnata', why: 'Riverbank native, holds the bank and takes flooding' },
+    { common: 'Banaba', scientific: 'Lagerstroemia speciosa', why: 'Native, takes wet ground' },
+    { common: 'Kawayan tinik', scientific: 'Bambusa blumeana', why: 'Binds a bank that floods' },
+  ],
+  urban: [
+    { common: 'Banaba', scientific: 'Lagerstroemia speciosa', why: 'Native shade tree with flowers' },
+    { common: 'Narra', scientific: 'Pterocarpus indicus', why: 'Native shade and street tree' },
+    { common: 'Dao', scientific: 'Dracontomelon dao', why: 'Native, a large shade tree for parks' },
+  ],
+};
+
+const DOCUMENTS = {
+  'protected-area': { doc_type: 'Presidential Proclamation', doc_title: 'Practice document — not a real proclamation' },
+  'forest-land': { doc_type: 'DENR Land Classification Map', doc_title: 'Practice document — not a real land classification map' },
+  flup: { doc_type: 'Forest Land Use Plan', doc_title: 'Practice document — not a real Forest Land Use Plan' },
+};
+
+// What each kind of town gets: [what, share of the town's land, where].
+// "upland" picks among the town's biggest barangays, "centre" its smallest.
+const CITY_AREAS = [
+  { kind: 'land-cover', cover: 'closed-forest', share: 0.04, where: 'upland', name: 'Forest Reserve', designation: 'protected-area' },
+  { kind: 'land-cover', cover: 'open-forest', share: 0.03, where: 'upland', name: 'Urban Forest' },
+  { kind: 'land-cover', cover: 'brush-shrubs', share: 0.02, where: 'upland', name: 'Brushland' },
+  { kind: 'land-cover', cover: 'grassland', share: 0.015, where: 'any', name: 'Grassland' },
+  { kind: 'land-cover', cover: 'marshland-swamp', share: 0.005, where: 'any', name: 'Marsh' },
+  { kind: 'land-cover', cover: 'inland-water', share: 0.008, where: 'any', name: 'Creek and Pond' },
+  { kind: 'land-cover', cover: 'perennial-crop', share: 0.03, where: 'any', name: 'Orchards' },
+  { kind: 'land-cover', cover: 'built-up', share: 0.03, where: 'centre', name: 'City Centre' },
+  { kind: 'planting-site', share: 0.002, where: 'any', name: 'Greening Site', site: 'urban', by: 'pgenro' },
+  { kind: 'planting-site', share: 0.002, where: 'any', name: 'Riverbank Planting Site', site: 'riverbank', by: 'pgenro' },
+  { kind: 'planting-site', share: 0.001, where: 'centre', name: 'School Grounds Planting Site', site: 'urban', by: 'office' },
+];
+
+const MUNICIPALITY_AREAS = [
+  { kind: 'land-cover', cover: 'closed-forest', share: 0.06, where: 'upland', name: 'Protected Forest', designation: 'protected-area' },
+  { kind: 'land-cover', cover: 'open-forest', share: 0.05, where: 'upland', name: 'Forest Land', designation: 'forest-land' },
+  { kind: 'land-cover', cover: 'brush-shrubs', share: 0.03, where: 'upland', name: 'Regenerating Brush' },
+  { kind: 'land-cover', cover: 'grassland', share: 0.02, where: 'upland', name: 'Cogonal Grassland' },
+  { kind: 'land-cover', cover: 'perennial-crop', share: 0.04, where: 'any', name: 'Agroforest', designation: 'flup' },
+  { kind: 'land-cover', cover: 'bamboo-stand', share: 0.003, where: 'any', name: 'Riverbank Kawayan', clumps: 4 },
+  { kind: 'land-cover', cover: 'annual-crop', share: 0.04, where: 'any', name: 'Ricefields' },
+  { kind: 'land-cover', cover: 'inland-water', share: 0.004, where: 'any', name: 'Creek' },
+  { kind: 'land-cover', cover: 'built-up', share: 0.015, where: 'centre', name: 'Poblacion' },
+  { kind: 'planting-site', share: 0.003, where: 'upland', name: 'Reforestation Site', site: 'upland', by: 'pgenro' },
+  { kind: 'planting-site', share: 0.002, where: 'any', name: 'Riverbank Planting Site', site: 'riverbank', by: 'pgenro' },
+  { kind: 'planting-site', share: 0.002, where: 'upland', name: 'Watershed Planting Site', site: 'upland', by: 'office' },
+];
+
+const ringOf = (flat) => {
+  const ring = [];
+  for (let i = 0; i < flat.length; i += 2) ring.push([flat[i], flat[i + 1]]);
+  return ring;
+};
+const landOf = (barangay) => barangay.g.reduce((sum, polygon) => sum + ringAreaM2(ringOf(polygon[0])), 0);
+const M_PER_DEG = 111320;
+const metresBetween = ([lng1, lat1], [lng2, lat2]) =>
+  Math.hypot((lng2 - lng1) * M_PER_DEG * Math.cos((lat1 * Math.PI) / 180), (lat2 - lat1) * M_PER_DEG);
+
+/**
+ * An outline of about `hectares` in one of the `pool` of barangays, wholly
+ * inside it and clear of `taken` (circles already placed): ten points round
+ * a centre, each at its own distance, so no two look alike. Every barangay is
+ * tried at a size before a smaller one is, so a big area finds the barangay
+ * big enough for it. Returns { ring, barangay }, or null.
+ */
+function outlineIn(pool, hectares, taken) {
+  let radius = Math.sqrt((hectares * 10000) / Math.PI);
+  while (radius >= 40) {
+    for (let attempt = 0; attempt < 40 + pool.length * 10; attempt += 1) {
+      const barangay = pool[attempt % pool.length];
+      const [lat, lng] = pointIn(barangay);
+      if (taken.some((c) => metresBetween(c.centre, [lng, lat]) < c.radius + radius * 1.2)) continue;
+      const ring = [];
+      for (let k = 0; k < 10; k += 1) {
+        const angle = (k / 10) * 2 * Math.PI + random() * 0.3;
+        const r = radius * (0.75 + random() * 0.45);
+        ring.push([
+          Number((lng + (r * Math.cos(angle)) / (M_PER_DEG * Math.cos((lat * Math.PI) / 180))).toFixed(6)),
+          Number((lat + (r * Math.sin(angle)) / M_PER_DEG).toFixed(6)),
+        ]);
+      }
+      if (!ring.every(([x, y]) => barangay.g.some((polygon) => insidePolygon(x, y, polygon)))) continue;
+      taken.push({ centre: [lng, lat], radius: radius * 1.2 });
+      ring.push(ring[0]);
+      return { ring, barangay };
+    }
+    radius *= 0.8;
+  }
+  return null;
+}
+
+function perimeterOf(ring) {
+  let total = 0;
+  for (let i = 1; i < ring.length; i += 1) total += metresBetween(ring[i - 1], ring[i]);
+  return total;
+}
+
+function areasOfTown(town, lgu, townTrees, extraTrees) {
+  const inTown = barangays.filter((b) => Math.floor(b.p / 1000) * 1000 === lgu.psgc);
+  const bySize = [...inTown].sort((a, b) => landOf(b) - landOf(a));
+  const landM2 = inTown.reduce((sum, b) => sum + landOf(b), 0);
+  const upland = bySize.slice(0, Math.max(1, Math.ceil(bySize.length * 0.35)));
+  // The town centre: the smaller half, though not the very smallest, which
+  // hold no more than a few streets.
+  const centre = bySize.slice(Math.floor(bySize.length * 0.5), Math.max(Math.floor(bySize.length * 0.5) + 1, bySize.length - 2));
+  const plan = lgu.isCity ? CITY_AREAS : MUNICIPALITY_AREAS;
+  const taken = [];
+  const code = String(Math.floor(lgu.psgc / 1000) % 100).padStart(2, '0');
+  const areas = [];
+
+  plan.forEach((what, index) => {
+    const pool = what.where === 'upland' ? upland : what.where === 'centre' ? centre : inTown;
+    const hectares = Math.max(1, (landM2 / 10000) * what.share);
+    const placed = outlineIn(pool, hectares, taken);
+    if (!placed) return;
+    const { ring, barangay } = placed;
+    const geometry = { type: 'Polygon', coordinates: [ring] };
+    const name = what.cover === 'built-up' ? `${lgu.label} ${what.name}` : `${barangay.n} ${what.name}`;
+
+    // A bamboo stand has the clumps the field officers tagged in it, so the
+    // form's suggestion has something to go on.
+    if (what.clumps) {
+      for (let k = 0; k < what.clumps; k += 1) {
+        const [x, y] = ring[Math.floor(random() * (ring.length - 1))];
+        const [cx, cy] = ring.reduce(([sx, sy], [px, py]) => [sx + px / ring.length, sy + py / ring.length], [0, 0]);
+        const t = 0.2 + random() * 0.5;
+        extraTrees.push({
+          id: uuid(),
+          tree_id: `TRN-${code}-B${String(k + 1).padStart(2, '0')}`,
+          latitude: Number((cy + (y - cy) * t).toFixed(6)),
+          longitude: Number((cx + (x - cx) * t).toFixed(6)),
+          barangay: barangay.n,
+          barangay_psgc: barangay.p,
+          municipality: lgu.name,
+          species: 'Kawayan tinik',
+          scientific_name: 'Bambusa blumeana',
+          species_type: 'Native',
+          biodiversity_status: 'Native',
+          total_height: between(8, 15),
+          task_status: 'Pending',
+          source: 'field',
+          is_tagged: true,
+          dateCaptured: daysAgo(Math.floor(random() * 120)),
+          is_training: true,
+        });
+      }
+    }
+
+    const inside = [...townTrees, ...extraTrees].filter((tree) => insidePolygon(tree.longitude, tree.latitude, [ring.flat()]));
+    const landCover = what.kind === 'land-cover';
+    const suggestion = landCover ? suggestCover(inside) : null;
+    const document = what.designation ? DOCUMENTS[what.designation] : null;
+    const office = what.by === 'office';
+    areas.push({
+      kind: what.kind,
+      name,
+      geometry,
+      area_m2: Math.round(ringAreaM2(ring)),
+      perimeter_m: Math.round(perimeterOf(ring)),
+      lgu_psgc: lgu.psgc,
+      municipality: lgu.name,
+      barangay: barangay.n,
+      barangay_psgc: barangay.p,
+      cover_class: landCover ? what.cover : null,
+      suggested_class: suggestion?.classId ?? null,
+      suggestion_reason: suggestion?.reason ?? null,
+      trees_inside: inside.length,
+      designation: what.designation ?? null,
+      doc_type: document?.doc_type ?? null,
+      doc_number: document ? `PRACTICE-${code}-${String(index + 1).padStart(2, '0')}` : null,
+      doc_title: document?.doc_title ?? null,
+      doc_url: document ? PRACTICE_DOCUMENT : null,
+      planting_status: landCover ? null : 'open',
+      planting_window: landCover ? null : 'June to September, with the rains',
+      spacing_m: landCover ? null : what.site === 'urban' ? 5 : 4,
+      access_note: landCover ? null : `From the ${barangay.n} barangay hall; practice data.`,
+      contact: landCover ? null : office ? `MENRO / CENRO of ${lgu.label} (training)` : 'PGENRO Forestry Division (training)',
+      recommended: landCover ? null : RECOMMENDED[what.site],
+      approval: office ? 'requested' : 'approved',
+      notes: 'Practice data for training.',
+      created_by_role: office || landCover ? 'lgu_admin' : 'pgenro',
+      created_at: daysAgo(30 + Math.floor(random() * 150)),
+      is_training: true,
+    });
+  });
+  return areas;
+}
+
+const bambooClumps = [];
+const areas = TOWNS.flatMap((town, i) => {
+  const lgu = LGUS.find((entry) => entry.name === town.name);
+  return areasOfTown(town, lgu, seeded[i].trees, bambooClumps);
+});
+trees.push(...bambooClumps);
+
 // ---- The SQL -------------------------------------------------------------------
 // Every key each table is given, for the final check to compare with the
 // columns that exist — computed there, not remembered from earlier in the
 // script.
 const keysOf = (rows) => [...new Set(rows.flatMap((row) => Object.keys(row)))];
-const seededKeys = Object.entries({ arborists, trees, permits, pending_trees: pendingTags })
+const seededKeys = Object.entries({ arborists, trees, permits, pending_trees: pendingTags, map_areas: areas })
   .flatMap(([table, rows]) => keysOf(rows).map((key) => `  ('${table}', '${key}')`))
   .join(',\n');
 
@@ -278,19 +504,26 @@ const sql = `-- Green Tag: dummy data for training the offices. GENERATED — do
 ${seeded.map((t) => `--     ${t.town}: ${t.trees.length} trees, ${t.tags.length} tags`).join('\n')}
 --   ${trees.filter((t) => (t.isLeaning || t.hasPowerlineConflict || t.isRootProblem || t.isDecayed) && !t.assigned_to).length} hazards nobody has been sent to (red), ${trees.filter((t) => t.assigned_to).length} already dispatched (orange)
 --   ${permits.length} cutting permits issued (yellow)
---   ${trees.filter((t) => t.stem_quality.startsWith('Code 2')).length} Code 2 stems, ${trees.filter((t) => t.stem_quality.startsWith('Code 3')).length} Code 3
+--   ${trees.filter((t) => String(t.stem_quality).startsWith('Code 2')).length} Code 2 stems, ${trees.filter((t) => String(t.stem_quality).startsWith('Code 3')).length} Code 3
 --   ${pendingTags.length} tags from the public, ${pendingTags.filter((t) => t.status === 'dispatched').length} out for field checking
 --   ${arborists.length} trainee arborists to dispatch
+--   ${areas.length} areas on the map: ${areas.filter((a) => a.kind === 'planting-site').length} planting sites (${areas.filter((a) => a.approval === 'requested').length} asked for by an office, for PGENRO to decide),
+--     ${areas.filter((a) => a.kind === 'land-cover').length} of land cover, ${areas.filter((a) => a.designation).length} with a (practice) designation document;
+--     ${bambooClumps.length} bamboo clumps tagged in the bamboo stands
 --
 -- Columns are matched by name: a key with no column of that name is left out
 -- rather than failing, and listed in the check at the end.
 
--- Inserting a tree normally writes "tree created" to PGENRO's activity log.
--- Paused while seeding, so ${trees.length} dummy trees do not land in the real log.
+-- Inserting a tree or an area normally writes to PGENRO's activity log.
+-- Paused while seeding, so ${trees.length} dummy trees and ${areas.length} areas do not
+-- land in the real log.
 do $$
 begin
   if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
     alter table public.trees disable trigger log_tree_changes;
+  end if;
+  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
+    alter table public.map_areas disable trigger log_map_area_changes;
   end if;
 end $$;
 
@@ -298,9 +531,10 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['permits', 'phenology_records', 'pending_trees', 'trees', 'arborists']
+  foreach t in array array['permits', 'phenology_records', 'pending_trees', 'trees', 'arborists', 'map_areas']
   loop
-    if to_regclass('public.' || t) is not null then
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = t and column_name = 'is_training') then
       execute format('delete from public.%I where is_training', t);
     end if;
   end loop;
@@ -328,13 +562,18 @@ end $$;
 
 revoke all on function public.training_seed_into(text, jsonb) from public, anon, authenticated;
 
-select public.training_seed_into('arborists', ${json(arborists)});
+select public.training_seed_into('arborists', ${json(arborists)}) where to_regclass('public.arborists') is not null;
 
 select public.training_seed_into('trees', ${json(trees)});
 
-select public.training_seed_into('permits', ${json(permits)});
+select public.training_seed_into('permits', ${json(permits)}) where to_regclass('public.permits') is not null;
 
-select public.training_seed_into('pending_trees', ${json(pendingTags)});
+select public.training_seed_into('pending_trees', ${json(pendingTags)}) where to_regclass('public.pending_trees') is not null;
+
+-- The areas: only where map_areas.sql has made the table and walled it.
+select public.training_seed_into('map_areas', ${json(areas)})
+where exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training');
 
 drop function public.training_seed_into(text, jsonb);
 
@@ -342,6 +581,9 @@ do $$
 begin
   if exists (select 1 from pg_trigger where tgname = 'log_tree_changes') then
     alter table public.trees enable trigger log_tree_changes;
+  end if;
+  if exists (select 1 from pg_trigger where tgname = 'log_map_area_changes') then
+    alter table public.map_areas enable trigger log_map_area_changes;
   end if;
 end $$;
 
@@ -362,7 +604,21 @@ select 'training arborists', (select count(*) from public.arborists where is_tra
        (select count(*) from public.arborists where is_training)::text
 union all
 select 'the activity log is paused no longer',
-       not exists (select 1 from pg_trigger where tgname = 'log_tree_changes' and tgenabled = 'D'), ''
+       not exists (select 1 from pg_trigger where tgname in ('log_tree_changes', 'log_map_area_changes') and tgenabled = 'D'), ''
+union all
+-- Read through query_to_xml, and only once there is a table to read: a
+-- database without map_areas still gets an answer.
+select 'training areas',
+       case when exists (select 1 from information_schema.columns
+                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
+            then (xpath('/row/n/text()', query_to_xml(
+                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text::int = ${areas.length}
+            else true end,
+       case when exists (select 1 from information_schema.columns
+                         where table_schema = 'public' and table_name = 'map_areas' and column_name = 'is_training')
+            then (xpath('/row/n/text()', query_to_xml(
+                   'select count(*) n from public.map_areas where is_training', false, true, '')))[1]::text
+            else 'map_areas.sql not run: no areas seeded' end
 union all
 select 'READ: left out of ' || seeded.tbl || ' (no such column)', null, string_agg(seeded.k, ', ' order by seeded.k)
 from (values
