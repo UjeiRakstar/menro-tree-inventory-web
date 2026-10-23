@@ -37,7 +37,13 @@ export function Paper({ orientation = 'portrait', label, running = '', note = ''
   );
 }
 
-/** One attribute table, its totals last. */
+/**
+ * One attribute table, its totals last.
+ *
+ * Numbers stay on one line; text wraps. A table of long text (the CBI table's
+ * "What the system shows" and "From") kept on one line ran off the side of
+ * the page and squeezed the row labels to a word a line.
+ */
 export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.' }) {
   return (
     <section aria-label={table.title} className="break-inside-avoid">
@@ -62,11 +68,11 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
               <tr key={`${row.name}-${i}`} className="odd:bg-white even:bg-slate-50">
                 {table.columns.map((column, j) =>
                   j === 0 ? (
-                    <th key={column.key} scope="row" className="border-b border-slate-200 px-1.5 py-0.5 text-left font-semibold text-slate-800">
+                    <th key={column.key} scope="row" className="min-w-[24mm] border-b border-slate-200 px-1.5 py-0.5 text-left align-top font-semibold text-slate-800">
                       {formatCell(row[column.key], column.kind)}
                     </th>
                   ) : (
-                    <td key={column.key} className={`whitespace-nowrap border-b border-slate-200 px-1.5 py-0.5 text-slate-700 ${column.kind === 'text' ? 'text-left' : 'text-right tabular-nums'}`}>
+                    <td key={column.key} className={`border-b border-slate-200 px-1.5 py-0.5 align-top text-slate-700 ${column.kind === 'text' ? 'text-left' :'whitespace-nowrap text-right tabular-nums'}`}>
                       {formatCell(row[column.key], column.kind)}
                     </td>
                   )
