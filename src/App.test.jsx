@@ -57,7 +57,10 @@ function renderAt(path) {
 }
 
 /** The admin header, which is also the app's navigation. */
-const adminHeader = () => screen.queryByText('Green Tag Tree Inventory System');
+// The office header's title. The login page carries the same name as its
+// heading, so it counts only inside a <header>.
+const adminHeader = () =>
+  screen.queryAllByText('Green Tag Tree Inventory System').find((el) => el.closest('header')) ?? null;
 
 beforeEach(() => {
   supabaseMock.reset();
@@ -82,7 +85,7 @@ describe('App shell and routing', () => {
     renderAt('/map');
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Tree Inventory & Carbon Dashboard' })
+      await screen.findByRole('heading', { level: 1, name: 'Green Tag Tree Inventory System' })
     ).toBeInTheDocument();
     expect(adminHeader()).not.toBeInTheDocument();
   });

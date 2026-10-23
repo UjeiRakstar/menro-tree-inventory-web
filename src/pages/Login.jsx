@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TreePine, Mail, Lock, Leaf } from 'lucide-react';
+import { Mail, Lock, Leaf } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
+import greenTagLogo from '../assets/GreenTag_Logo.png';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -65,11 +66,8 @@ export default function Login() {
       <div className="relative w-full max-w-md">
         {/* Logo / Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-700 text-white mb-4">
-            <TreePine size={32} />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800">Tree Inventory & Carbon Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">Decision Support System v1.2</p>
+          <img src={greenTagLogo} alt="" aria-hidden="true" className="mx-auto mb-4 h-20 w-20 object-contain" />
+          <h1 className="text-2xl font-bold text-slate-800">Green Tag Tree Inventory System</h1>
         </div>
 
         {/* Login Card */}
@@ -166,7 +164,7 @@ export default function Login() {
         </p>
 
         <p className="text-center text-xs text-slate-400 mt-6">
-          © 2026 MENRO • Municipal Environment & Natural Resources Office
+          © 2026 PGENRO Laguna • Laguna State Polytechnic University
         </p>
       </div>
     </div>
