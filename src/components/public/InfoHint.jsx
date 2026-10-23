@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
+import { tipPosition } from './tipPlacement.js';
 
 /**
  * The ⓘ beside a figure, and the only place that figure is explained.
@@ -23,9 +24,6 @@ import { Info } from 'lucide-react';
  * while they read it.
  */
 
-/** How close to the window edge the tooltip may come. */
-const GUTTER = 8;
-
 /** Matches the w-72 below; needed before the tooltip exists to measure. */
 const WIDTH = 288;
 
@@ -42,19 +40,7 @@ export default function InfoHint({ label, text, size = 14, className = '' }) {
   const place = useCallback(() => {
     const button = buttonRef.current;
     if (!button) return;
-    const rect = button.getBoundingClientRect();
-    const height = tipRef.current?.offsetHeight ?? 0;
-
-    const left = Math.min(
-      Math.max(rect.left + rect.width / 2 - WIDTH / 2, GUTTER),
-      Math.max(GUTTER, window.innerWidth - WIDTH - GUTTER)
-    );
-
-    const below = rect.bottom + GUTTER;
-    const flip = height > 0 && below + height > window.innerHeight - GUTTER;
-    const top = flip ? Math.max(GUTTER, rect.top - height - GUTTER) : below;
-
-    setPosition({ left, top });
+    setPosition(tipPosition(button.getBoundingClientRect(), tipRef.current?.offsetHeight ?? 0, WIDTH));
   }, []);
 
   // Twice: once to put it somewhere before it can be seen, and again once it

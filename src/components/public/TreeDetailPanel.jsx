@@ -7,6 +7,7 @@ import { barangayForTree } from '../../lib/barangayLookup.js';
 // The shared ⓘ: portalled to the page body, so the panel's scrolling cannot
 // clip it the way it clipped the copy that used to live in this file.
 import InfoHint from './InfoHint.jsx';
+import HoverTip from './HoverTip.jsx';
 import denrErdbLogo from '../../assets/DENR_ERDB_Logo.png';
 import heightIcon from '../../assets/Tree_Height.png';
 import dbhIcon from '../../assets/DBH_icon.png';
@@ -71,32 +72,22 @@ function paragraphsOf(text) {
 }
 
 /**
- * A tooltip that hangs to the left of whatever it belongs to.
- *
- * Everything it is used for sits at the panel's right edge inside a scrolling
- * column, where a centred tooltip runs past that edge and gets cut off.
- */
-function Tooltip({ title, children, open = false }) {
-  return (
-    <span
-      role="tooltip"
-      className={`pointer-events-none absolute right-0 top-full z-10 mt-2 w-56 max-w-[16rem] rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-normal not-italic leading-snug text-white shadow-lg ${
-        open ? 'block' : 'hidden group-hover:block group-focus-within:block'
-      }`}
-    >
-      {title && <span className="block font-semibold">{title}</span>}
-      {children}
-    </span>
-  );
-}
-
-/**
  * One of the three round badges: what it means on hover, and pressing it picks
  * every tree sharing that trait out on the map.
  */
 function TraitBadge({ trait, active = false, onHighlight }) {
   return (
-    <span className="relative group">
+    <HoverTip
+      tip={
+        <>
+          <span className="block font-semibold">{trait.label}</span>
+          {trait.description}
+          <span className="mt-1 block text-slate-300">
+            {active ? 'Highlighted on the map.' : 'Tap to highlight these on the map.'}
+          </span>
+        </>
+      }
+    >
       <button
         type="button"
         onClick={() => onHighlight?.(highlightForTrait(trait))}
@@ -109,13 +100,7 @@ function TraitBadge({ trait, active = false, onHighlight }) {
         <img src={trait.icon} alt="" aria-hidden="true" className="w-11 h-11 rounded-full object-contain" />
       </button>
       <span className="sr-only">{`${trait.label}: ${trait.description}`}</span>
-      <Tooltip title={trait.label}>
-        {trait.description}
-        <span className="mt-1 block text-slate-300">
-          {active ? 'Highlighted on the map.' : 'Tap to highlight these on the map.'}
-        </span>
-      </Tooltip>
-    </span>
+    </HoverTip>
   );
 }
 
@@ -177,12 +162,20 @@ function TreeDetailsTab({ tree, observation, distribution, highlight, onHighligh
           <>
             <div className="flex flex-wrap items-end justify-around gap-4">
             {phenology.map((phase) => (
-              <span key={`${phase.kind}-${phase.key}`} className="relative group flex w-20 flex-col items-center gap-1">
+              <HoverTip
+                key={`${phase.kind}-${phase.key}`}
+                className="flex w-20 flex-col items-center gap-1"
+                tip={
+                  <>
+                    <span className="block font-semibold">{`${phase.kind}: ${phase.label}`}</span>
+                    {phase.description}
+                  </>
+                }
+              >
                 <img src={phase.icon} alt="" aria-hidden="true" className="h-12 w-12 object-contain" />
                 <span className="text-xs font-semibold text-green-800">{phase.label}</span>
                 <span className="sr-only">{`${phase.kind} status — ${phase.label}: ${phase.description}`}</span>
-                <Tooltip title={`${phase.kind}: ${phase.label}`}>{phase.description}</Tooltip>
-              </span>
+              </HoverTip>
               ))}
             </div>
             {observedDate && (

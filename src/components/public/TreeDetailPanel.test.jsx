@@ -72,7 +72,14 @@ describe('TreeDetailPanel', () => {
     expect(screen.getByText(/Endemic species:/)).toBeInTheDocument();
     expect(screen.getByText(/Fruit tree:/)).toBeInTheDocument();
     expect(screen.getByText(/Crowdsourced:/)).toBeInTheDocument();
-    expect(screen.getAllByRole('tooltip')).toHaveLength(3);
+    // Hover, and the explanation is drawn outside the scrolling panel, where
+    // nothing can cut it off.
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /Highlight every endemic/i }).parentElement);
+    const tip = screen.getByRole('tooltip');
+    expect(tip).toHaveTextContent(/Tap to highlight these on the map/);
+    expect(tip.parentElement).toBe(document.body);
+    expect(tip).toHaveClass('fixed');
   });
 
   it('opens on the Description tab and switches to Tree Details', () => {
