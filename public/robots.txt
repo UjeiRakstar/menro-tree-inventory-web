@@ -1,0 +1,9 @@
+# Green Tag, in testing: open to anyone with the address, kept out of search
+# results by the noindex on every page and file (GOING_LIVE.md, part E).
+#
+# Nothing is disallowed here on purpose. A search engine kept out by
+# robots.txt never reads a page's noindex, and can still list the bare
+# address if it finds a link to it; let in, it reads the noindex and leaves
+# the page out.
+User-agent: *
+Allow: /

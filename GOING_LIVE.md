@@ -5,6 +5,11 @@ and switch on "Continue with Google" for everyone. Parked on 20 October 2026
 until the IT team that uploads the site can be reached. Parts A and B can be
 done now, without them.
 
+**For now it goes up for testing** (23 October): open to anyone given the
+address, and kept out of search results — part E. Nothing in parts A–D
+changes that; publishing on Google sign-in (part D) is about who may sign
+in, not about search.
+
 Each step says who does it: **you** (the developer, in the Supabase and
 Google dashboards) or **IT** (whoever uploads to the website).
 
@@ -87,11 +92,21 @@ Audience can sign in (up to 100).
    does for version 1 (so `/community`, `/public-map` and the rest open the
    app). Real files, such as `privacy.html` and `/assets/…`, are served as
    they are.
-3. **Check after uploading:**
+3. **Every file is sent with `X-Robots-Tag: noindex, nofollow`**, which
+   keeps it out of search results. Apache does it from the `.htaccess` in
+   `dist/` (it needs `mod_headers`), Netlify from `_headers`, Vercel from
+   `vercel.json`. On nginx, IT adds to the site's `server` block:
+   `add_header X-Robots-Tag "noindex, nofollow" always;`
+4. **Check after uploading:**
    - `https://greentag.laguna.gov.ph/privacy.html` opens the privacy policy
      (not the app);
    - `https://greentag.laguna.gov.ph/community` opens the Community page;
-   - a hard refresh on `/public-map` still opens the map.
+   - a hard refresh on `/public-map` still opens the map;
+   - `https://greentag.laguna.gov.ph/robots.txt` opens a short text file
+     (not the app);
+   - the browser's developer tools → Network → the page → Response Headers
+     show `x-robots-tag: noindex, nofollow`. (Or, from a terminal:
+     `curl -I https://greentag.laguna.gov.ph/`.)
 
 If version 2 cannot go up yet, IT can upload **only** `public/privacy.html`
 to the site's root, beside version 1. That alone is enough for part D.
@@ -119,3 +134,30 @@ to the site's root, beside version 1. That alone is enough for part D.
    record.
 5. Try "Continue with Google" on the live site with an account that is
    **not** a test user.
+
+## E. In testing: reachable, not searchable — and when to publish
+
+While in testing, anyone with the address opens the site, and search engines
+leave it out of their results. Two things do it, both in the repository:
+
+- `<meta name="robots" content="noindex, nofollow">` on every page:
+  `index.html` (so every page of the app), `public/privacy.html`,
+  `public/terms.html` and `public/training/practice-document.html`;
+- the `X-Robots-Tag: noindex, nofollow` header on every file, images and
+  PDFs included (part C, step 3).
+
+`public/robots.txt` blocks nothing, on purpose: a search engine kept out by
+robots.txt never reads the noindex, and can still list the bare address if
+it finds a link to it somewhere.
+
+This is not a lock. Anyone given the address can open the site, and the
+public pages (the map, the tree database) show what they would show when
+published. What needs signing in still needs signing in. If version 1 is
+already in Google's results, it drops out once Google crawls the site again;
+the Removals tool in Google Search Console (whoever holds the
+`laguna.gov.ph` verification) makes it faster.
+
+**To publish**, once PGENRO says so: take the robots meta out of the four
+pages, the header out of `public/.htaccess`, `public/_headers` and
+`vercel.json` (and IT's nginx line), rebuild and upload. Then, if wanted, add
+the site in Google Search Console and ask for it to be indexed.

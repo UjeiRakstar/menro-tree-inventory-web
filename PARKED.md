@@ -744,6 +744,9 @@ option, not a priority.
   `try_files $uri $uri/ /index.html;` to the site's `location /`. Environment
   values: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
   `VITE_CLOUDINARY_CLOUD_NAME`.
+- **Testing, not published (23 October).** Every page and file says
+  noindex: reachable by its address, left out of search results. On nginx IT
+  adds the header line; to publish later, GOING_LIVE.md part E.
 - **Supabase for the live address.** Authentication → URL Configuration: Site
   URL = the live domain; redirect URLs: the domain's `/community`,
   `/public-map` and the password-reset page. Without it, sign-in links and
