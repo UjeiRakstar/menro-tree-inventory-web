@@ -252,8 +252,9 @@ can do everything. The RISE details on the public tree panel, more of them.
   got them; fixed by hand 22 October. The form has placed a tag from its
   coordinates since 14 October and will not send one without a town, so no
   new tag can go astray this way. (The field app makes no tags.)
-- **`supabase/drop_trees_backup.sql`.** Look at section 1, then uncomment the
-  drop. Nothing in either repo reads that table.
+- ~~`supabase/drop_trees_backup.sql`.~~ Run (section 1), 23 October; the
+  table was still there, so step 37 (`tidy_trees.sql`) drops it, once it
+  finds every tree in it still in public.trees.
 - ~~Two decisions left hanging.~~ Answered 18 October: carbon stays in the
   headline, and the Forestry tab comes first (done).
 
@@ -504,14 +505,27 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     bolo, buho …), naming the species found. A field officer tags a clump as
     one point with its species, as any tree. Not tree cover: no growth rate,
     no carbon, not a natural area for the CBI.
+37. **The odd columns of trees, and the May backup, 23 October** — run
+    `supabase/tidy_trees.sql`. Checked against the live data (read with the
+    public key) and both repositories' history: `trees` is empty and was
+    never used; `height_class` is the field app's old name for the height
+    class (until 12 May) and all 97 values match `heightClass`; `is_tagged`
+    was an early-May task filter nothing has read since 7 May. All three are
+    dropped, each only if the file's own check finds nothing would be lost.
+    `photo_url` stays: it holds the main photograph of 103 of the 111 public
+    trees (the field app wrote it before August; it writes `imageUrl` now).
+    `trees_backup_may17` was still there on 23 October (the drop in
+    drop_trees_backup.sql is commented out); this drops it, if every tree in
+    it is still in public.trees. A field app build from before 12 May would
+    no longer sync; every phone should run the current one anyway.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
-allow and refuse — 15 suites, 642 checks — the final check query on its
+allow and refuse — 17 suites — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is
-read-only, and covers steps 1–31 (22 October): paste it in the SQL editor any time. Each row says whether a part
+read-only, and covers steps 1–37 (23 October): paste it in the SQL editor any time. Each row says whether a part
 is in (tables, row level security, triggers, the restrictive rules,
 functions, storage buckets) and names what is missing, then reads out the
 counts worth watching.

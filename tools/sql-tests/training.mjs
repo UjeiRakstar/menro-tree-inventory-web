@@ -75,15 +75,15 @@ await db.exec(`
   create trigger zz_sync_arborist_profile after insert on auth.users
     for each row execute function public.sync_arborist_profile_from_metadata();
 
-  -- public.trees as the live one has it, less height_class so the seed has a
-  -- key to leave out.
+  -- public.trees as the live one has it after tidy_trees.sql, less
+  -- tree_category so the seed has a key to leave out.
   create table public.trees (
     id text primary key, tree_id text, latitude float8, longitude float8, barangay text,
     barangay_psgc bigint, municipality text, species text, scientific_name text,
-    species_type text, biodiversity_status text, tree_category text, dbh numeric,
+    species_type text, biodiversity_status text, dbh numeric,
     merchantable_height numeric, total_height numeric, "heightClass" text, stem_quality text,
     "isLeaning" boolean, "hasPowerlineConflict" boolean, "isRootProblem" boolean, "isDecayed" boolean,
-    assigned_to text, has_cutting_permit boolean, task_status text, source text, is_tagged boolean,
+    assigned_to text, has_cutting_permit boolean, task_status text, source text,
     "dateCaptured" timestamptz, "imageUrl" text, photo_url text, leaves_url text, bark_url text,
     fruits_url text, created_at timestamptz default now());
   alter table public.trees enable row level security;
@@ -180,7 +180,7 @@ check('…every part ends with its own check, all of it true',
 const seedRows = partRows[partRows.length - 1];
 check('the seed runs and every count matches', seedRows.filter((r) => r.ok === false).length === 0,
   seedRows.map((r) => `${r.check}=${r.ok} (${r.detail})`).join('; '));
-check('…and says which keys had no column', seedRows.some((r) => /left out of trees/.test(r.check) && /height_class/.test(r.detail)),
+check('…and says which keys had no column', seedRows.some((r) => /left out of trees/.test(r.check) && /tree_category/.test(r.detail)),
   seedRows.filter((r) => r.ok === null).map((r) => `${r.check}: ${r.detail}`).join('; '));
 check('seeding writes nothing to the real activity log',
   (await count(`select count(*) n from public.activity_log where not is_training`)) === realLogBefore);

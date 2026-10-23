@@ -5,7 +5,7 @@
 -- true), missing (ok = false, with what is missing in the detail), or is a
 -- figure to read (ok = null).
 --
--- It looks for what steps 1–36 of PARKED.md make: tables, the columns the
+-- It looks for what steps 1–37 of PARKED.md make: tables, the columns the
 -- later steps add, the rules on who reads what, the triggers that stamp and
 -- route, the functions the pages call, and the storage buckets. A count that
 -- matters (tags no LGU will get, a Google account sitting in the approval
@@ -144,6 +144,14 @@ select 'an area can be a bamboo stand (step 36)',
        case when exists (select 1 from pg_constraint where conname = 'map_areas_cover_check'
                          and pg_get_constraintdef(oid) like '%bamboo-stand%')
             then '' else 'bamboo_stands.sql not run' end
+union all
+select 'the odd columns of trees are gone (step 37)',
+       not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'trees'
+                   and column_name in ('trees', 'height_class', 'is_tagged')),
+       coalesce('still there: ' || (select string_agg(column_name::text, ', ' order by column_name) from information_schema.columns
+                                    where table_schema = 'public' and table_name = 'trees'
+                                      and column_name in ('trees', 'height_class', 'is_tagged'))
+                || ' — tidy_trees.sql not run, or it kept them (its check says why)', '')
 union all
 select 'no Google account in the approval queue',
        (select value from n where label = 'google_in_profiles') = '0',

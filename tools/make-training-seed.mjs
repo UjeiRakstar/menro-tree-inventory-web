@@ -193,7 +193,6 @@ function seedTown(town) {
       merchantable_height: Number((total * between(0.4, 0.7, 2)).toFixed(1)),
       total_height: total,
       heightClass: heightClassOf(total),
-      height_class: heightClassOf(total),
       stem_quality: STEM[stem],
       isLeaning: hazardType === 'isLeaning',
       hasPowerlineConflict: hazardType === 'hasPowerlineConflict',
@@ -203,7 +202,6 @@ function seedTown(town) {
       has_cutting_permit: permitted,
       task_status: 'Pending',
       source: 'field',
-      is_tagged: true,
       dateCaptured: daysAgo(Math.floor(random() * 180)),
       is_training: true,
     });
@@ -426,7 +424,6 @@ function areasOfTown(town, lgu, townTrees, extraTrees) {
           total_height: between(8, 15),
           task_status: 'Pending',
           source: 'field',
-          is_tagged: true,
           dateCaptured: daysAgo(Math.floor(random() * 120)),
           is_training: true,
         });
