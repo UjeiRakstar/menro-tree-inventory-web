@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { inOfficeLgu, isPgenro, officeLguOf } from '../lib/roles.js';
-import { lguOfTree } from '../hooks/useAttention.js';
+import { lguOfTree, useAttention } from '../hooks/useAttention.js';
 import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
 
 const LGU_LABEL = new Map(MUNICIPALITY_LIST.map((item) => [item.psgc, item.label]));
@@ -69,6 +69,10 @@ export default function BiodiversityHub() {
     if (tabs.some(([id]) => id === askedTab)) setActiveTab(askedTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [askedTab, forester]);
+  // The requests waiting for PGENRO, counted as the header's "!" counts them
+  // and live: deciding one takes it off the tab.
+  const attention = useAttention({ withHazards: false, withRequests: forester ? 'waiting' : null });
+  const waiting = { requests: forester ? attention.requests : 0 };
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [selectedTree, setSelectedTree] = useState(null);
   const [search, setSearch] = useState('');
@@ -268,6 +272,14 @@ export default function BiodiversityHub() {
           <button key={id} type="button" role="tab" aria-selected={activeTab === id} onClick={() => setActiveTab(id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === id ? 'border-green-700 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             {label}
+            {waiting[id] > 0 && (
+              <>
+                <span aria-hidden="true" className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                  {waiting[id]}
+                </span>
+                <span className="sr-only">{`, ${waiting[id]} waiting for your decision`}</span>
+              </>
+            )}
           </button>
         ))}
       </div>

@@ -84,6 +84,22 @@ describe('PGENRO’s Trees (22 October)', () => {
     expect(screen.queryByRole('tab', { name: /Carbon Sink/ })).not.toBeInTheDocument();
   });
 
+  it('marks the requests tab with how many are waiting for PGENRO', async () => {
+    auth.profile = PGENRO_ADMIN;
+    supabaseMock.setResponse('map_areas:select', { data: [{ id: 'a1' }, { id: 'a2' }], error: null });
+    renderPage();
+    const tab = await screen.findByRole('tab', { name: /Planting site requests, 2 waiting for your decision/ });
+    expect(tab).toHaveTextContent('2');
+  });
+
+  it('puts no number on the tab when nothing is waiting', async () => {
+    auth.profile = PGENRO_ADMIN;
+    supabaseMock.setResponse('map_areas:select', { data: [], error: null });
+    renderPage();
+    const tab = await screen.findByRole('tab', { name: /Planting site requests/ });
+    expect(tab).not.toHaveTextContent(/waiting/);
+  });
+
   it('has the province’s Tree Database, where PGENRO chooses each species’ cover and hides a photo', async () => {
     auth.profile = PGENRO_ADMIN;
     const CLOUD = 'https://res.cloudinary.com/demo/image/upload/v1/';
