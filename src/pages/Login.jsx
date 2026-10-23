@@ -66,8 +66,11 @@ export default function Login() {
       <div className="relative w-full max-w-md">
         {/* Logo / Brand */}
         <div className="text-center mb-8">
-          <img src={greenTagLogo} alt="" aria-hidden="true" className="mx-auto mb-4 h-20 w-20 object-contain" />
-          <h1 className="text-2xl font-bold text-slate-800">Green Tag Tree Inventory System</h1>
+          {/* The brand is the way home, as on every other page. */}
+          <Link to="/" className="group inline-block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
+            <img src={greenTagLogo} alt="" aria-hidden="true" className="mx-auto mb-4 h-20 w-20 object-contain transition group-hover:scale-105" />
+            <h1 className="text-2xl font-bold text-slate-800 transition group-hover:text-green-800">Green Tag Tree Inventory System</h1>
+          </Link>
         </div>
 
         {/* Login Card */}

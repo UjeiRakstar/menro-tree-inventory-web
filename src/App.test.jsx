@@ -90,6 +90,16 @@ describe('App shell and routing', () => {
     expect(adminHeader()).not.toBeInTheDocument();
   });
 
+  it('takes the visitor home from the sign-in page’s logo and title', async () => {
+    renderAt('/login');
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Green Tag Tree Inventory System' });
+    const brand = heading.closest('a');
+    expect(brand).toHaveAttribute('href', '/');
+    fireEvent.click(brand);
+    expect((await screen.findAllByRole('link', { name: 'Log In / Sign Up' }, { timeout: 5000 })).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { level: 1, name: 'Green Tag Tree Inventory System' })).not.toBeInTheDocument();
+  });
+
   it('opens the public About page at the root, with no admin chrome', async () => {
     renderAt('/');
 
