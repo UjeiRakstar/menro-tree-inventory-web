@@ -804,9 +804,10 @@ option, not a priority.
   left that a visitor's browser runs except `uuid` inside ExcelJS — a
   buffer check on a path ExcelJS does not use for workbooks; the only "fix"
   is an older ExcelJS. React Router's open redirect is gone with version 7.
-  The rest are in tools on the developer's machine: Tailwind 3's file watcher
-  (above), and the NotebookLM tool server (`notebooklm-mcp`, an AI-assistant
-  tool, not part of the site).
+  The rest are in Tailwind 3's file watcher, on the developer's machine only
+  (above). (`notebooklm-mcp` left the project's dependencies on 23 October;
+  the AI assistant's NotebookLM connection fetches it itself, through
+  `.mcp.json`.)
 - **Free-tier limits to watch:** Supabase (database 500 MB, storage 1 GB,
   5 GB egress a month — the satellite tiles are read from storage), Cloudinary
   credits, Copernicus 30,000 requests a month, Gemini quota per LGU key.
