@@ -33,7 +33,7 @@ export default defineConfig({
     format: 'es',
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         /**
          * Keep the big libraries in chunks of their own.
@@ -46,19 +46,20 @@ export default defineConfig({
          *
          * Leaflet and the charts are the two worth separating — they are large
          * and each is used by only some of the pages.
+         *
+         * Since Vite 8 (Rolldown), as groups. A group takes the libraries its
+         * own library needs as well, so React is claimed first: left to the
+         * charts group, React went in with the charts, and every first page
+         * downloaded 527 kB of charting to get it.
          */
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('leaflet')) return 'vendor-leaflet';
-          if (id.includes('recharts') || id.includes('/d3-') || id.includes('victory-vendor')) {
-            return 'vendor-charts';
-          }
-          if (id.includes('@supabase')) return 'vendor-supabase';
-          if (id.includes('react-router')) return 'vendor-router';
-          if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('scheduler')) {
-            return 'vendor-react';
-          }
-          return undefined;
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 50 },
+            { name: 'vendor-router', test: /node_modules[\\/](react-router|react-router-dom|@remix-run)[\\/]/, priority: 40 },
+            { name: 'vendor-supabase', test: /node_modules[\\/]@supabase[\\/]/, priority: 30 },
+            { name: 'vendor-leaflet', test: /node_modules[\\/](leaflet|react-leaflet|@react-leaflet)[\\/]/, priority: 20 },
+            { name: 'vendor-charts', test: /node_modules[\\/](recharts|d3-[^\\/]+|victory-vendor)[\\/]/, priority: 10 },
+          ],
         },
       },
     },
