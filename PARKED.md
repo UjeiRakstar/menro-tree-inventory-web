@@ -6,6 +6,30 @@ Last read through: 15 October 2026, against the repo, the live database
 (read-only, with the site's public key) and CAPSTONE_SPECS.md. Roadmap below
 added 18 October 2026.
 
+## For the weekend (parked 23 October)
+
+The testing deployment does not wait on any of these.
+
+- **The field app:** test it on a phone, then merge its branch; tag a tree
+  from the public map and sync it, to see the resident's path to the map
+  work; the hagameter steps; asking for merchantable height.
+- **Before publishing (not before testing):** PGENRO and the Data Protection
+  Officer review the Terms of Use; a named DPO on the privacy page, if wanted.
+- **Linting** (ESLint has no configuration).
+- **Item 7 of 22 October** (an option, not a priority).
+- **Phone-width checks** of the About page, the BioDashboard and both map
+  panels — easiest on the testing deployment itself.
+- **One main-photo column.** 101 of the older trees have their photograph
+  only in `photo_url`, which the field app does not read, so a field
+  officer's phone shows no photo for them. Copying it into `imageUrl` would
+  fix that; the web reads either.
+- **The family threshold**, once PGENRO fills in each species' family
+  (sources under "Waiting on a measurement").
+- **Tailwind 4**, once every office browser is known to be Chrome 111,
+  Safari 16.4 or Firefox 128 or later.
+- **CAPSTONE_SPECS.md** — brought up to date 23 October; read it against the
+  manuscript.
+
 ## The roadmap from 18 October
 
 Your reply of 18 October, in the order it is being built. Each round is
@@ -258,27 +282,27 @@ can do everything. The RISE details on the public tree panel, more of them.
 - ~~Two decisions left hanging.~~ Answered 18 October: carbon stays in the
   headline, and the Forestry tab comes first (done).
 
-## Mine to fix — found in this sweep
+## Mine to fix — found in this sweep (settled 23 October)
 
-- **Two hover tooltips in the tree panel can still clip.** The ⓘ there now
-  uses the shared, portalled `InfoHint`. The trait-badge and phenology
-  tooltips in `TreeDetailPanel.jsx` are not ⓘ buttons and still use the old
-  absolutely-positioned `Tooltip`, so near the bottom of the panel's scroll
-  they can be cut off. A portalled hover-tip for any trigger would close it.
-- **Nothing is linted.** ESLint 10 is installed and there is no
-  `eslint.config.*`, so `npx eslint` refuses to run and nothing checks the
-  code. The `eslint-disable` comments in `PublicMap.jsx` and `SitePanel.jsx`
-  are currently decorative.
-- **No `.gitattributes`.** Every commit warns that LF will become CRLF. Harmless
-  today; a repo that changes line endings under people is how a one-line diff
-  becomes a whole-file one.
-- **Old development tools.** `npm audit` flags Vite, Vitest, React Router,
-  Tailwind's file watcher and others (none of them shipped to a visitor except
-  React Router). Updating them is its own piece of work: Vite and Vitest are a
-  major version behind, and React Router's fix needs a test pass of every link.
-- **A 365 kB chunk named `treeTraits`.** Larger than the whole of Leaflet, for
-  a module that imports seven small icons. Something is being pulled in that
-  should not be. Not investigated.
+- ~~Two hover tooltips in the tree panel can still clip.~~ Fixed: the trait
+  badges and the phenology icons use `HoverTip`, drawn outside the panel as
+  InfoHint is (`tipPlacement.js`, shared).
+- **Nothing is linted — parked.** ESLint 10 is installed and there is no
+  `eslint.config.*`, so `npx eslint` refuses to run. The `eslint-disable`
+  comments in `PublicMap.jsx` and `SitePanel.jsx` are decorative until then.
+- ~~No `.gitattributes`.~~ Added: text stored and checked out with LF,
+  images and PDFs binary.
+- ~~Old development tools.~~ Upgraded: Vite 8 (Rolldown; builds in 3 s, not
+  34), Vitest 5, jsdom 29, PGlite 0.5, React Router 7, the rest within range.
+  **Tailwind stays at 3.4 (its latest 3), on purpose:** Tailwind 4 needs
+  Chrome 111, Safari 16.4 or Firefox 128, and the last Chrome on Windows 7 is
+  109 — an office PC on Windows 7 or an old browser would see the site
+  unstyled. What `npm audit` flags in Tailwind 3 is its file watcher, which
+  runs only on the developer's machine; `braces` has no fixed version at all.
+  Move to Tailwind 4 once every office browser is known to be new enough.
+- ~~A 365 kB chunk named `treeTraits`.~~ It is 28 kB now (the icons were
+  optimised). The real weight was the first download: 502 kB, 400 of it map
+  data read only for the list of 30 towns. Now 164 kB (46 kB compressed).
 
 ## The logged-in side — what is left after phases 1 and 2
 
@@ -750,7 +774,7 @@ option, not a priority.
   the database); the service role key, `GEMINI_API_KEY`, `BREVO_API_KEY` (Supabase
   secrets). Hand these to IT separately, never in a commit or a chat.
 - **Hosting.** Any static host (Vercel, Netlify, the province's own server):
-  build `npm ci && npm run build`, publish `dist/`, Node 20 or later. Every
+  build `npm ci && npm run build`, publish `dist/`, Node 20.19 or later (Vite 8). Every
   path must fall back to `index.html` (a single-page app): `/map`,
   `/tree-database` and the rest give "not found" without that rule. The rule
   is in the repo for three hosts: `vercel.json` (Vercel), `public/_redirects`
@@ -776,15 +800,13 @@ option, not a priority.
   is re-entered on Map layers if the configuration changes.
 - **Before going live:** `npm run test` and `npm run test:sql` pass; the
   Terms of Use reviewed by PGENRO and the DPO; the field app tested on a phone.
-- **Security advisories, as of 22 October** (`npm audit --omit=dev`, what
-  ships to a visitor): `npm audit fix` cleared what had a safe fix. Left, each
-  needing a major-version upgrade: React Router 6 — an open redirect through a
-  `<Link>` or `navigate()` given an address from outside (Green Tag never
-  navigates to an address taken from the URL or a user, checked), and a
-  server-rendering flaw (Green Tag renders nothing on a server); `uuid` inside
-  ExcelJS — a buffer check on a path ExcelJS does not use for workbooks. Low
-  risk as used; upgrading React Router to 7 is its own piece of work, with a
-  test of every page.
+- **Security advisories, as of 23 October** (after the upgrades): nothing
+  left that a visitor's browser runs except `uuid` inside ExcelJS — a
+  buffer check on a path ExcelJS does not use for workbooks; the only "fix"
+  is an older ExcelJS. React Router's open redirect is gone with version 7.
+  The rest are in tools on the developer's machine: Tailwind 3's file watcher
+  (above), and the NotebookLM tool server (`notebooklm-mcp`, an AI-assistant
+  tool, not part of the site).
 - **Free-tier limits to watch:** Supabase (database 500 MB, storage 1 GB,
   5 GB egress a month — the satellite tiles are read from storage), Cloudinary
   credits, Copernicus 30,000 requests a month, Gemini quota per LGU key.
@@ -800,12 +822,14 @@ option, not a priority.
   builds OpenCV); on this PC it does not run.
 
 
-- **No landslide layer — but there may be one on your computer.**
-  `Documents/Landslide Laguna.geojson` (203 MB, 16 October) holds landslide
-  hazard polygons with an `LH` level of 1 to 3, the way NOAH's are, and the
-  Map layers page reads `LH`. If it is NOAH's rain-induced landslide map,
-  upload it from the PGENRO account (Map layers → Rain-induced landslide
-  hazard); until then areas say "Not assessed".
+- **The landslide layer: NOAH's, and only NOAH's (decided 23 October).**
+  `Documents/Landslide Laguna.geojson` (203 MB, 16 October) carries an `LH`
+  level of 1 to 3, as NOAH's maps do, but records no source. Upload it from
+  the PGENRO account (Map layers → Rain-induced landslide hazard) only if it
+  came from NOAH; otherwise take Laguna's from NOAH's downloads
+  (https://noah.up.edu.ph — ESRI shapefiles, Open Database License). The Map
+  layers page reads `LH`. Until then areas say "Not assessed". Santa Cruz's
+  CDRA landslide plate (UPLB) is not used.
 - **Files in that folder not used, and why.** The elevation bands GeoJSON
   carries codes (-2 … 1001) with no key, so the DEM it came from is used
   instead. The 100-year flood shapefile is the same NOAH data as the GeoJSON.
@@ -841,8 +865,11 @@ option, not a priority.
   of Laguna or one city or municipality: an Excel workbook in the standard look
   (trees, a summary by place, species) and GeoJSON. PGENRO reads the requests
   on its Inbox page. Only what the public map shows of a tree goes out.
-- **Species write-ups.** Mango has one; the rest do not. Query 5 of
-  `supabase/data_checks.sql` is the PGENRO to-do list.
+- **Species write-ups — PGENRO's to write (decided 23 October).** Mango has
+  one; the rest do not. Not a gap in the system: PGENRO writes them and
+  uploads the RISE files (Trees → Species (RISE)); the manuscript can name it
+  as room for improvement. Query 5 of `supabase/data_checks.sql` is the
+  PGENRO to-do list.
 - **A cloud-free satellite basemap — done 21 October** (step 30).
 
 ### Waiting on the PGENRO account
@@ -863,28 +890,58 @@ that can upload a layer.
   with why. It suggests nothing until the forester records each species' site
   needs (Trees → Species (RISE) → "Site needs, in figures"), by hand or read
   from the RISE PDF. Origin matters too: invasive species are never suggested.
-- **Soil series names.** The sample ones are plausible for lowland Laguna, not
-  verified against the BSWM sheet.
+- **Soil series: from the BSWM shapefile only (decided 23 October).** The live
+  soil layer is DA–BSWM's, uploaded on Map layers → Soil type, and every
+  saved area reads its soil from it. The names in the sample areas
+  (`mockMapSites.js`) are placeholders that go with the sample data; nothing
+  else supplies a soil series.
 
 ### Waiting on a measurement
 
-- **The growth rate.** Now 1.19 cm a year, borrowed (see the roadmap, Round A).
-  Better still: a re-measurement of the same tree at two dates, or a
-  per-species figure from PGENRO or ERDB.
+- **The growth rate.** 1.19 cm of diameter a year, from Schneider, T.,
+  Ashton, M. S., Montagnini, F. & Milan, P. P. (2014). Growth performance of
+  sixty tree species in smallholder reforestation trials on Leyte,
+  Philippines. *New Forests* 45, 83–96 (online 2013). PDF, from the Visayas
+  State University rainforestation site:
+  https://rainforestation.vsu.edu.ph/wp-content/uploads/2022/04/Schneider_et_-al_2013_Growth_performance_of_sixty_tree.pdf
+  — 2,789 measured trees of 60 species; 1.19 cm a year is the mean on
+  limestone-influenced soils, 0.81 cm on volcanic ones. The manuscript should
+  say it is a plantation figure from Leyte, not a city one: no Philippine
+  study found (23 October) measures city trees' yearly diameter growth. The
+  better figure is still a re-measurement of the same tagged trees a year
+  apart.
 - **Merchantable height in the field app.** The timber volume needs it; the
   app does not ask for it. You have said this gets done no matter what. Until
   it does, the volume speaks for only the trees that happen to have one.
   (Carbon no longer needs it: since 20 October it is worked out on the total
   height.)
 - **The 30% family threshold.** Santamour's rule has three thresholds and the
-  page checks two. The third needs a species-to-family list.
+  page checks two. The third needs each species' family. To cite:
+  - the rule: Santamour, F. S. Jr. (1990). Trees for urban planting:
+    diversity, uniformity, and common sense. *Proceedings of the 7th
+    Conference of the Metropolitan Tree Improvement Alliance (METRIA 7)*,
+    57–65 — no free PDF found. The paper that tests it: Kendal, D., Dobbs,
+    C. & Lohr, V. I. (2014). Global patterns of diversity in the urban
+    forest: is there evidence to support the 10/20/30 rule? *Urban Forestry
+    & Urban Greening* 13(3), 411–417,
+    https://doi.org/10.1016/j.ufug.2014.04.004 (through the library);
+  - the families: the Angiosperm Phylogeny Group (2016). An update of the
+    Angiosperm Phylogeny Group classification for the orders and families of
+    flowering plants: APG IV. *Botanical Journal of the Linnean Society*
+    181(1), 1–20, https://doi.org/10.1111/boj.12385 — PDF:
+    https://repository.naturalis.nl/pub/801236/APG-IV-A.pdf ; and each
+    Philippine species' family as Co's Digital Flora of the Philippines gives
+    it (Pelser, Barcelona & Nickrent, eds., 2011 onwards,
+    https://www.philippineplants.org), described in Barcelona, J. F. et al.
+    (2013), *Philippine Journal of Science* 142, 57–67 — PDF:
+    https://philjournalsci.dost.gov.ph/images/pdf/special_issue/Cos_Digital_Flora_of_the_Philippines_Plant_Identification.pdf
+  The species profiles already have a Family field (RISE); once PGENRO fills
+  it in, the page can check the third threshold from it.
 
 ## Elsewhere
 
-- **Odd columns in public.trees.** A column named `trees` that nothing reads,
-  `heightClass` beside `height_class`, `photo_url` beside `imageUrl`, and
-  `is_tagged`, which nothing touches. Query 8 of `supabase/data_checks.sql`
-  counts the non-null values in each: empty everywhere is safe to drop.
+- ~~Odd columns in public.trees.~~ Settled 23 October: step 37
+  (`tidy_trees.sql`).
 - **Phone-width screenshots.** The About page, the BioDashboard and both map
   panels have only ever been seen on a desktop.
 

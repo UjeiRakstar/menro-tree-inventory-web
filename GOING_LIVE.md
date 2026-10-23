@@ -85,7 +85,7 @@ Audience can sign in (up to 100).
    VITE_CLOUDINARY_CLOUD_NAME=<the Cloudinary cloud name>
    ```
 
-   run `npm ci` then `npm run build`. Upload everything inside `dist/` to
+   run `npm ci` then `npm run build` (Node 20.19 or later). Upload everything inside `dist/` to
    the site's root, replacing version 1. The anon key is meant to be public;
    **never** put the service role key or any AI key in `.env`.
 2. **The server answers every unknown address with `index.html`**, as it
