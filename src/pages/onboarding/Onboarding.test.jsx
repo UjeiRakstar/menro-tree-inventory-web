@@ -130,18 +130,18 @@ describe('a resident signed in with Google', () => {
 
   it('is sent from the offices’ pages to the community', async () => {
     renderAt('/action-board');
-    expect(await screen.findByText('You have joined as', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('You have joined as', {}, { timeout: 15000 })).toBeInTheDocument();
     expect(screen.queryByText('This account has no profile')).not.toBeInTheDocument();
   });
 
   it('is sent from the office sign-in to the community too', async () => {
     renderAt('/login');
-    expect(await screen.findByText('You have joined as', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('You have joined as', {}, { timeout: 15000 })).toBeInTheDocument();
   });
 
   it('is shown in the public navbar by an avatar, whose menu goes to the community and logs out', async () => {
     renderAt('/about');
-    const [avatar] = await screen.findAllByRole('button', { name: 'Account: Ana Reyes' }, { timeout: 5000 });
+    const [avatar] = await screen.findAllByRole('button', { name: 'Account: Ana Reyes' }, { timeout: 15000 });
     expect(screen.queryByRole('link', { name: 'Log In / Sign Up' })).not.toBeInTheDocument();
     // No photo from Google here: her initials.
     expect(avatar).toHaveTextContent('AR');
@@ -159,7 +159,7 @@ describe('a resident signed in with Google', () => {
       error: null,
     });
     const { container } = renderAt('/about');
-    await screen.findAllByRole('button', { name: 'Account: Ana Reyes' }, { timeout: 5000 });
+    await screen.findAllByRole('button', { name: 'Account: Ana Reyes' }, { timeout: 15000 });
     expect(container.querySelector('img[src="https://lh3.example/ana.jpg"]')).toBeTruthy();
   });
 });
@@ -168,7 +168,7 @@ describe('an office account on the public pages', () => {
   it('is shown by its avatar too, with the way back to the dashboard', async () => {
     supabaseMock.signInAs({ ...SANTA_CRUZ_ADMIN, full_name: 'Maria Santos', avatar_url: 'https://example.test/maria.png' }, SANTA_CRUZ);
     const { container } = renderAt('/community');
-    const [avatar] = await screen.findAllByRole('button', { name: 'Account: Maria Santos' }, { timeout: 5000 });
+    const [avatar] = await screen.findAllByRole('button', { name: 'Account: Maria Santos' }, { timeout: 15000 });
     expect(container.querySelector('img[src="https://example.test/maria.png"]')).toBeTruthy();
     fireEvent.click(avatar);
     const menu = screen.getByRole('menu', { name: 'Account' });

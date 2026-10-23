@@ -118,6 +118,9 @@ describe('the BioDashboard of a MENRO / CENRO', () => {
     expect(action.compareDocumentPosition(figures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Pila' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Download Data/ })).not.toBeInTheDocument();
+    // Its map can be explored, and opens the office map in full.
+    expect(screen.getByTestId('map').dataset.dragging).toBe('true');
+    expect(screen.getByRole('link', { name: 'Enlarge map' })).toHaveAttribute('href', '/map');
   });
 
   it('narrows to a barangay from the list, the bars still comparing them all', async () => {

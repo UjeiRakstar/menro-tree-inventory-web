@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, GeoJSON, Polygon, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -8,6 +8,7 @@ import {
   Leaf,
   Loader2,
   MapPin,
+  Maximize2,
   Ruler,
   TreePine,
 } from 'lucide-react';
@@ -129,6 +130,21 @@ function FocusController({ selected }) {
     if (!bounds) return;
     map.flyToBounds(bounds, { padding: [24, 24], maxZoom: selected ? 13 : 11, duration: 1 });
   }, [selected, map]);
+  return null;
+}
+
+/**
+ * The map can be explored, but only Laguna: dragged no further than the
+ * province's edge, and zoomed out no further than the whole of it.
+ */
+function KeepToLaguna() {
+  const map = useMap();
+  useEffect(() => {
+    if (!LAGUNA_BOUNDS) return;
+    map.setMaxBounds?.(LAGUNA_BOUNDS);
+    const whole = map.getBoundsZoom?.(LAGUNA_BOUNDS);
+    if (Number.isFinite(whole)) map.setMinZoom?.(whole);
+  }, [map]);
   return null;
 }
 
@@ -807,22 +823,34 @@ export function BioDashboardView({ audience = 'public', lockedLgu = null, top = 
             </div>
           )}
 
-          {/* Not a tool to navigate: it cannot be panned or zoomed, and the pins
-              are not clickable. The one thing it does take is a click on a city
-              or municipality, which selects it. */}
+          {/* The way to the full map, for whoever wants more than this view. */}
+          <Link
+            to={audience === 'public' ? '/public-map' : '/map'}
+            className="absolute right-3 top-3 z-[1000] inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white hover:text-green-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
+          >
+            <Maximize2 size={14} aria-hidden="true" />
+            Enlarge map
+          </Link>
+
+          {/* Explored within Laguna (KeepToLaguna): dragged and zoomed with the
+              buttons, a double click or a pinch. The scroll wheel stays the
+              page's, so scrolling past the map never zooms it. The pins are
+              not clickable; a click on a city or municipality selects it. */}
           <MapContainer
             bounds={LAGUNA_BOUNDS}
             boundsOptions={{ padding: [24, 24] }}
             style={{ height: '100%', width: '100%' }}
-            zoomControl={false}
-            dragging={false}
+            zoomControl
+            dragging
             scrollWheelZoom={false}
-            doubleClickZoom={false}
-            touchZoom={false}
+            doubleClickZoom
+            touchZoom
             boxZoom={false}
             keyboard={false}
+            maxBoundsViscosity={1}
             attributionControl={false}
           >
+            <KeepToLaguna />
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <Polygon positions={OUTSIDE_LAGUNA_MASK} pathOptions={MASK_STYLE} interactive={false} />
             <GeoJSON

@@ -309,14 +309,17 @@ describe('PublicDashboard', () => {
     ).toBeInTheDocument();
   });
 
-  it('draws the map as a picture: no zoom, no panning, no clickable pins', async () => {
+  it('lets the map be explored within Laguna, opens the full map, and keeps the pins unclickable', async () => {
     renderDashboard();
     await screen.findByTestId('map');
 
     const map = screen.getByTestId('map');
-    expect(map.dataset.zoomControl).toBe('false');
-    expect(map.dataset.dragging).toBe('false');
+    expect(map.dataset.zoomControl).toBe('true');
+    expect(map.dataset.dragging).toBe('true');
+    // The scroll wheel stays the page's.
     expect(map.dataset.scrollZoom).toBe('false');
+    // The public goes to the public map; /map is the offices'.
+    expect(screen.getByRole('link', { name: 'Enlarge map' })).toHaveAttribute('href', '/public-map');
     for (const pin of screen.getAllByTestId('pin')) {
       expect(pin.dataset.interactive).toBe('false');
     }
