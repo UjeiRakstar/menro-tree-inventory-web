@@ -1,4 +1,6 @@
-import psgc from '../data/Laguna-PSGC-2026Q3.json';
+// By key, so a page that asks only for a town's facts does not carry the
+// 47 KB of barangays: the build leaves out the keys nothing uses.
+import { edition, published, populationSource, province, lgus, barangays } from '../data/Laguna-PSGC-2026Q3.json';
 
 /**
  * The Philippine Standard Geographic Code for Laguna, 3rd quarter 2026 edition
@@ -13,20 +15,16 @@ import psgc from '../data/Laguna-PSGC-2026Q3.json';
  * uses (BMB Technical Bulletin 2018-02, section 4d): a barangay of 5,000 people
  * or more, or with the establishments it lists, is urban.
  */
-export const PSGC_EDITION = Object.freeze({
-  edition: psgc.edition,
-  published: psgc.published,
-  populationSource: psgc.populationSource,
-});
+export const PSGC_EDITION = Object.freeze({ edition, published, populationSource });
 
 /** A city or municipality: { name, city, cityClass, income, population2024 }, or null. */
-export const lguFacts = (code) => psgc.lgus[Number(code)] ?? null;
+export const lguFacts = (code) => lgus[Number(code)] ?? null;
 
 /** A barangay: { name, urban, population2024 }, or null. */
-export const barangayFacts = (code) => psgc.barangays[Number(code)] ?? null;
+export const barangayFacts = (code) => barangays[Number(code)] ?? null;
 
 /** The province: { psgc, name, income, population2024 }. */
-export const provinceFacts = () => psgc.province;
+export const provinceFacts = () => province;
 
 /**
  * The official name, as plans and reports write it: "City of Biñan",

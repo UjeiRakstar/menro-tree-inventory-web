@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Facebook, Globe, Loader2, Mail, MapPin, Phone, Send } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
-import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
+import { MUNICIPALITY_LIST } from '../../lib/lguOptions.js';
 import { officialName } from '../../lib/psgc.js';
 import { useAuthIfAny } from '../../context/AuthContext.jsx';
 

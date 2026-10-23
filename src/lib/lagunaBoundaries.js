@@ -12,15 +12,12 @@ import municipalityData from '../data/Laguna-Municipalities.geojson';
 export const LAGUNA_PROVINCE = provinceData;
 export const LAGUNA_MUNICIPALITIES = municipalityData;
 
-/** Every city/municipality, labelled and sorted the way a dropdown wants them. */
-export const MUNICIPALITY_LIST = municipalityData.features
-  .map((f) => ({
-    name: f.properties.municipality,
-    label: f.properties.municipality_label,
-    isCity: f.properties.is_city,
-    psgc: Number(f.properties.municipality_psgc) || null,
-  }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+/**
+ * Every city/municipality, labelled and sorted the way a dropdown wants them —
+ * from the names-only index (lguOptions.js), the same 30 as the polygons.
+ * A page that needs only the list imports it from there.
+ */
+export { MUNICIPALITY_LIST } from './lguOptions.js';
 
 const polygonsOf = (geometry) =>
   geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MUNICIPALITY_LIST } from './lagunaBoundaries.js';
+import { MUNICIPALITY_LIST } from './lguOptions.js';
 import { isSuperAdmin } from './roles.js';
 
 /**

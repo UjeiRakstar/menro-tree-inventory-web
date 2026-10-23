@@ -14,6 +14,17 @@ import lguIndex from '../data/Laguna-LGUs.json';
  */
 export const LGU_OPTIONS = lguIndex;
 
+/**
+ * Every city/municipality, labelled and sorted the way a dropdown wants them.
+ * Here, from the names-only index, rather than from the boundary polygons:
+ * the contact form and the "Working in" picker are on pages every visitor
+ * loads first, and reading the list off the polygons put 350 KB of geometry
+ * in front of every page. lagunaBoundaries.js passes this same list on.
+ */
+export const MUNICIPALITY_LIST = lguIndex
+  .map(({ name, label, isCity, psgc }) => ({ name, label, isCity, psgc: Number(psgc) || null }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
 /** Barangays of one LGU, alphabetically. Empty for an unknown LGU. */
 export function barangaysOf(municipality) {
   if (!municipality) return [];

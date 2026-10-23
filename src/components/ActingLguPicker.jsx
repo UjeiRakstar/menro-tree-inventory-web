@@ -1,5 +1,5 @@
 import { Building2 } from 'lucide-react';
-import { MUNICIPALITY_LIST } from '../lib/lagunaBoundaries.js';
+import { MUNICIPALITY_LIST } from '../lib/lguOptions.js';
 import { useActingLgu } from '../lib/actingLgu.js';
 
 /**
