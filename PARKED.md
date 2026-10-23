@@ -822,14 +822,13 @@ option, not a priority.
   builds OpenCV); on this PC it does not run.
 
 
-- **The landslide layer: NOAH's, and only NOAH's (decided 23 October).**
-  `Documents/Landslide Laguna.geojson` (203 MB, 16 October) carries an `LH`
-  level of 1 to 3, as NOAH's maps do, but records no source. Upload it from
-  the PGENRO account (Map layers → Rain-induced landslide hazard) only if it
-  came from NOAH; otherwise take Laguna's from NOAH's downloads
-  (https://noah.up.edu.ph — ESRI shapefiles, Open Database License). The Map
-  layers page reads `LH`. Until then areas say "Not assessed". Santa Cruz's
-  CDRA landslide plate (UPLB) is not used.
+- **The landslide layer: NOAH's, and only NOAH's (decided 23 October) — and
+  already live.** Read from the live database on 23 October: the
+  rain-induced landslide layer is UP NOAH's `Laguna_Landslide_Borderless.geojson`,
+  uploaded 15 October, beside BSWM's soil, the Copernicus DEM and NOAH's
+  flood map (all 15 October). Nothing to upload. Santa Cruz's CDRA landslide
+  plate (UPLB) is not used. (`Documents/Landslide Laguna.geojson` is not
+  needed.)
 - **Files in that folder not used, and why.** The elevation bands GeoJSON
   carries codes (-2 … 1001) with no key, so the DEM it came from is used
   instead. The 100-year flood shapefile is the same NOAH data as the GeoJSON.
@@ -879,9 +878,8 @@ The map draws land cover and tree planting sites, read out of
 figures, marked in amber. These turn it real; each needs the PGENRO account
 that can upload a layer.
 
-- **The landslide upload.** Soil, elevation, flood and CLIRAM are live (15
-  October); a sample area opened on the map is measured against them. Only
-  NOAH's rain-induced landslide map is missing.
+- ~~The landslide upload.~~ Live since 15 October (NOAH's), with soil,
+  elevation, flood and CLIRAM; this note was out of date until 23 October.
 - **Unlocking the rest of the land cover table.** All 29 published rows are in
   `src/lib/landCover.js`; four are `publicVisible`. The other 25 should become a
   PGENRO toggle rather than a second table — one table cannot drift from itself.
