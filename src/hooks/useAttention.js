@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
 import { needingAction } from '../lib/adminPins.js';
@@ -54,35 +54,40 @@ export function useAttention({
   // Bumped when a proposal is made or decided, so the "!" changes live
   // (supabase/live_updates.sql) rather than on the next page.
   const [tick, setTick] = useState(0);
+  // Each use its own channels. The header counts too, so a page that also
+  // counts (Trees) asks for a second channel of the same name — and Supabase
+  // hands back the header's, already subscribed, which throws on .on() and
+  // blanks the page.
+  const instance = useId();
 
   useEffect(() => {
     if (!withProposals) return undefined;
     const channel = supabase
-      .channel('attention-proposals')
+      .channel(`attention-proposals-${instance}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'map_area_proposals' }, () =>
         setTick((n) => n + 1)
       )
       .subscribe();
     return () => supabase.removeChannel?.(channel);
-  }, [withProposals]);
+  }, [withProposals, instance]);
 
   useEffect(() => {
     if (!withRequests) return undefined;
     const channel = supabase
-      .channel('attention-requests')
+      .channel(`attention-requests-${instance}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'map_areas' }, () => setTick((n) => n + 1))
       .subscribe();
     return () => supabase.removeChannel?.(channel);
-  }, [withRequests]);
+  }, [withRequests, instance]);
 
   useEffect(() => {
     if (!withInbox) return undefined;
     const channel = supabase
-      .channel('attention-inbox')
+      .channel(`attention-inbox-${instance}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inbox_messages' }, () => setTick((n) => n + 1))
       .subscribe();
     return () => supabase.removeChannel?.(channel);
-  }, [withInbox]);
+  }, [withInbox, instance]);
 
   useEffect(() => {
     let cancelled = false;
