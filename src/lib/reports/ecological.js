@@ -692,7 +692,10 @@ const SOURCES =
   'office and PGENRO mapped them, in NAMRIA’s classes.\n\n' +
   'Limitations: the figures describe exposure, not risk; the tree inventory covers the trees tagged so far, not every tree; and each ' +
   'layer is measured on a grid of about 60 m, so small areas are approximate. For planning purposes only — not a land title, survey ' +
-  'plan or proof of ownership.';
+  'plan or proof of ownership.\n\n' +
+  'Disclaimer: this report is based on the data entered by its users. The population, for example, is the PSA’s (PSGC) or as ' +
+  'validated by the user. Where a figure differs from another source — the Community-Based Monitoring System (CBMS), or the figures ' +
+  'in the CLUP, CDP or CDRA — the latest data should be used, as validated by the user.';
 
 /**
  * Where the data and the methods come from, with where to find them: the

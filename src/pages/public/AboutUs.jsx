@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Monitor, ChevronDown, Compass } from 'lucide-react';
+import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Sprout, ChevronDown, Compass } from 'lucide-react';
 import NewsBanner from '../../components/public/NewsBanner.jsx';
 import Leaderboard from '../../components/public/Leaderboard.jsx';
 import { ContactForm, OfficeDirectory } from '../../components/public/ContactUs.jsx';
@@ -10,7 +10,9 @@ import greenTagLogo from '../../assets/GreenTag_Logo.png';
 import mobileImg from '../../assets/Mobile.jpg';
 import mobileview_mapImg from '../../assets/mobileview_map.jpg';
 import desktopImg from '../../assets/desktop.PNG';
-import mappingFeatureImg from '../../assets/optimised/Mapping-Feature.webp';
+import flupGlimpse from '../../assets/optimised/about-flup.webp';
+import lccapGlimpse from '../../assets/optimised/about-lccap.webp';
+import cbiGlimpse from '../../assets/optimised/about-cbi.webp';
 import sdg9Img from '../../assets/SDG9.png';
 import sdg11Img from '../../assets/SDG11.png';
 import sdg13Img from '../../assets/SDG13.png';
@@ -265,6 +267,64 @@ function FeatureRow({ icon: Icon, title, description, delay = 0, onIconClick, pr
   );
 }
 
+/**
+ * The plans Green Tag's figures feed, each with a glimpse of the page that
+ * holds them — shown on the monitor beside the list as one is hovered,
+ * focused or tapped.
+ */
+const PLANS = [
+  {
+    key: 'flup',
+    icon: TreePine,
+    title: 'Forest Land Use Plan',
+    description: 'Every tagged tree on one map with elevation, slope, soil, land cover and hazards, and the planting sites PGENRO approves.',
+    image: flupGlimpse,
+    alt: 'The map: Laguna’s tagged trees, land cover and planting sites',
+  },
+  {
+    key: 'lccap',
+    icon: ShieldAlert,
+    title: 'Enhanced Local Climate Change Action Plan',
+    description: 'The carbon the trees store and take in each year, and which trees and lands lie where floods and landslides reach.',
+    image: lccapGlimpse,
+    alt: 'The BioDashboard: trees, species, carbon stored and sequestered',
+  },
+  {
+    key: 'cbi',
+    icon: Sprout,
+    title: 'City and Urban Biodiversity Index',
+    description: 'Endemic, native and invasive species, tree canopy and partnerships, counted the way the indices ask.',
+    image: cbiGlimpse,
+    alt: 'The Tree Database: each species tagged, with what DENR-ERDB says of it',
+  },
+];
+
+/** One plan in the list: the whole row is a button that turns the monitor to it. */
+function PlanRow({ plan, active, onShow, delay }) {
+  const { icon: Icon, title, description } = plan;
+  return (
+    <FadeIn delay={delay} direction="left">
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={onShow}
+        onMouseEnter={onShow}
+        onFocus={onShow}
+        className={`flex w-full gap-4 items-start rounded-xl p-3 -mx-3 text-left transition-colors duration-300
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 ${active ? 'bg-green-50' : 'hover:bg-green-50/60'}`}
+      >
+        <span className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${active ? 'bg-green-600' : 'bg-green-100'}`}>
+          <Icon className={`transition-colors duration-300 ${active ? 'text-white' : 'text-green-700'}`} size={20} aria-hidden="true" />
+        </span>
+        <span className="flex-1">
+          <span className="block font-bold text-gray-900 text-sm sm:text-base uppercase tracking-wide mb-1">{title}</span>
+          <span className="block text-gray-600 text-sm leading-relaxed">{description}</span>
+        </span>
+      </button>
+    </FadeIn>
+  );
+}
+
 /* ══════════════════════════════════════════════════
    Main Component
    ══════════════════════════════════════════════════ */
@@ -274,6 +334,8 @@ export default function AboutUs() {
   // The front phone shows the app, or — the Crowdsourcing icon tapped — the
   // residents' leaderboard (Round D).
   const [showBoard, setShowBoard] = useState(false);
+  // The plan the monitor shows.
+  const [plan, setPlan] = useState(PLANS[0].key);
   const heroParallax = useParallax(0.25);
 
   useEffect(() => {
@@ -630,25 +692,14 @@ export default function AboutUs() {
                 </h2>
               </FadeIn>
 
-              <div className="space-y-6 mb-8 text-gray-700">
-                <FeatureRow
-                  icon={TreePine}
-                  title="Carbon Sequestration Tracking"
-                  delay={100}
-                  description="Greenhouse gas emissions are no longer just abstract numbers—we can now track and manage them. As a robust Decision Support System, Green Tag empowers LGUs to shape their Forest Land Use Plans (FLUP), Urban Biodiversity Index, and Local Climate Change Action Plans by calculating carbon stock and sequestration potential."
-                />
-                <FeatureRow
-                  icon={Monitor}
-                  title="Inter-Agency Data Integration"
-                  delay={200}
-                  description="The platform identifies verified planting sites approved by the PGENRO Forestry Division and integrates essential data from top agencies: administrative maps from NAMRIA, soil and elevation data from BSWM, climate-adjusted hazard maps from UPRI NOAH, satellite imagery from Copernicus, and CLIRAM data from DOST-PAGASA."
-                />
-                <FeatureRow
-                  icon={ShieldAlert}
-                  title="Data-Driven Resilient Decisions"
-                  delay={300}
-                  description="This wealth of information ensures our leaders make resilient decisions that strictly comply with the City Biodiversity Index."
-                />
+              <p className="text-gray-600 leading-relaxed">
+                Evidence for planning, from the ground up: trees tagged in the field, read against the
+                agencies’ maps, for the plans a Local Government Unit prepares.
+              </p>
+              <div className="space-y-2 mb-8 text-gray-700">
+                {PLANS.map((item, i) => (
+                  <PlanRow key={item.key} plan={item} active={plan === item.key} onShow={() => setPlan(item.key)} delay={100 * (i + 1)} />
+                ))}
               </div>
 
               {/* Call to Action Button */}
@@ -668,18 +719,26 @@ export default function AboutUs() {
 
             {/* Right: Desktop mockup with glow */}
             <FadeIn delay={300} direction="left" className="flex-1 w-full flex justify-center lg:justify-end">
-              <div className="relative">
+              {/* The screens are stacked out of flow, so the frame sets its own width. */}
+              <div className="relative w-full max-w-[320px] sm:max-w-[420px] md:max-w-[500px]">
                 {/* Ambient glow */}
                 <div className="absolute -inset-4 bg-green-500/20 rounded-2xl blur-3xl" />
                 {/* Monitor frame */}
                 <div className="relative z-10">
-                  <div className="w-full max-w-[320px] sm:max-w-[420px] md:max-w-[500px] aspect-video bg-gray-900 rounded-2xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.3)] ring-1 ring-white/10">
-                    <div className="w-full h-full rounded-xl overflow-hidden bg-white">
-                      <img
-                        src={mappingFeatureImg}
-                        alt="Tree inventory desktop dashboard preview"
-                        className="w-full h-full object-cover"
-                      />
+                  <div className="w-full aspect-video bg-gray-900 rounded-2xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.3)] ring-1 ring-white/10">
+                    <div className="relative w-full h-full rounded-xl overflow-hidden bg-white" aria-live="polite">
+                      {PLANS.map((item) => (
+                        <img
+                          key={item.key}
+                          src={item.image}
+                          alt={plan === item.key ? item.alt : ''}
+                          aria-hidden={plan === item.key ? undefined : true}
+                          loading="lazy"
+                          className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 ease-out ${
+                            plan === item.key ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
+                          }`}
+                        />
+                      ))}
                     </div>
                   </div>
                   {/* Stand */}

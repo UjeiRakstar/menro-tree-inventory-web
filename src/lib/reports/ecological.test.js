@@ -155,6 +155,8 @@ describe('the report', () => {
     // Green Tag is named in Data and limitations only; the references carry their links.
     for (const section of report.sections.filter((s) => s.key !== 'sources')) expect(section.text).not.toMatch(/Green Tag/);
     expect(text('sources')).toMatch(/prepared with the Green Tag Tree Inventory System/);
+    // The figures are the users' own: where they differ from the CBMS or another plan, the latest, validated, is used.
+    expect(text('sources')).toMatch(/Disclaimer: this report is based on the data entered by its users[\s\S]*CBMS[\s\S]*the latest data should be used, as validated by the user\./);
     expect(text('references')).toMatch(/https:\/\/noah\.up\.edu\.ph/);
     expect(text('references').split('\n\n').length).toBeGreaterThan(10);
     expect(report.chapters.at(-1).parts.map((p) => p.heading).slice(-2)).toEqual(['Data and Limitations', 'References']);

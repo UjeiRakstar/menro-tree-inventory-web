@@ -265,3 +265,21 @@ describe('a data privacy request (20 October)', () => {
     expect(await within(form).findByRole('status')).toHaveTextContent('Sent to PGENRO, as a data privacy request.');
   });
 });
+
+describe('the plans and the monitor', () => {
+  it('turns the monitor to each plan as it is hovered, focused or tapped', () => {
+    renderAbout();
+    const plan = (name) => screen.getByRole('button', { name: new RegExp(`^${name}`) });
+    expect(plan('Forest Land Use Plan')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('img', { name: /^The map/ })).toBeInTheDocument();
+
+    fireEvent.mouseEnter(plan('Enhanced Local Climate Change Action Plan'));
+    expect(screen.getByRole('img', { name: /^The BioDashboard/ })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /^The map/ })).not.toBeInTheDocument();
+
+    fireEvent.click(plan('City and Urban Biodiversity Index'));
+    expect(plan('City and Urban Biodiversity Index')).toHaveAttribute('aria-pressed', 'true');
+    expect(plan('Forest Land Use Plan')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('img', { name: /^The Tree Database/ })).toBeInTheDocument();
+  });
+});
