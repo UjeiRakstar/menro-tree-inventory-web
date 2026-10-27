@@ -220,6 +220,19 @@ describe('an event’s days, kind and purpose (21 October)', () => {
     // A tree planting is a biodiversity project, unless PGENRO says otherwise.
     expect(insert.payload.cbi_credit).toBe('project');
     expect(insert.payload).not.toHaveProperty('venue_lat');
+    // No partner named, none sent: it saves before cbi_ubi.sql is run.
+    expect(insert.payload).not.toHaveProperty('partners');
+  });
+
+  it('names its partners, each once — and sends none when there are none', async () => {
+    render(<NewsPage />);
+    const form = screen.getByRole('form', { name: 'New post' });
+    fill(form, 'Title', 'MOA signing');
+    fill(form, 'Date', '2026-11-08');
+    fill(form, /^Partners/, 'LSPU, Haribon Foundation, lspu ,');
+    fireEvent.click(within(form).getByRole('button', { name: /Post and send to the offices/ }));
+    await screen.findByRole('status');
+    expect(supabaseMock.writesTo('news_posts', 'insert')[0].payload.partners).toEqual(['LSPU', 'Haribon Foundation']);
   });
 
   it('keeps a purpose chosen by hand when the kind changes', async () => {

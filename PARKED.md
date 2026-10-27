@@ -542,6 +542,21 @@ ACCOUNTS_AND_MAPPING.md. The database files run **in this order**, each once:
     drop_trees_backup.sql is commented out); this drops it, if every tree in
     it is still in public.trees. A field app build from before 12 May would
     no longer sync; every phone should run the current one anyway.
+38. **The City and Urban Biodiversity Index, 27 October** — run
+    `supabase/cbi_ubi.sql`. From the BMB lecture on the Singapore Index
+    (Handbook, 2021): a land cover area can be marked natural, degraded or
+    restored (Indicators 1 and 7A); an event names its partner organisations
+    (Indicator 24 counts organisations, not events); and each LGU's office
+    self-assesses the indicators the system cannot measure — its LBSAP,
+    budget, agencies, school curricula and the rest — a year at a time, in
+    Settings. The map sheet's Report tab now offers three reports: the
+    Ecological Profile; the City Biodiversity Index for a city or the Urban
+    Biodiversity Index (TB 2018-02, on the urban barangays) for a
+    municipality, the Ecological Profile its introduction; and the
+    greenhouse gas report, its emissions waiting for LSPU's GHGI System
+    (ghgi.lspu.edu.ph). Until the file is run, everything else works; the
+    self-assessment says what to run, and a condition or partner cannot be
+    saved.
 
 **Test any of these before it goes live:** `npm run test:sql` runs every
 file above in real Postgres (PGlite, in memory) and tries what each must
@@ -549,7 +564,7 @@ allow and refuse — 17 suites — the final check query on its
 own, as the SQL editor runs it. The suites are in `tools/sql-tests/`.
 
 **Is the live database all there?** `supabase/health_check.sql` is
-read-only, and covers steps 1–37 (23 October): paste it in the SQL editor any time. Each row says whether a part
+read-only, and covers steps 1–38 (27 October): paste it in the SQL editor any time. Each row says whether a part
 is in (tables, row level security, triggers, the restrictive rules,
 functions, storage buckets) and names what is missing, then reads out the
 counts worth watching.

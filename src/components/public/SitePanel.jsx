@@ -9,6 +9,7 @@ import temperatureIcon from '../../assets/Average_Temperature_icon.png';
 import floodIcon from '../../assets/Flood.png';
 import landslideIcon from '../../assets/Landslide.png';
 import { formatArea } from '../../lib/areaGeometry.js';
+import { AREA_CONDITIONS } from '../../lib/cbiPoints.js';
 import {
   annualBiomassTonnes,
   formatTonnesPerYear,
@@ -33,6 +34,9 @@ import { ProvisionalNote, ProvisionalTag } from './Provisional.jsx';
 
 /** In step with the slide class below, and with the other two panels'. */
 const SLIDE_MS = 300;
+
+/** An area's condition, as its office marked it (cbi_ubi.sql): 'Restored or naturalised', or null. */
+const conditionLabel = (id) => AREA_CONDITIONS.find((c) => c.id === id)?.label.split(' — ')[0] ?? null;
 
 /** One line of what to do at a planting site, with its amber dot while it is invented. */
 function ActionRow({ label, sample = false, children }) {
@@ -303,6 +307,7 @@ export default function SitePanel({ feature, onClose, onCollapsedChange, footer 
               {isPlantingSite
                 ? `Verified by the ${props.verifiedBy}`
                 : props.coverLabel ?? cover?.label ?? 'Land cover not yet classified'}
+              {!isPlantingSite && conditionLabel(props.condition) && ` · ${conditionLabel(props.condition)}`}
             </p>
             <p className="text-[12px] italic leading-snug text-slate-500">{placeLine(feature)}</p>
           </div>

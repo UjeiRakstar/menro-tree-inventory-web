@@ -87,7 +87,8 @@ function CbiPoints({ cbi }) {
           </span>
         </p>
         <ul className="divide-y divide-slate-100">
-          {cbi.indicators.map((indicator) => (
+          {/* What the system measures; an office's self-assessment is in its report, not here. */}
+          {cbi.indicators.filter((indicator) => indicator.system).map((indicator) => (
             <li key={indicator.id} className="flex items-start justify-between gap-3 px-3 py-2">
               <span className="min-w-0 text-[11px] leading-snug text-slate-600">
                 <span className="text-slate-400">{indicator.no}.</span> {indicator.name}

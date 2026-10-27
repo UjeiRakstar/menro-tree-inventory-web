@@ -5,7 +5,7 @@
 -- true), missing (ok = false, with what is missing in the detail), or is a
 -- figure to read (ok = null).
 --
--- It looks for what steps 1–37 of PARKED.md make: tables, the columns the
+-- It looks for what steps 1–38 of PARKED.md make: tables, the columns the
 -- later steps add, the rules on who reads what, the triggers that stamp and
 -- route, the functions the pages call, and the storage buckets. A count that
 -- matters (tags no LGU will get, a Google account sitting in the approval
@@ -152,6 +152,15 @@ select 'the odd columns of trees are gone (step 37)',
                                     where table_schema = 'public' and table_name = 'trees'
                                       and column_name in ('trees', 'height_class', 'is_tagged'))
                 || ' — tidy_trees.sql not run, or it kept them (its check says why)', '')
+union all
+select 'the City and Urban Biodiversity Index (step 38)',
+       to_regclass('public.cbi_self_assessments') is not null
+       and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'map_areas' and column_name = 'condition')
+       and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'news_posts' and column_name = 'partners'),
+       case when to_regclass('public.cbi_self_assessments') is not null
+                 and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'map_areas' and column_name = 'condition')
+                 and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'news_posts' and column_name = 'partners')
+            then '' else 'cbi_ubi.sql not run' end
 union all
 select 'no Google account in the approval queue',
        (select value from n where label = 'google_in_profiles') = '0',

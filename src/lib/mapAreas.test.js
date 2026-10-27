@@ -83,6 +83,14 @@ describe('areaFormProblems', () => {
 });
 
 describe('rowFromForm', () => {
+  it('sends an area’s condition when there is one, or to clear one — and nothing otherwise (27 October)', () => {
+    const shape = SHAPE;
+    expect(rowFromForm({ ...emptyAreaForm('land-cover'), name: 'A', coverClass: 'open-forest' }, { shape })).not.toHaveProperty('condition');
+    expect(rowFromForm({ ...emptyAreaForm('land-cover'), name: 'A', coverClass: 'open-forest', condition: 'degraded' }, { shape }).condition).toBe('degraded');
+    const cleared = rowFromForm({ ...formFromRow({ kind: 'land-cover', name: 'A', cover_class: 'open-forest', condition: 'restored' }), condition: '' }, { shape });
+    expect(cleared).toHaveProperty('condition', null);
+  });
+
   it('measures the shape and keeps only the fields of its kind', () => {
     const form = { ...emptyAreaForm(), name: ' Labuin forest ', coverClass: 'open-forest', contact: 'not for land cover' };
     const row = rowFromForm(form, {

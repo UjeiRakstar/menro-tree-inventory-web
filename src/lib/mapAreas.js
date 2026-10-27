@@ -2,6 +2,7 @@ import { centroidOf, geometryAreaM2 } from './areaGeometry.js';
 import { containsPoint } from './lagunaBoundaries.js';
 import { distanceM, lengthM, areaM2 } from './drawing.js';
 import { maiCoverOf, namriaClassById } from './namriaCover.js';
+import { AREA_CONDITIONS } from './cbiPoints.js';
 import { ROLES, roleOf } from './roles.js';
 import { elevationTypeOf } from './layers/elevation.js';
 
@@ -92,6 +93,8 @@ export function emptyAreaForm(kind = 'land-cover') {
     kind,
     name: '',
     coverClass: '',
+    condition: '',
+    conditionWas: '',
     designation: '',
     docType: '',
     docNumber: '',
@@ -153,6 +156,9 @@ export function rowFromForm(form, { shape, place = null, suggestion = null, tree
     barangay: place?.barangay ?? null,
     barangay_psgc: place?.psgc ?? null,
     cover_class: landCover ? form.coverClass || null : null,
+    // Natural, degraded or restored (cbi_ubi.sql): sent only when there is one
+    // to set or clear, so a database without the column still saves the rest.
+    ...(form.condition || form.conditionWas ? { condition: landCover ? form.condition || null : null } : {}),
     suggested_class: landCover ? suggestion?.classId ?? null : null,
     suggestion_reason: landCover ? suggestion?.reason ?? null : null,
     trees_inside: treesCount,
@@ -183,6 +189,8 @@ export function formFromRow(row) {
     ...emptyAreaForm(row?.kind ?? 'land-cover'),
     name: row?.name ?? '',
     coverClass: row?.cover_class ?? '',
+    condition: row?.condition ?? '',
+    conditionWas: row?.condition ?? '',
     designation: row?.designation ?? '',
     docType: row?.doc_type ?? '',
     docNumber: row?.doc_number ?? '',
@@ -324,6 +332,7 @@ export function rowToFeature(row, { lguLabel = '', climate = null } = {}) {
       kind: row.kind,
       name: row.name,
       namriaClass: row.cover_class ?? null,
+      condition: row.condition ?? null,
       coverId: namria ? maiCoverOf(row.cover_class)?.id ?? null : null,
       coverLabel: namria?.label ?? null,
       barangay: row.barangay ?? null,
@@ -405,6 +414,7 @@ const PROPOSAL_FIELDS = [
   ['name', 'Name'],
   ['kind', 'Kind'],
   ['cover_class', 'Land cover'],
+  ['condition', 'Condition'],
   ['designation', 'Legal designation'],
   ['doc_title', 'Document'],
   ['planting_status', 'Planting status'],
@@ -418,6 +428,7 @@ const PROPOSAL_FIELDS = [
 const shown = (key, value) => {
   if (value == null || value === '') return '—';
   if (key === 'cover_class') return namriaClassById(value)?.label ?? value;
+  if (key === 'condition') return AREA_CONDITIONS.find((c) => c.id === value)?.label ?? value;
   return String(value);
 };
 

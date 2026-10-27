@@ -13,6 +13,7 @@ import {
   NEWS_BUCKET,
   newsProblems,
   newsStatus,
+  partnerList,
   photoPaths,
   publishDueNews,
   publishTimeOf,
@@ -31,7 +32,7 @@ const PinPicker = lazy(() => import('../../components/map/PinPicker.jsx'));
 // what it counts for in the CBI. Where (22 October): the venue pinned on the
 // map, and the planting site an event is made from.
 const EMPTY = {
-  title: '', event_date: '', event_end_date: '', one_day: true, event_kind: '', lgu_psgc: '', cbi_credit: '',
+  title: '', event_date: '', event_end_date: '', one_day: true, event_kind: '', lgu_psgc: '', cbi_credit: '', partners: '',
   venue: '', pin: null, map_area_id: null, body: '', when: 'now', publish_at: '',
 };
 /** The form's dates as the post keeps them: a one-day event has no last day. */
@@ -54,6 +55,9 @@ const STATUS_BADGE = {
 const isMissingColumn = (error) =>
   error?.code === '42703' || error?.code === 'PGRST204' || /column .* does not exist|Could not find the '/i.test(error?.message ?? '');
 const NEEDS_RERUN = 'Scheduling and archiving need supabase/inbox.sql to be run again.';
+/** The partners column comes with cbi_ubi.sql (step 38). */
+const NEEDS_PARTNERS = 'Naming partners needs supabase/cbi_ubi.sql to be run (step 38).';
+const missingWhich = (error) => (/partners/.test(error?.message ?? '') ? NEEDS_PARTNERS : NEEDS_RERUN);
 const input = 'mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none';
 
 /** The images among pasted or dropped items, named so a pasted one has a name too. */
@@ -209,6 +213,7 @@ export default function NewsPage() {
       event_kind: item.event_kind ?? '',
       lgu_psgc: item.lgu_psgc ? String(item.lgu_psgc) : '',
       cbi_credit: item.cbi_credit ?? '',
+      partners: partnerList(item.partners).join(', '),
       venue: item.venue ?? '',
       pin: Number.isFinite(item.venue_lat) && Number.isFinite(item.venue_lng) ? [item.venue_lat, item.venue_lng] : null,
       map_area_id: item.map_area_id ?? null,
@@ -270,13 +275,17 @@ export default function NewsPage() {
         ),
         photos: [...kept, ...uploaded],
       };
+      // Its partners (Indicator 24), sent when there are any or to clear
+      // them: a post saves before cbi_ubi.sql is run, as long as none is named.
+      const partners = partnerList(form.partners);
+      if (partners.length || partnerList(editing?.partners).length) row.partners = partners;
       // When it goes out: a time chosen, or now for a post still waiting.
       const scheduling = canSchedule && form.when === 'schedule';
       if (scheduling) row.publish_at = new Date(form.publish_at).toISOString();
       else if (editing && newsStatus(editing) === 'scheduled') row.publish_at = new Date().toISOString();
       if (editing) {
         const { data, error } = await supabase.from('news_posts').update(row).eq('id', editing.id).select().single();
-        if (error) throw new Error(isMissingColumn(error) ? NEEDS_RERUN : error.message);
+        if (error) throw new Error(isMissingColumn(error) ? missingWhich(error) : error.message);
         // Photos taken off the post come off storage too, once the post no longer shows them.
         const dropped = photoPaths((editing.photos ?? []).filter((url) => !kept.includes(url)));
         if (dropped.length) await supabase.storage.from(NEWS_BUCKET).remove(dropped);
@@ -293,7 +302,7 @@ export default function NewsPage() {
         });
       } else {
         const { data, error } = await supabase.from('news_posts').insert(row).select().single();
-        if (error) throw new Error(isMissingColumn(error) ? NEEDS_RERUN : error.message);
+        if (error) throw new Error(isMissingColumn(error) ? missingWhich(error) : error.message);
         setPosts((current) => [data ?? { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }, ...(current ?? [])]);
         setOutcome({
           ok: true,
@@ -329,7 +338,7 @@ export default function NewsPage() {
     const archived_at = archived ? new Date().toISOString() : null;
     const { error } = await supabase.from('news_posts').update({ archived_at }).eq('id', item.id);
     if (error) {
-      setOutcome({ ok: false, text: isMissingColumn(error) ? NEEDS_RERUN : error.message });
+      setOutcome({ ok: false, text: isMissingColumn(error) ? missingWhich(error) : error.message });
       return;
     }
     setPosts((current) => current.map((p) => (p.id === item.id ? { ...p, archived_at } : p)));
@@ -481,6 +490,13 @@ export default function NewsPage() {
               <option value="">None of these</option>
               {CBI_CREDITS.map((credit) => <option key={credit.id} value={credit.id}>{credit.label}</option>)}
             </select>
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            <span className="font-semibold text-slate-700">Partners</span>
+            <input value={form.partners} onChange={set('partners')} placeholder="e.g. LSPU, Haribon Foundation, NGCP" className={input} />
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Optional. The companies, NGOs, schools and international organisations it was held with, separated by commas.
+            </span>
           </label>
         </div>
         {pinning && (

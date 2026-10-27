@@ -6,7 +6,7 @@ vi.mock('../supabaseClient.js', async () => {
 });
 
 import { cbiEventCounts, eventDays, newsProblems, whenAndWhere } from './news.js';
-import { cbiTable } from './reports/thematic.js';
+import { cbiPoints } from './cbiPoints.js';
 
 describe('an event’s days, as the line under its title', () => {
   it('a day, a few days, across months and across years', () => {
@@ -40,12 +40,14 @@ describe('the CBI’s projects, policies, partnerships and outreach', () => {
     expect(cbiEventCounts(POSTS, { lgu: null, year: 2026 }).outreach).toHaveLength(2);
   });
 
-  it('fills the CBI table’s governance rows, the budget still outside', () => {
-    const table = cbiTable({ events: cbiEventCounts(POSTS, { lgu: 403426000, year: 2026 }), year: 2026 });
-    const row = (part) => table.rows.find((r) => r.name.includes(part));
-    expect(row('27. Outreach').value).toBe('1 in 2026: CBI Training');
-    expect(row('24. Partnerships').value).toBe('1 in 2026: MOA with UPLB');
-    expect(row('25. Biodiversity projects').value).toBe('None posted for 2026');
-    expect(row('16. Budget').value).toBe('Outside this system');
+  it('scores the governance indicators from them, the budget left to the office', () => {
+    const cbi = cbiPoints({ events: cbiEventCounts(POSTS, { lgu: 403426000, year: 2026 }), population: 1000000 });
+    const no = (n) => cbi.indicators.find((i) => i.no === n);
+    expect(no(27)).toMatchObject({ count: 1, value: 1, points: 0, source: 'system' });
+    // No partner named on the MOA: the partnership event stands in, and says so.
+    expect(no(24)).toMatchObject({ value: 1, points: 1, proxy: 'events' });
+    expect(no(25)).toMatchObject({ count: 0, value: 0, points: 0 });
+    expect(no(16)).toMatchObject({ points: null, source: null });
   });
+
 });

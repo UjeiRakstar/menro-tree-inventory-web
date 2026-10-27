@@ -28,7 +28,7 @@ const SUITES = [
   ['permits, by LGU', 'permits-fence.mjs'],
   ['RISE species fields', 'rise.mjs'],
   ['map areas', 'areas.mjs'],
-  ['office settings and AI keys', 'settings.mjs'],
+  ['office settings, AI keys and the CBI self-assessment', 'settings.mjs'],
   ['inboxes, news and messages', 'inbox.mjs'],
   ['residents, the leaderboard and office set-up', 'community.mjs'],
   ['replies to the public', 'replies.mjs'],

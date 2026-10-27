@@ -680,10 +680,20 @@ function summaryText({ where, short, totalHa, places, placeLabel, population, el
   );
 }
 
-const SOURCES =
+/** How each report's Data and Limitations opens: Green Tag is named here, and only here. */
+export const PREPARED_WITH =
   'This report was prepared with the Green Tag Tree Inventory System, developed for the Provincial Government of Laguna ' +
   'through its Provincial Government Environment and Natural Resources Office (PGENRO), with Laguna State Polytechnic University. ' +
-  'Its figures and narrative are written by the system from the data below, then reviewed and edited by the office.\n\n' +
+  'Its figures and narrative are written by the system from the data below, then reviewed and edited by the office.';
+
+/** How each one ends: the figures are the users' own. */
+export const DISCLAIMER =
+  'Disclaimer: this report is based on the data entered by its users. The population, for example, is the PSA’s (PSGC) or as ' +
+  'validated by the user. Where a figure differs from another source — the Community-Based Monitoring System (CBMS), or the figures ' +
+  'in the CLUP, CDP or CDRA — the latest data should be used, as validated by the user.';
+
+const SOURCES =
+  `${PREPARED_WITH}\n\n` +
   'Boundaries: PSA and NAMRIA; population and urban or rural: PSA 2024 Census (PSGC 3rd quarter 2026), or the office’s own figures. ' +
   'Elevation: Copernicus DEM, on a grid of about 60 m; slope worked out from it cell by cell, in the FLUP classes. Climate: DOST-PAGASA ' +
   'CLIRAM. Hazards: UP NOAH flood and rain-induced landslide susceptibility. Trees: the field inventory of the LGU’s field officers and ' +
@@ -693,9 +703,7 @@ const SOURCES =
   'Limitations: the figures describe exposure, not risk; the tree inventory covers the trees tagged so far, not every tree; and each ' +
   'layer is measured on a grid of about 60 m, so small areas are approximate. For planning purposes only — not a land title, survey ' +
   'plan or proof of ownership.\n\n' +
-  'Disclaimer: this report is based on the data entered by its users. The population, for example, is the PSA’s (PSGC) or as ' +
-  'validated by the user. Where a figure differs from another source — the Community-Based Monitoring System (CBMS), or the figures ' +
-  'in the CLUP, CDP or CDRA — the latest data should be used, as validated by the user.';
+  DISCLAIMER;
 
 /**
  * Where the data and the methods come from, with where to find them: the

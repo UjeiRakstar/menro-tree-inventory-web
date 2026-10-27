@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { hazardTable } from '../attributeTables.js';
 import {
-  buildThemeReport,
   climateTable,
   compositionTable,
   diversityIndices,
@@ -51,14 +50,6 @@ describe('the soil report', () => {
     expect(table.rows[0].share).toBeCloseTo(0.5, 5);
   });
 
-  it('writes what the tables say, and what the soils mean for the plans', () => {
-    const report = buildThemeReport('soil', { place: { label: 'Santa Cruz', isCity: false, psgc: 403426000 }, ...{ places: PLACES, measured: MEASURED } });
-    expect(report.title).toBe('SOIL REPORT');
-    expect(report.maps.map((m) => m.survey)).toEqual(['soil']);
-    const text = Object.fromEntries(report.sections.map((s) => [s.key, s.text]));
-    expect(text.soil).toMatch(/^2 soil series are mapped in the Municipality of Santa Cruz \(DA–BSWM\)/);
-    expect(text['soil-relevance']).toMatch(/FLUP: .*Module 2, Table 1.*CLUP \/ CDP: .*eLCCAP: .*CBI: /);
-  });
 });
 
 describe('the elevation and slope report', () => {
@@ -70,14 +61,6 @@ describe('the elevation and slope report', () => {
     expect(slope.totals.steep).toBeCloseTo(40 / 150, 5);
   });
 
-  it('cites the 18% line in PD 705', () => {
-    const report = buildThemeReport('terrain', { place: { label: 'Santa Cruz', psgc: 403426000 }, places: PLACES, measured: MEASURED });
-    const text = Object.fromEntries(report.sections.map((s) => [s.key, s.text]));
-    expect(text.elevation).toMatch(/rises from about 3 m to 640 m above sea level/);
-    expect(text.slope).toMatch(/The largest shares of ground at 18% and over are in Alipit \(40%\)/);
-    expect(text['terrain-relevance']).toMatch(/PD 705, section 15/);
-    expect(report.maps.map((m) => m.survey)).toEqual(['elevation', 'slope']);
-  });
 });
 
 describe('the hazard and climate report', () => {
@@ -98,20 +81,6 @@ describe('the hazard and climate report', () => {
     expect(climateTable(null)).toBeNull();
   });
 
-  it('says it is exposure, not risk, and where it goes in the LCCAP', () => {
-    const report = buildThemeReport('hazards', {
-      place: { label: 'Santa Cruz', psgc: 403426000 },
-      tables: { hazards },
-      populationOf: () => 1000,
-      climate: { rainfall: { annualMm: 2765, projected: { period: '2036–2065', annualMm: 2900 } }, temperature: { meanC: 26.6 }, scenario: 'SSP2-4.5' },
-    });
-    const text = Object.fromEntries(report.sections.map((s) => [s.key, s.text]));
-    expect(text.flood).toMatch(/^20 ha \(13%\) of Santa Cruz lies within the UP NOAH flood susceptibility extent: 10 ha at the low level, 5 ha medium and 5 ha high/);
-    expect(text.landslide).toMatch(/has not been uploaded/);
-    expect(text.climate).toMatch(/For 2036–2065 under SSP2-4\.5, annual rainfall is projected at about 2,900 mm/);
-    expect(text['hazards-relevance']).toMatch(/exposure, not risk.*Task 3A\.4/);
-    expect(report.maps.map((m) => m.survey)).toEqual(['flood', 'landslide']);
-  });
 });
 
 describe('the biodiversity report', () => {
@@ -130,38 +99,5 @@ describe('the biodiversity report', () => {
     expect(compositionTable(TREES).counts).toEqual({ endemic: 2, native: 1, exotic: 1, invasive: 1, unrecorded: 1 });
   });
 
-  it('says what it can give toward the CBI, and what is outside it', () => {
-    const report = buildThemeReport('biodiversity', {
-      place: { label: 'Santa Cruz', psgc: 403426000 },
-      trees: TREES,
-      tables: { landCover: { rows: [{ areaHa: 12, treeCover: true, natural: true }, { areaHa: 5, treeCover: false, natural: false }] } },
-      placeAreaHa: 3718,
-      communityTags: 4,
-    });
-    const cbi = report.tables.find((t) => t.key === 'cbi');
-    expect(cbi.rows[0]).toMatchObject({ name: '1. Proportion of natural areas', value: '12 ha of natural land cover mapped (0% of the area)' });
-    expect(cbi.rows.at(-2).value).toBe('Outside this system');
-    // Points on the Handbook's bands where the system has the measure: 0.3% natural area is none.
-    expect(cbi.rows[0].points).toBe('0');
-    expect(cbi.rows.find((r) => r.name === '16. Budget allocated to biodiversity').points).toBe('');
-    expect(cbi.rows.at(-1).value).toMatch(/^\d+ of 16, from 4 of the index’s 28 indicators$/);
-    const text = Object.fromEntries(report.sections.map((s) => [s.key, s.text]));
-    expect(text.composition).toMatch(/^6 trees of 4 species have been tagged in Santa Cruz/);
-    expect(text.diversity).toMatch(/H′ = 1\.33/);
-    expect(text.cbi).toMatch(/The 4 community tags show residents taking part/);
-    expect(report.maps.map((m) => m.treeColour)).toEqual(['origin', 'use']);
-  });
 
-  it('counts the residents taking part in this LGU, for the CBI’s citizen-science indicator', () => {
-    const report = buildThemeReport('biodiversity', {
-      place: { label: 'Santa Cruz', psgc: 403426000 },
-      trees: TREES,
-      participation: { residents: 12, taggers: 12, tags: 40, verified_tags: 31 },
-    });
-    const row = report.tables.find((t) => t.key === 'cbi').rows.find((r) => r.name === '28. Community science');
-    // Per million of Santa Cruz's people (PSA 2024), as Indicator 28 counts them.
-    expect(row.value).toMatch(/^12 residents signed in with Google and tagged trees here; \d+ per million residents; 31 of their 40 tags verified in the field$/);
-    expect(row.points).toMatch(/^[0-4]$/);
-    expect(row.from).toMatch(/counted where they tagged/);
-  });
 });

@@ -25,6 +25,7 @@ import { ProvisionalNote } from '../public/Provisional.jsx';
 import { loadMeasuringLayers } from '../../lib/layers/browser.js';
 import { factsFor } from '../../lib/layers/facts.js';
 import { groundOf } from '../../lib/mapAreas.js';
+import { AREA_CONDITIONS } from '../../lib/cbiPoints.js';
 import { asRecommended, recommendSpecies, siteOf } from '../../lib/speciesMatch.js';
 import SpeciesSuggestions from './SpeciesSuggestions.jsx';
 
@@ -462,6 +463,18 @@ export default function AreaForm({
                       <option key={cls.id} value={cls.id}>{cls.label}</option>
                     ))}
                   </optgroup>
+                </select>
+              </Field>
+
+              {/* The Handbook's Indicator 1 counts only natural areas "not highly
+                  disturbed", and restored ones too; 7A counts what was restored. */}
+              <Field id={id('condition')} label="Condition"
+                hint="Optional. For the City / Urban Biodiversity Index: a degraded forest is not counted as natural; a restored area is, whatever its cover.">
+                <select id={id('condition')} value={form.condition} onChange={set('condition')} className={input}>
+                  <option value="">Not said</option>
+                  {AREA_CONDITIONS.map((condition) => (
+                    <option key={condition.id} value={condition.id}>{condition.label}</option>
+                  ))}
                 </select>
               </Field>
             </>

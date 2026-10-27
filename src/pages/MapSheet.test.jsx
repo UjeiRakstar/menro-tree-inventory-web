@@ -112,8 +112,10 @@ describe('MapSheet', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
     const summary = await screen.findByRole('textbox', { name: 'Executive summary — text' });
     expect(summary.value).toMatch(/Municipality of Santa Cruz/);
-    // One report, no choosing: the six became one (27 October).
-    expect(screen.queryByRole('radiogroup', { name: 'Which report' })).not.toBeInTheDocument();
+    // The Ecological Profile first; beside it, for a municipality, the UBI, and the GHG report (27 October).
+    const choices = within(screen.getByRole('radiogroup', { name: 'Which report' })).getAllByRole('radio');
+    expect(choices.map((choice) => choice.textContent)).toEqual(['Ecological profile and tree inventory', 'Urban Biodiversity Index', 'Greenhouse gas']);
+    expect(choices[0]).toHaveAttribute('aria-checked', 'true');
     for (const heading of [
       '1. Executive Summary',
       '2. Ecological Profile',
@@ -145,6 +147,22 @@ describe('MapSheet', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Write again from the figures/ }));
     expect(screen.getByRole('textbox', { name: 'Executive summary — text' }).value).toMatch(/Municipality of Santa Cruz/);
+  });
+
+  it('writes the Urban Biodiversity Index for a municipality, the Ecological Profile its introduction, and the GHG report', async () => {
+    show();
+    fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
+    fireEvent.click(await screen.findByRole('radio', { name: 'Urban Biodiversity Index' }));
+    expect(await screen.findByRole('heading', { name: 'URBAN BIODIVERSITY INDEX REPORT' })).toBeInTheDocument();
+    for (const heading of ['2. Ecological Profile', '2.5 Biodiversity Features', '3. Native Biodiversity in the City', '5. Governance and Management of Biodiversity']) {
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('textbox', { name: 'Executive summary — text' }).value).toMatch(/Urban Biodiversity Index to the Municipality of Santa Cruz/);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Greenhouse gas' }));
+    expect(await screen.findByRole('heading', { name: 'GREENHOUSE GAS REPORT' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '5. Emissions' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Emissions — text' }).value).toMatch(/GHGI System of Laguna State Polytechnic University/);
   });
 
   it('colours the trees by origin, keyed with how many of each', async () => {

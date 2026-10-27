@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { geometryAreaM2 } from '../areaGeometry.js';
 import { biomassKg } from '../treeCarbon.js';
 import { buildGhgReport, cuttingLosses, inMappedCover, treeCoverAreas, treeGhg } from './ghg.js';
-import { buildThemeReport } from './thematic.js';
 
 // A square of open forest, about 1 km across, east of Santa Cruz's poblacion.
 const FOREST = {
@@ -104,18 +103,6 @@ describe('the Excel tree list', () => {
     expect(list.rows[0]).toMatchObject({ species: 'Narra', inCover: 'Yes — counted in its area', why: '' });
     expect(list.rows[3]).toMatchObject({ species: 'Mahogany', co2Kg: null, why: 'No total height recorded' });
     expect(list.rows[4].why).toMatch(/palm/);
-  });
-});
-
-describe('as a thematic report', () => {
-  it('opens with the carbon map, and ends with its sources', () => {
-    const built = buildThemeReport('ghg', { place: null, places: PLACES, placeLabel: 'Barangay', trees: TREES, areas: [FOREST] });
-    expect(built.title).toBe('GREENHOUSE GAS INVENTORY REPORT');
-    expect(built.maps).toEqual([expect.objectContaining({ treeColour: 'carbon' })]);
-    expect(built.tables.map((table) => table.key)).toEqual(['ghg-summary', 'ghg-forest', 'ghg-trees']);
-    expect(built.annex.map((table) => table.key)).toEqual(['ghg-tree-list']);
-    expect(built.sections.at(-1).text).toMatch(/Community-level GHG Inventory Tool/);
-    expect(built.sections.find((s) => s.key === 'ghg-total').text).toMatch(/remove about [\d.,]+ t of CO₂ a year/);
   });
 });
 

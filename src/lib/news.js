@@ -57,12 +57,13 @@ export const PURPOSE_OF_KIND = Object.freeze({
 let cbiEvents = null;
 
 /**
- * Every published post's purpose, day and LGU — what the city panel counts
- * its CBI events from. Read once a page; null when News & Events cannot be
- * read (inbox.sql not run again since 21 October).
+ * Every published post's purpose, day, LGU and partners — what the city panel
+ * counts its CBI events from. Read once a page; null when News & Events cannot
+ * be read (inbox.sql not run again since 21 October). Every column, so the
+ * partners (cbi_ubi.sql) come with them once there, and nothing fails before.
  */
 export function loadCbiEvents() {
-  cbiEvents ??= Promise.resolve(supabase.from('news_posts').select('id, title, event_date, lgu_psgc, cbi_credit'))
+  cbiEvents ??= Promise.resolve(supabase.from('news_posts').select('*'))
     .then(({ data, error }) => (error ? null : Array.isArray(data) ? data : []))
     .catch(() => null);
   return cbiEvents;
@@ -85,7 +86,40 @@ export function cbiEventCounts(posts, { lgu = null, year = new Date().getFullYea
     if (lgu !== null && Number(post.lgu_psgc) !== Number(lgu)) continue;
     counts[post.cbi_credit].push(post);
   }
+  counts.partners = partnersOf(posts, { lgu, year });
   return counts;
+}
+
+/** A partner's name as one, however it was typed: "LSPU", "lspu ", "L.S.P.U." are the same. */
+const partnerKey = (name) => String(name ?? '').toLowerCase().replace(/[^a-z0-9ñ]+/g, '');
+
+/** A post's partners, as typed: one per line or comma, blanks and repeats left out. */
+export function partnerList(value) {
+  const seen = new Set();
+  const list = Array.isArray(value) ? value : String(value ?? '').split(/[,\n;]/);
+  return list
+    .map((name) => String(name).trim())
+    .filter((name) => {
+      const key = partnerKey(name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/**
+ * Indicator 24 counts organisations, not events (cbi_ubi.sql, 27 October):
+ * every partner named on a place's events in a year, each once, whatever the
+ * event's purpose.
+ */
+export function partnersOf(posts, { lgu = null, year = new Date().getFullYear() } = {}) {
+  const named = new Map();
+  for (const post of Array.isArray(posts) ? posts : []) {
+    if (!post?.event_date || Number(String(post.event_date).slice(0, 4)) !== Number(year)) continue;
+    if (lgu !== null && Number(post.lgu_psgc) !== Number(lgu)) continue;
+    for (const name of partnerList(post.partners)) if (!named.has(partnerKey(name))) named.set(partnerKey(name), name);
+  }
+  return [...named.values()];
 }
 
 /** What is wrong with a post before it is saved; empty when it can be. */

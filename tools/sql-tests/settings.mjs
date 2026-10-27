@@ -250,6 +250,46 @@ check('…and still its own PGENRO profile', (await saveProfile(PGENRO, 'pgenro'
 check('an LGU office still keeps only its own', (await saveProfile(MENRO_CLB, String(SCZ), 'Hijack')) !== null);
 check('nobody keeps an office that is not one', (await as(PGENRO, 'authenticated', () => one(`select public.keeps_office('not-an-office') as ok`))).ok === false);
 
+// ---- cbi_ubi.sql: the City and Urban Biodiversity Index (27 October) ---------------------
+for (const file of ['planting_requests.sql', 'inbox.sql']) await asEditor(SQL(file));
+for (const label of ['runs', 'runs twice']) {
+  try {
+    const out = await asEditor(SQL('cbi_ubi.sql'));
+    const rows = out[out.length - 1].rows;
+    check(`cbi_ubi.sql ${label}`, rows.every((r) => r.ok !== false),
+      rows.map((r) => `${r.check}=${r.ok}${r.detail ? ' (' + r.detail + ')' : ''}`).join('; '));
+  } catch (error) {
+    check(`cbi_ubi.sql ${label}`, false, error.message);
+    process.exit(1);
+  }
+}
+const assess = (who, lgu, indicator, points, value = null) => as(who, 'authenticated', () => fails(() => db.query(
+  `insert into public.cbi_self_assessments (lgu_psgc, year, indicator, points, value, note) values ($1, 2026, $2, $3, $4, 'LBSAP 2025')
+   on conflict (lgu_psgc, year, indicator) do update set points = excluded.points, value = excluded.value`, [lgu, indicator, points, value])));
+check('an office self-assesses its own LGU', (await assess(MENRO_SCZ, SCZ, 17, 2)) === null);
+const assessed = await one(`select updated_by, points from public.cbi_self_assessments where lgu_psgc = $1 and indicator = 17`, [SCZ]);
+check('…stamped with who saved it', assessed.updated_by === MENRO_SCZ && assessed.points === 2);
+check('…and changes it', (await assess(MENRO_SCZ, SCZ, 17, 3)) === null);
+check('another LGU cannot write it', (await assess(MENRO_CLB, SCZ, 16, null, 2.5)) !== null);
+check('…nor read it', (await as(MENRO_CLB, 'authenticated', () => count(`select count(*) n from public.cbi_self_assessments`))) === 0);
+check('PGENRO reads every LGU’s', (await as(PGENRO, 'authenticated', () => count(`select count(*) n from public.cbi_self_assessments`))) === 1);
+check('a trainee changes nothing of the real office’s', (await assess(TRAINEE, SCZ, 16, null, 2.5)) !== null);
+check('the public reads none', (await as(null, 'anon', () => fails(() => db.query(`select * from public.cbi_self_assessments`)))) !== null);
+check('a level is 0 to 4', (await assess(MENRO_SCZ, SCZ, 18, 5)) !== null);
+check('an indicator is 1 to 28', (await assess(MENRO_SCZ, SCZ, 29, 1)) !== null);
+check('an entry says something', (await assess(MENRO_SCZ, SCZ, 19, null, null)) !== null);
+const area = (kind, condition) => fails(() => db.query(
+  `insert into public.map_areas (kind, name, geometry, cover_class, condition)
+   values ($1, 'Test', '{"type":"Polygon","coordinates":[[[121,14],[121.01,14],[121.01,14.01],[121,14]]]}', $2, $3)`,
+  [kind, kind === 'land-cover' ? 'open-forest' : null, condition]));
+check('a land cover area is marked restored', (await area('land-cover', 'restored')) === null);
+check('…but not with a condition that is not one', (await area('land-cover', 'pristine')) !== null);
+check('a planting site has no condition', (await area('planting-site', 'natural')) !== null);
+await db.query(`insert into public.news_posts (title, event_date) values ('Tree planting', '2026-11-08')`);
+const partners = (list) => fails(() => db.query(`update public.news_posts set partners = $1`, [list]));
+check('an event names its partners', (await partners(['LSPU', 'Haribon Foundation'])) === null);
+check('…up to 40', (await partners(Array.from({ length: 41 }, (_, i) => `Partner ${i}`))) !== null);
+
 const failed = results.filter((r) => !r.ok);
 console.log(`
 ${results.length - failed.length}/${results.length} passed`);

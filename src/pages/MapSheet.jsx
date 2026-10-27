@@ -15,7 +15,13 @@ import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
 import { loadGrid, loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
 import { slopeKey, slopePicture, terrainFacts } from '../lib/layers/terrain.js';
-import { buildEcologicalReport } from '../lib/reports/ecological.js';
+import { ECOLOGICAL_REPORT, buildEcologicalReport } from '../lib/reports/ecological.js';
+import { buildIndexReport, indexReportFor } from '../lib/reports/biodiversityIndex.js';
+import { GHG_REPORT, buildGreenhouseReport } from '../lib/reports/greenhouse.js';
+import { loadCbiEvents } from '../lib/news.js';
+import { loadVerifiedPlans } from '../lib/lccap.js';
+import { loadCommunityCounts } from '../lib/community.js';
+import { loadSelfAssessment } from '../lib/cbiSelf.js';
 import { LAGUNA_GRID } from '../lib/layers/grid.js';
 import { areaFacts } from '../lib/layers/measure.js';
 import { groundOf } from '../lib/mapAreas.js';
@@ -586,13 +592,89 @@ export default function MapSheet() {
     [lgu, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf, phenologyData]
   );
 
-  // The office's edits, by section; a section not edited follows the figures.
+  // Which report (27 October): the Ecological Profile; the City Biodiversity
+  // Index for a city, the Urban Biodiversity Index for a municipality, each
+  // with the Ecological Profile as its introduction (an LGU's sheet only);
+  // or the greenhouse gas report.
+  const [reportKind, setReportKind] = useState('ecological');
+  const reportChoices = [
+    ECOLOGICAL_REPORT,
+    ...(lgu ? [indexReportFor(lgu)] : []),
+    GHG_REPORT,
+  ];
+  const chosenKind = reportChoices.some((choice) => choice.id === reportKind) ? reportKind : 'ecological';
+  const indexKind = chosenKind === 'cbi' || chosenKind === 'ubi';
+  const reportYear = new Date().getFullYear();
+  const lguPsgc = lgu?.psgc ?? null;
+  const [indexData, setIndexData] = useState({ newsPosts: null, climatePlans: null, communityScientists: null, self: {}, selfMissing: false });
+  useEffect(() => {
+    if (tab !== 'report' || !indexKind || !lguPsgc) return undefined;
+    let cancelled = false;
+    Promise.all([loadCbiEvents(), loadVerifiedPlans(), loadCommunityCounts(lguPsgc), loadSelfAssessment(lguPsgc, reportYear)]).then(
+      ([newsPosts, climatePlans, counts, self]) => {
+        if (cancelled) return;
+        setIndexData({
+          newsPosts,
+          climatePlans,
+          communityScientists: counts ? Number(counts.taggers ?? counts.residents) : null,
+          self: self.entries,
+          selfMissing: self.missing,
+        });
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, indexKind, lguPsgc, reportYear]);
+  // The place's cutting permits, for the GHG report's losses.
+  const [permits, setPermits] = useState([]);
+  useEffect(() => {
+    if (tab !== 'report' || chosenKind !== 'ghg') return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data } = await everyRow(() =>
+        supabase.from('permits').select('id, tree_id, status, created_at, number_of_trees, lgu_psgc')
+      );
+      if (cancelled) return;
+      const rows = Array.isArray(data) ? data : [];
+      setPermits(lguPsgc ? rows.filter((permit) => Number(permit.lgu_psgc) === lguPsgc) : rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, chosenKind, lguPsgc]);
+  const report = useMemo(() => {
+    if (chosenKind === 'ecological') return ecoReport;
+    const ctx = {
+      place: lgu,
+      places,
+      measured: measured.facts,
+      grids: measured.grids ?? null,
+      placeLabel,
+      tables: tablesByKey,
+      trees: tableTrees,
+      placeOf,
+      climate,
+      populationOf,
+      urbanOf,
+      profiles: phenologyData.profiles,
+      phenology: phenologyData.records,
+      features: measuredAreas,
+      year: reportYear,
+    };
+    if (chosenKind === 'ghg') return buildGreenhouseReport({ ...ctx, permits });
+    return buildIndexReport({ ...ctx, ...indexData });
+    // tablesByKey is rebuilt from tables each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenKind, ecoReport, lgu, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf, phenologyData, measuredAreas, reportYear, permits, indexData]);
+
+  // The office's edits, by report and section; a section not edited follows the figures.
   const [edits, setEdits] = useState({});
   const [reportNote, setReportNote] = useState(null);
   const [reportBusy, setReportBusy] = useState('');
-  const editKey = (key) => `ecological/${key}`;
-  const sections = ecoReport.sections.map((section) => ({ ...section, text: edits[editKey(section.key)] ?? section.text }));
-  const reportTitle = ecoReport.title;
+  const editKey = (key) => `${report.kind}/${key}`;
+  const sections = report.sections.map((section) => ({ ...section, text: edits[editKey(section.key)] ?? section.text }));
+  const reportTitle = report.title;
 
   async function improveReport() {
     setReportBusy('improve');
@@ -628,7 +710,7 @@ export default function MapSheet() {
   }, [paper, lguName, areaId, basemap.id]);
   useEffect(() => {
     if (tab !== 'report' || capture || !mapLayers.loaded) return;
-    const missing = ecoReport.maps.filter((map) => !mapImages[map.key]);
+    const missing = report.maps.filter((map) => !mapImages[map.key]);
     if (missing.length === 0) return;
     // A layer not uploaded has no map to draw; the report says so.
     const unavailable = missing.filter((map) => map.survey && !layerFor(map.survey));
@@ -642,7 +724,7 @@ export default function MapSheet() {
     });
     // layerFor and params are read as they are now.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, ecoReport, mapImages, capture, mapLayers.loaded]);
+  }, [tab, report, mapImages, capture, mapLayers.loaded]);
   useEffect(() => {
     if (!capture) return undefined;
     const [map] = capture.queue;
@@ -706,7 +788,7 @@ export default function MapSheet() {
     setReportNote(null);
     try {
       const figuresByKey = {};
-      for (const spec of ecoReport.maps) {
+      for (const spec of report.maps) {
         const image = mapImages[spec.key];
         figuresByKey[spec.key] = image?.url
           ? { data: await (await fetch(image.url)).arrayBuffer(), width: image.width, height: image.height, caption: spec.caption }
@@ -728,11 +810,12 @@ export default function MapSheet() {
         heading: headingOf(lgu),
         title: reportTitle,
         preparedBy: preparedText,
-        chapters: ecoReport.chapters,
+        chapters: report.chapters,
         figuresByKey,
         textOf: (section) => textOf.get(section.key) ?? section.text,
       });
-      saveFile(blob, `${fileStem}_Ecological-Profile-and-Tree-Inventory-Report.docx`);
+      const reportName = report.title.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()).replace(/\s+/g, '-');
+      saveFile(blob, `${fileStem}_${reportName}.docx`);
     } catch (failure) {
       setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
     } finally {
@@ -745,7 +828,7 @@ export default function MapSheet() {
     setReportBusy('xlsx');
     setReportNote(null);
     try {
-      const blob = await tablesWorkbook(ecoReport.tables, { lgu, preparedBy: preparedText });
+      const blob = await tablesWorkbook(report.tables, { lgu, preparedBy: preparedText });
       saveFile(blob, `${fileStem}_Report-tables.xlsx`);
     } catch (failure) {
       setReportNote({ ok: false, text: `The Excel file could not be made: ${failure.message}` });
@@ -1076,11 +1159,37 @@ export default function MapSheet() {
       )}
       {tab === 'report' && (
         <div className="p-6">
+          <div role="radiogroup" aria-label="Which report" className="mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center gap-2 print:hidden">
+            <span className="text-sm font-semibold text-slate-600">Report:</span>
+            {reportChoices.map((choice) => (
+              <button
+                key={choice.id}
+                type="button"
+                role="radio"
+                aria-checked={chosenKind === choice.id}
+                onClick={() => {
+                  setReportKind(choice.id);
+                  setReportNote(null);
+                }}
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition ${
+                  chosenKind === choice.id ? 'bg-green-700 text-white ring-green-700' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {choice.id === 'ecological' ? 'Ecological profile and tree inventory' : choice.label}
+              </button>
+            ))}
+            {indexKind && indexData.selfMissing && (
+              <span className="text-xs text-amber-800">The self-assessment needs supabase/cbi_ubi.sql to be run (step 38).</span>
+            )}
+            {indexKind && !indexData.selfMissing && (
+              <span className="text-xs text-slate-500">The office&apos;s self-assessment is in Settings.</span>
+            )}
+          </div>
           <ChapterReportView
             heading={headingOf(lgu)}
             title={reportTitle}
             preparedBy={preparedText}
-            report={ecoReport}
+            report={report}
             sections={sections}
             mapImages={Object.fromEntries(Object.entries(mapImages).map(([key, image]) => [key, image?.url ?? null]))}
             unavailable={Object.keys(mapImages).filter((key) => mapImages[key]?.unavailable)}

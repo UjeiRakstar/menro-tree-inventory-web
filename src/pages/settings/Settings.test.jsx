@@ -344,3 +344,45 @@ describe('Your account — the person, apart from the office (27 October)', () =
     expect(screen.getByRole('form', { name: 'Your account' })).toBeInTheDocument();
   });
 });
+
+describe('the biodiversity index self-assessment (27 October)', () => {
+  it('is the UBI for a municipality: a level from the Handbook’s scale, a figure, the evidence — saved for the year', async () => {
+    supabaseMock.setResponse('cbi_self_assessments:select', { data: [{ indicator: 16, points: null, value: 1.5, note: 'AIP 2026' }], error: null });
+    show();
+    open('Urban Biodiversity Index');
+    const form = await screen.findByRole('form', { name: 'Urban Biodiversity Index self-assessment' });
+    await waitFor(() => expect(within(form).getByLabelText(/^16\. Budget allocated to biodiversity/)).toHaveValue('1.5'));
+    fireEvent.change(within(form).getByLabelText(/^17\. Policies, rules and regulations/), { target: { value: '2' } });
+    fireEvent.change(within(form).getByLabelText('Evidence for indicator 17'), { target: { value: 'LBSAP 2025' } });
+    // The budget taken out: it is cleared, not left as it was.
+    fireEvent.change(within(form).getByLabelText(/^16\. Budget allocated to biodiversity/), { target: { value: '' } });
+    fireEvent.click(within(form).getByRole('button', { name: /^Save \d{4}$/ }));
+    await waitFor(() => expect(supabaseMock.writesTo('cbi_self_assessments', 'upsert')).toHaveLength(1));
+    const [upsert] = supabaseMock.writesTo('cbi_self_assessments', 'upsert');
+    expect(upsert.payload).toEqual([expect.objectContaining({ lgu_psgc: 403426000, indicator: 17, points: 2, value: null, note: 'LBSAP 2025' })]);
+    const [cleared] = supabaseMock.writesTo('cbi_self_assessments', 'delete');
+    expect(cleared.filters).toEqual(expect.arrayContaining([['lgu_psgc', 403426000], ['indicator', [16]]]));
+  });
+
+  it('wants a number for a figure', async () => {
+    show();
+    open('Urban Biodiversity Index');
+    const form = await screen.findByRole('form', { name: 'Urban Biodiversity Index self-assessment' });
+    fireEvent.change(within(form).getByLabelText(/^22\. Cross-sectoral/), { target: { value: 'five' } });
+    fireEvent.click(within(form).getByRole('button', { name: /^Save \d{4}$/ }));
+    expect(await within(form).findByText('A number, please.')).toBeInTheDocument();
+    expect(supabaseMock.writesTo('cbi_self_assessments', 'upsert')).toHaveLength(0);
+  });
+
+  it('says what to run when the table is not there yet', async () => {
+    supabaseMock.setResponse('cbi_self_assessments:select', { data: null, error: { code: '42P01', message: 'relation "public.cbi_self_assessments" does not exist' } });
+    show();
+    open('Urban Biodiversity Index');
+    expect(await screen.findByText(/needs supabase\/cbi_ubi\.sql to be run/)).toBeInTheDocument();
+  });
+
+  it('is the CBI for a city, and not offered to PGENRO, which has no LGU of its own', () => {
+    show(PGENRO);
+    expect(screen.queryByRole('button', { name: /Biodiversity Index/ })).not.toBeInTheDocument();
+  });
+});

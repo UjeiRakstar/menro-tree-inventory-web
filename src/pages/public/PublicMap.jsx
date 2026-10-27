@@ -39,7 +39,8 @@ import { areaPermission, canMakeEventAt, documentFolderOf, emptyAreaForm, formFr
 import { boundsOfShape, shapeFromGeometry } from '../../lib/areaImport.js';
 import { ROLES, roleOf, isSuperAdmin } from '../../lib/roles.js';
 import { centroidOf, geometryAreaM2, toHectares } from '../../lib/areaGeometry.js';
-import { areaFigures, cbiPoints } from '../../lib/cbiPoints.js';
+import { areaFigures, cbiPoints, nativeSpeciesChange } from '../../lib/cbiPoints.js';
+import { connectivityOf } from '../../lib/connectivity.js';
 import { loadCommunityCounts } from '../../lib/community.js';
 import { loadVerifiedPlans, planBadges } from '../../lib/lccap.js';
 import { lguFacts } from '../../lib/psgc.js';
@@ -1361,9 +1362,12 @@ export function TreeMap({
   const cityCbi = useMemo(() => {
     if (!selectedCity) return null;
     const feature = municipalityNamed(selectedCity.name);
+    const areas = areaFigures(savedAreas.features, selectedCity.name);
     return cbiPoints({
       trees: areaTrees,
-      areas: areaFigures(savedAreas.features, selectedCity.name),
+      areas,
+      connectivity: connectivityOf(areas.natural),
+      nativeChange: nativeSpeciesChange(areaTrees),
       placeAreaHa: feature ? toHectares(geometryAreaM2(feature.geometry)) : 0,
       population: lguFacts(selectedCity.psgc)?.population2024 ?? 0,
       events: eventPosts ? cbiEventCounts(eventPosts, { lgu: selectedCity.psgc }) : null,

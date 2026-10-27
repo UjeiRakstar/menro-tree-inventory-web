@@ -7,7 +7,7 @@ vi.mock('../supabaseClient.js', async () => {
 
 import { supabaseMock } from '../test/supabaseMock.js';
 import { forgetVerifiedPlans, lccapProblems, planBadges } from './lccap.js';
-import { cbiTable } from './reports/thematic.js';
+import { cbiPoints, describeIndicator } from './cbiPoints.js';
 import ClimatePlanSection from '../pages/settings/ClimatePlanSection.jsx';
 import ClimatePlans from '../pages/pgenro/ClimatePlans.jsx';
 import LguPlanBadges from '../components/public/LguPlanBadges.jsx';
@@ -42,11 +42,11 @@ describe('a climate plan’s checks and badges', () => {
   });
 
   it('counts in the CBI among the LGU’s plans', () => {
-    const table = cbiTable({ climatePlan: planBadges([VERIFIED], SCZ, 2026) });
-    expect(table.rows.find((r) => r.name.startsWith('20. Biodiversity-related responses to climate change')).value).toBe(
-      'eLCCAP 2024–2032, verified by PGENRO; submitted to the Climate Change Commission'
-    );
+    const climate = cbiPoints({ climatePlan: planBadges([VERIFIED], SCZ, 2026) }).indicators.find((i) => i.no === 20);
+    expect(climate).toMatchObject({ points: 1, source: 'system' });
+    expect(describeIndicator(climate)).toBe('A climate change action plan, verified by PGENRO');
   });
+
 });
 
 describe('an office files its plan', () => {
