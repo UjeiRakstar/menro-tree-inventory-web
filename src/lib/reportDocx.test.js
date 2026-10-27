@@ -60,8 +60,14 @@ describe('reportDocx', () => {
       chapters: report.chapters,
       figuresByKey: Object.fromEntries(report.maps.map((map) => [map.key, { caption: map.caption }])),
       textOf: (section) => (section.key === 'summary' ? 'Our own summary.' : section.text),
+      // The LGU's seal (a 1×1 PNG here), and something that is not a picture, left out.
+      logos: [
+        Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0)).buffer,
+        new TextEncoder().encode('<svg/>').buffer,
+      ],
     });
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    expect(Object.keys(zip.files).filter((name) => name.startsWith('word/media/') && !name.endsWith('/'))).toHaveLength(1);
     const text = (await zip.file('word/document.xml').async('string')).replace(/<[^>]+>/g, ' ');
     for (const words of [
       'ECOLOGICAL PROFILE AND TREE INVENTORY REPORT',

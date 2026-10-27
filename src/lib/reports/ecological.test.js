@@ -141,6 +141,12 @@ describe('the report', () => {
     expect(text('structure')).toMatch(/^(A mix of ages|Mostly young trees|Mostly mature trees):/);
     expect(text('summary')).toMatch(/the ecology of the Municipality of Santa Cruz/);
     expect(text('location')).toMatch(/^The Municipality of Santa Cruz is a municipality/);
+    // Green Tag is named in Data and limitations only; the references carry their links.
+    for (const section of report.sections.filter((s) => s.key !== 'sources')) expect(section.text).not.toMatch(/Green Tag/);
+    expect(text('sources')).toMatch(/prepared with the Green Tag Tree Inventory System/);
+    expect(text('references')).toMatch(/https:\/\/noah\.up\.edu\.ph/);
+    expect(text('references').split('\n\n').length).toBeGreaterThan(10);
+    expect(report.chapters.at(-1).parts.map((p) => p.heading).slice(-2)).toEqual(['Data and Limitations', 'References']);
     expect(text('summary')).toMatch(/3 trees of 3 species/);
     expect(text('location')).toMatch(/1 of them urban and 1 rural/);
     expect(text('location')).toMatch(/about 1,500 residents/);

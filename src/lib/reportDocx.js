@@ -17,6 +17,8 @@ import { formatCell } from './attributeTables.js';
  *             each part its maps, tables and paragraphs in turn — with
  *   figuresByKey  { [map key]: { data, width, height, caption } }, and
  *   textOf    (section) => the section's text as the office left it
+ *   logos     the letterhead's pictures (ArrayBuffers): the LGU's seal, the
+ *             office's logo — PNG or JPEG; any other kind is left out
  */
 export async function reportDocx({
   heading = [],
@@ -30,6 +32,7 @@ export async function reportDocx({
   figuresFirst = false,
   chapters = null,
   figuresByKey = {},
+  logos = [],
   textOf = (section) => section.text,
 }) {
   const {
@@ -54,7 +57,21 @@ export async function reportDocx({
       children: [new Paragraph({ children: [new TextRun({ text, bold, size: 16 })] })],
     });
 
+  // PNG or JPEG, by their first bytes; Word takes nothing else here.
+  const imageType = (data) => {
+    const bytes = new Uint8Array(data ?? new ArrayBuffer(0));
+    if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'png';
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpg';
+    return null;
+  };
+  const letterhead = logos
+    .map((data) => ({ data, type: imageType(data) }))
+    .filter((logo) => logo.type)
+    .map((logo) => new ImageRun({ type: logo.type, data: logo.data, transformation: { width: 80, height: 80 } }));
   const children = [
+    ...(letterhead.length
+      ? [new Paragraph({ alignment: AlignmentType.CENTER, children: letterhead.flatMap((run, i) => (i ? [new TextRun({ text: '      ' }), run] : [run])) })]
+      : []),
     centred('Republic of the Philippines', { size: 20 }),
     ...heading.map((line, i) => centred(line, { bold: i === 0, size: i === 0 ? 24 : 20 })),
     new Paragraph({ text: '' }),

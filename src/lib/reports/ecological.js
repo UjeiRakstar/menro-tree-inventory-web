@@ -571,7 +571,7 @@ function originText({ short, summary, speciesRows }) {
     (invasive.length ? `: ${listOf(invasive.map((row) => `${row.name} (${n(row.count)})`))}.` : '.') +
     '\n\nEndemic and native trees carry the local biodiversity — the birds, insects and other plants that depend on them — and are the ' +
     'species to favour in planting. Invasive trees spread at the expense of native vegetation; the share of invasive species is one of ' +
-    'the City Biodiversity Index’s indicators (Indicator 9), and Green Tag never recommends an invasive species for a planting site.'
+    'the City Biodiversity Index’s indicators (Indicator 9), and the planting site suggestions never recommend an invasive species.'
   );
 }
 
@@ -658,7 +658,7 @@ function summaryText({ where, short, totalHa, places, placeLabel, population, el
   const elevAll = (et.below500 ?? 0) + (et.from500 ?? 0) + (et.above1000 ?? 0);
   const xt = exposure.totals ?? {};
   return (
-    `This report profiles the ecology of ${where} and its tagged trees, as recorded in the Green Tag Tree Inventory System. ` +
+    `This report profiles the ecology of ${where} and its tagged trees, as recorded in the LGU’s tree inventory. ` +
     `It brings together the place — its ${n(places.length)} ${placesWord(placeLabel)}, about ${hectares(totalHa)} ha and ${n(population)} residents — ` +
     `its terrain and climate, the trees the field officers and residents have tagged, and the exposure of the trees, land cover and ` +
     `planting sites to flooding and landslides.\n\n` +
@@ -676,12 +676,38 @@ function summaryText({ where, short, totalHa, places, placeLabel, population, el
 }
 
 const SOURCES =
+  'This report was prepared with the Green Tag Tree Inventory System, developed for the Provincial Government of Laguna ' +
+  'through its Provincial Government Environment and Natural Resources Office (PGENRO), with Laguna State Polytechnic University. ' +
+  'Its figures and narrative are written by the system from the data below, then reviewed and edited by the office.\n\n' +
   'Boundaries: PSA and NAMRIA; population and urban or rural: PSA 2024 Census (PSGC 3rd quarter 2026), or the office’s own figures. ' +
   'Elevation: Copernicus DEM, on a grid of about 60 m; slope worked out from it cell by cell, in the FLUP classes. Climate: DOST-PAGASA ' +
-  'CLIRAM. Hazards: UP NOAH flood and rain-induced landslide susceptibility. Trees: the Green Tag field inventory and verified ' +
-  'community tags; diameter classes as DENR FMB Technical Bulletin No. 3; diversity indices as DENR-BMB Technical Bulletin 2018-02; ' +
-  'flowering and fruiting months from the species’ DENR-ERDB RISE profiles. Land cover and planting sites: as the office and PGENRO ' +
-  'mapped them, in NAMRIA’s classes. For planning purposes only — not a land title, survey plan or proof of ownership.';
+  'CLIRAM. Hazards: UP NOAH flood and rain-induced landslide susceptibility. Trees: the field inventory of the LGU’s field officers and ' +
+  'the residents’ tags they verified; diameter classes as DENR FMB Technical Bulletin No. 3; diversity indices as DENR-BMB Technical ' +
+  'Bulletin 2018-02; flowering and fruiting months from the species’ DENR-ERDB RISE profiles. Land cover and planting sites: as the ' +
+  'office and PGENRO mapped them, in NAMRIA’s classes.\n\n' +
+  'Limitations: the figures describe exposure, not risk; the tree inventory covers the trees tagged so far, not every tree; and each ' +
+  'layer is measured on a grid of about 60 m, so small areas are approximate. For planning purposes only — not a land title, survey ' +
+  'plan or proof of ownership.';
+
+/**
+ * Where the data and the methods come from, with where to find them: the
+ * same for every LGU, so written once. One reference to a paragraph.
+ */
+export const REFERENCES = [
+  'Philippine Statistics Authority. (2026). Philippine Standard Geographic Code (PSGC), 3rd quarter 2026; 2024 Census of Population. https://psa.gov.ph/classification/psgc',
+  'National Mapping and Resource Information Authority (NAMRIA). Administrative boundaries and land cover classification. https://www.namria.gov.ph',
+  'University of the Philippines Resilience Institute, Project NOAH. Flood and rain-induced landslide hazard maps (ESRI shapefiles, Open Database License). https://noah.up.edu.ph',
+  'Department of Agriculture – Bureau of Soils and Water Management. Soil series maps. https://www.bswm.da.gov.ph',
+  'European Space Agency / Copernicus. Copernicus Digital Elevation Model, through the Copernicus Data Space Ecosystem. https://dataspace.copernicus.eu',
+  'DOST-PAGASA. Climate Information and Risk Analysis Matrix (CLIRAM): observed and projected rainfall and temperature. https://www.pagasa.dost.gov.ph',
+  'DENR Ecosystems Research and Development Bureau. ERDB Services and Knowledge Resources Integrated System (RISE): species profiles. https://erdb.denr.gov.ph',
+  'DENR Forest Management Bureau. (2014). Technical Bulletin No. 3: Measurement standards and procedures in the conduct of inventory for standing trees. https://forestry.denr.gov.ph',
+  'DENR Biodiversity Management Bureau. (2018). Technical Bulletin No. 2018-02: Procedures in the conduct of assessment of urban biodiversity. https://bmb.gov.ph',
+  'DENR. Draft guidelines in the formulation of Forest Land Use Plan for local government units. https://forestry.denr.gov.ph',
+  'Local Government Academy, DILG. (2017). Enhanced LGU guidebook on the formulation of the Local Climate Change Action Plan, Book 3. https://lga.gov.ph',
+  'Presidential Decree No. 705, Revised Forestry Code of the Philippines (1975), section 15. https://lawphil.net/statutes/presdecs/pd1975/pd_705_1975.html',
+  'Santamour, F. S., Jr. (1990). Trees for urban planting: diversity, uniformity, and common sense. Proceedings of the 7th Conference of the Metropolitan Tree Improvement Alliance (METRIA 7), 57–65.',
+];
 
 // ---- The report -----------------------------------------------------------------------
 
@@ -785,7 +811,8 @@ export function buildEcologicalReport(ctx) {
         part('area-exposure', '4.2 Exposure of Land Cover and Tree Planting Sites', ['areas-flood', 'areas-landslide'], [landCover, plantingSites], [
           { key: 'area-exposure', heading: 'Exposure of land cover and tree planting sites', text: areaExposureText({ landCover, plantingSites }) },
         ]),
-        part('sources', 'Data and limitations', [], [], [{ key: 'sources', heading: 'Data and limitations', text: SOURCES }]),
+        part('sources', 'Data and Limitations', [], [], [{ key: 'sources', heading: 'Data and limitations', text: SOURCES }]),
+        part('references', 'References', [], [], [{ key: 'references', heading: 'References', text: REFERENCES.join('\n\n') }]),
       ],
     },
   ];

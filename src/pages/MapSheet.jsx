@@ -274,6 +274,9 @@ export default function MapSheet() {
     ? 'Provincial Government Environment and Natural Resources Office (PGENRO), Laguna'
     : `${lgu?.label ?? ''} MENRO / CENRO`;
   const preparedText = preparedBy || (saved?.office_head ? `${officeName} — ${saved.office_head}` : officeName);
+  // The report's letterhead: the LGU's seal (its own from Settings, else the built-in one), and the office's logo.
+  const reportSeal = saved?.lgu_logo_url || (lgu ? logoFor(lgu.name) : PROVINCE_LOGO) || null;
+  const reportOfficeLogo = lgu ? saved?.office_logo_url || null : null;
 
   // ---- What goes on it -------------------------------------------------------------
   const surveyLayer = survey ? layerFor(survey) : null;
@@ -693,7 +696,18 @@ export default function MapSheet() {
           : { caption: spec.caption };
       }
       const textOf = new Map(sections.map((section) => [section.key, section.text]));
+      // The letterhead's pictures; one that cannot be fetched is left out, not the report.
+      const logos = [];
+      for (const url of [reportSeal, reportOfficeLogo]) {
+        if (!url) continue;
+        try {
+          logos.push(await (await fetch(url)).arrayBuffer());
+        } catch {
+          // Left out.
+        }
+      }
       const blob = await reportDocx({
+        logos,
         heading: headingOf(lgu),
         title: reportTitle,
         preparedBy: preparedText,
@@ -1050,6 +1064,8 @@ export default function MapSheet() {
             onXlsx={downloadReportExcel}
             busy={reportBusy}
             note={reportNote}
+            seal={reportSeal}
+            officeLogo={reportOfficeLogo}
           />
         </div>
       )}

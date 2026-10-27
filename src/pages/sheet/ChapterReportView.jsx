@@ -15,6 +15,8 @@ const NOTE = 'For planning purposes only. Not a land title, survey plan or proof
  *   report     buildEcologicalReport() — { title, maps, chapters }
  *   sections   the report's sections with the office's edits, by order
  *   mapImages  { [map key]: PNG URL } as the sheet captures them
+ *   seal       the LGU's seal (or the province's), on the title page
+ *   officeLogo the office's own logo from Settings, if it set one
  */
 export default function ChapterReportView({
   heading,
@@ -35,6 +37,8 @@ export default function ChapterReportView({
   onXlsx,
   busy = '',
   note = null,
+  seal = null,
+  officeLogo = null,
 }) {
   const button = 'inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-50';
   const date = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -139,11 +143,18 @@ export default function ChapterReportView({
                 <Paper key={part.key} label={first ? title : part.heading ?? chapter.heading} running={first ? '' : running} note={NOTE} page={page} pages={total}>
                   {first && (
                     <header className="text-center">
-                      <p className="text-xs text-slate-600">Republic of the Philippines</p>
-                      {heading.map((line, j) => (
-                        <p key={line} className={j === 0 ? 'text-sm font-bold' : 'text-xs text-slate-600'}>{line}</p>
-                      ))}
-                      <h2 className="mt-2 text-xl font-extrabold">{title}</h2>
+                      {/* The letterhead: the LGU's seal, the heading, the office's own logo. */}
+                      <div className="flex items-center justify-center gap-4">
+                        {seal ? <img src={seal} alt="Seal" className="h-[22mm] w-[22mm] object-contain" /> : <span className="w-[22mm]" />}
+                        <div>
+                          <p className="text-xs text-slate-600">Republic of the Philippines</p>
+                          {heading.map((line, j) => (
+                            <p key={line} className={j === 0 ? 'text-sm font-bold' : 'text-xs text-slate-600'}>{line}</p>
+                          ))}
+                        </div>
+                        {officeLogo ? <img src={officeLogo} alt="Office logo" className="h-[22mm] w-[22mm] object-contain" /> : <span className="w-[22mm]" />}
+                      </div>
+                      <h2 className="mt-3 text-xl font-extrabold">{title}</h2>
                       <p className="text-xs italic text-slate-500">Prepared by {preparedBy} · {date}</p>
                     </header>
                   )}
