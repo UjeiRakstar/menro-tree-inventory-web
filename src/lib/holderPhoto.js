@@ -16,6 +16,7 @@ export const DESIGNATIONS = [
   'Environmental Management Specialist',
   'Forest Ranger',
   'Administrative Aide',
+  'Contractual',
 ];
 
 export const PGENRO_DESIGNATIONS = [
@@ -24,6 +25,7 @@ export const PGENRO_DESIGNATIONS = [
   'Forester',
   'Environmental Management Specialist',
   'Administrative Aide',
+  'Contractual',
 ];
 
 /**
