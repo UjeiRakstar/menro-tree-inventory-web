@@ -103,27 +103,48 @@ describe('MapSheet', () => {
     expect(sheet()).toBeInTheDocument();
   });
 
-  it('writes the report from the figures, the office edits it, and AI only improves the wording', async () => {
+  it('writes one report, in the outline’s order; the office edits it, and AI only improves the wording', async () => {
     supabaseMock.supabase.functions.invoke.mockResolvedValue({
-      data: { sections: [{ key: 'purpose', text: 'This report, improved, supports the CLUP.' }] },
+      data: { sections: [{ key: 'summary', text: 'This summary, improved.' }] },
       error: null,
     });
     show();
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
-    const purpose = await screen.findByRole('textbox', { name: 'Purpose — text' });
-    expect(purpose.value).toMatch(/Municipality of Santa Cruz, Laguna/);
-    fireEvent.change(purpose, { target: { value: 'Our own words.' } });
-    expect(screen.getByRole('textbox', { name: 'Purpose — text' })).toHaveValue('Our own words.');
+    const summary = await screen.findByRole('textbox', { name: 'Executive summary — text' });
+    expect(summary.value).toMatch(/Municipality of Santa Cruz/);
+    // One report, no choosing: the six became one (27 October).
+    expect(screen.queryByRole('radiogroup', { name: 'Which report' })).not.toBeInTheDocument();
+    for (const heading of [
+      '1. Executive Summary',
+      '2. Ecological Profile',
+      '2.1 Location',
+      '2.2 Elevation',
+      '2.3 Slope',
+      '2.4 Climate',
+      '3. Biodiversity of Trees',
+      '3.1 Overview of the Biodiversity',
+      '3.2 Endemic, Native and Invasive Trees',
+      '3.3 Vegetation Structure and Density',
+      '3.4 Phenology and Economic Value',
+      '4. Exposure of Natural Resources to Hazards',
+      '4.1 Exposure of the Trees',
+      '4.2 Exposure of Land Cover and Tree Planting Sites',
+    ]) {
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
+    }
+
+    fireEvent.change(summary, { target: { value: 'Our own words.' } });
+    expect(screen.getByRole('textbox', { name: 'Executive summary — text' })).toHaveValue('Our own words.');
 
     fireEvent.click(screen.getByRole('button', { name: /Improve with AI/ }));
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Purpose — text' })).toHaveValue('This report, improved, supports the CLUP.'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Executive summary — text' })).toHaveValue('This summary, improved.'));
     expect(supabaseMock.supabase.functions.invoke).toHaveBeenCalledWith('improve-report', expect.objectContaining({
       body: expect.objectContaining({ place: 'Municipality of Santa Cruz' }),
     }));
     expect(screen.getByRole('status')).toHaveTextContent(/Read it through before you use it/);
 
     fireEvent.click(screen.getByRole('button', { name: /Write again from the figures/ }));
-    expect(screen.getByRole('textbox', { name: 'Purpose — text' }).value).toMatch(/Municipality of Santa Cruz/);
+    expect(screen.getByRole('textbox', { name: 'Executive summary — text' }).value).toMatch(/Municipality of Santa Cruz/);
   });
 
   it('colours the trees by origin, keyed with how many of each', async () => {
@@ -235,40 +256,38 @@ describe('MapSheet', () => {
     expect(document.querySelector('style').textContent).toContain('size: 420mm 297mm');
   });
 
-  it('writes a thematic report — maps, then tables, then the narrative — and says when a layer is missing', async () => {
+  it('keeps each part’s maps with it, numbered through the report, and says when a layer is missing', async () => {
     show();
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Hazards and climate' }));
-
-    expect(await screen.findByRole('region', { name: 'HAZARD AND CLIMATE REPORT' })).toBeInTheDocument();
-    // No landslide layer: no map of it, said so; the flood map is drawn from the sheet.
-    expect(await screen.findByText('This layer has not been uploaded yet, so there is no map of it.')).toBeInTheDocument();
-    await waitFor(() => expect(sheet()).toHaveAccessibleName('FLOOD SUSCEPTIBILITY MAP — Santa Cruz'));
-    expect(screen.getByText('Figure 1. Flood susceptibility map (UP NOAH)')).toBeInTheDocument();
-
-    expect(screen.getByRole('region', { name: 'Exposure to hazards by barangay' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'People in hazard areas (estimate)' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Rain-induced landslides — text' }).value).toMatch(/landslide layer has not been uploaded/);
-    expect(screen.getByRole('textbox', { name: 'What this means for the plans — text' }).value).toMatch(/exposure, not risk/);
+    expect(await screen.findByText('Figure 1. Location map — the place and its barangays')).toBeInTheDocument();
+    expect(screen.getByText('Figure 4. The tagged trees')).toBeInTheDocument();
+    expect(screen.getByText('Figure 6. The tagged trees and flood susceptibility (UP NOAH)')).toBeInTheDocument();
+    expect(screen.getByText('Figure 9. Land cover, tree planting sites and rain-induced landslide susceptibility (UP NOAH)')).toBeInTheDocument();
+    // No elevation or landslide layer here: no map of them, said so.
+    expect((await screen.findAllByText('This layer has not been uploaded yet, so there is no map of it.')).length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByRole('textbox', { name: 'Elevation — text' }).value).toMatch(/elevation layer has not been uploaded/);
+    expect(screen.getByRole('region', { name: 'Tagged trees in hazard areas by barangay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Excel/ })).toBeInTheDocument();
   });
 
-  it('writes the biodiversity report from the trees, toward the CBI', async () => {
+  it('writes the biodiversity of the trees: origin, use, species and their harvest months', async () => {
     supabaseMock.setResponse('trees:select', {
       data: [
-        { id: 't1', latitude: 14.2805, longitude: 121.4105, species: 'Narra', species_type: 'Endemic', source: 'crowdsource' },
-        { id: 't2', latitude: 14.2795, longitude: 121.4121, species: 'Mahogany', species_type: 'Invasive' },
+        { id: 't1', latitude: 14.2805, longitude: 121.4105, species: 'Narra', species_type: 'Endemic', tree_category: 'Timber', source: 'crowdsource' },
+        { id: 't2', latitude: 14.2795, longitude: 121.4121, species: 'Mahogany', species_type: 'Invasive', tree_category: 'Timber' },
       ],
       error: null,
     });
+    supabaseMock.setResponse('species_profiles:select', { data: [{ species: 'Narra', flowering_months: [3, 4], fruiting_months: [5, 6] }], error: null });
     show();
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Biodiversity' }));
-    expect(await screen.findByRole('region', { name: 'BIODIVERSITY REPORT' })).toBeInTheDocument();
-    const structure = await screen.findByRole('region', { name: 'Vegetation structure and diversity' });
-    await waitFor(() => expect(within(structure).getByRole('rowheader', { name: 'Endemic trees' }).closest('tr')).toHaveTextContent('1'));
-    expect(screen.getByRole('region', { name: 'Toward the City Biodiversity Index' })).toHaveTextContent('1 community tags verified');
-    // The maps are the trees, coloured by origin and by use.
-    expect(screen.getByText('Figure 2. Tagged trees by use — fruit, timber and ornamental')).toBeInTheDocument();
+    const origin = await screen.findByRole('region', { name: 'Endemic, native and invasive species' });
+    await waitFor(() => expect(within(origin).getByRole('rowheader', { name: 'Narra' }).closest('tr')).toHaveTextContent('Endemic'));
+    expect(within(origin).getByRole('rowheader', { name: 'Mahogany' }).closest('tr')).toHaveTextContent('Invasive');
+    const summary = screen.getByRole('region', { name: 'The tagged trees by origin and by use' });
+    expect(within(summary).getByRole('rowheader', { name: 'Timber trees' }).closest('tr')).toHaveTextContent('2');
+    const phenology = screen.getByRole('region', { name: 'Phenology and harvest periods by species' });
+    await waitFor(() => expect(within(phenology).getByRole('rowheader', { name: 'Narra' }).closest('tr')).toHaveTextContent('May to June'));
   });
 
   it('offers slope as a survey layer, once there is an elevation layer', () => {

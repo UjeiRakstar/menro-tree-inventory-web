@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { loadWoodDensities, withWoodDensities } from '../lib/woodDensities.js';
-import { loadVerifiedPlans } from '../lib/lccap.js';
 import { Download, Loader2, Printer, X } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -11,13 +10,12 @@ import { useSatelliteBasemap } from '../hooks/useSatellite.js';
 import { useMapAreas } from '../hooks/useMapAreas.js';
 import { useOfficeProfile } from '../hooks/useOfficeProfile.js';
 import { LAGUNA_MUNICIPALITIES, LAGUNA_PROVINCE, MUNICIPALITY_LIST, containsPoint, municipalityAt, municipalityNamed } from '../lib/lagunaBoundaries.js';
-import { loadCommunityCounts } from '../lib/community.js';
 import { centroidOf, formatArea, geometryAreaM2 } from '../lib/areaGeometry.js';
 import { hazardAreaM2, seedlingCapacity, siteAreaM2 } from '../lib/mapSites.js';
 import { PGENRO_OVERLAYS } from '../lib/mapLayers.js';
 import { loadGrid, loadMeasuringLayers, repaintPicture } from '../lib/layers/browser.js';
 import { slopeKey, slopePicture, terrainFacts } from '../lib/layers/terrain.js';
-import { REPORT_KINDS, REPORT_MAPS, buildThemeReport, reportKindById } from '../lib/reports/thematic.js';
+import { buildEcologicalReport } from '../lib/reports/ecological.js';
 import { LAGUNA_GRID } from '../lib/layers/grid.js';
 import { areaFacts } from '../lib/layers/measure.js';
 import { layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
@@ -29,12 +27,10 @@ import greenTagLogo from '../assets/GreenTag_Logo.png';
 import philippines from '../data/Philippines.geojson';
 import { barangayForTree, loadBarangayIndex } from '../lib/barangayLookup.js';
 import { barangayTable, carbonTable, hazardTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
-import { writeReport } from '../lib/reportWriter.js';
 import { lguFacts, officialName } from '../lib/psgc.js';
 import { reportDocx } from '../lib/reportDocx.js';
 import TablesView from './sheet/TablesView.jsx';
-import ReportView from './sheet/ReportView.jsx';
-import ThemeReportView from './sheet/ThemeReportView.jsx';
+import ChapterReportView from './sheet/ChapterReportView.jsx';
 import { everyRow } from '../lib/everyRow.js';
 import {
   PAPERS,
@@ -475,7 +471,7 @@ export default function MapSheet() {
           },
         ])
       );
-      setMeasured({ status: 'done', facts });
+      setMeasured({ status: 'done', facts, grids });
     });
     return () => {
       cancelled = true;
@@ -504,67 +500,28 @@ export default function MapSheet() {
   const TABLE_NAMES = { 'land-cover': 'landCover', 'planting-sites': 'plantingSites' };
   const tablesByKey = Object.fromEntries(tables.map((table) => [TABLE_NAMES[table.key] ?? table.key, table]));
   const climate = lgu ? mapLayers.climateByLgu.get(lgu.psgc) ?? null : null;
-  const written = useMemo(
-    () => writeReport({ place: lgu, tables: tablesByKey, trees: tableTrees, climate }),
-    // tablesByKey is rebuilt from tables each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lgu, tables, tableTrees, climate]
-  );
-  // Which report: the general one, or a thematic one (Round C, 18 October).
-  const [reportKind, setReportKind] = useState('general');
-  // Residents taking part, for the CBI: this LGU's own, or Laguna's (community.sql).
-  const [participation, setParticipation] = useState(null);
-  const lguPsgc = lgu?.psgc ?? null;
+  // The one report (27 October): the Ecological Profile and Tree Inventory
+  // Report, in place of the six the sheet offered. Its phenology needs each
+  // species' months (the RISE profiles) and what the field officers observed.
+  const [phenologyData, setPhenologyData] = useState({ profiles: [], records: [] });
   useEffect(() => {
-    if (reportKind !== 'biodiversity') return undefined;
-    let cancelled = false;
-    loadCommunityCounts(lguPsgc).then((counts) => {
-      if (!cancelled) setParticipation(counts);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reportKind, lguPsgc]);
-  // The LGU's verified climate plan, for the CBI (lccap.sql).
-  const [climatePlans, setClimatePlans] = useState(null);
-  useEffect(() => {
-    if (reportKind !== 'biodiversity') return undefined;
-    let cancelled = false;
-    loadVerifiedPlans().then((rows) => !cancelled && setClimatePlans(rows));
-    return () => {
-      cancelled = true;
-    };
-  }, [reportKind]);
-  // News & Events credited to the CBI, for the biodiversity report (21 October).
-  const [newsPosts, setNewsPosts] = useState(null);
-  useEffect(() => {
-    if (reportKind !== 'biodiversity') return undefined;
+    if (tab !== 'report') return undefined;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase.from('news_posts').select('*');
-      if (!cancelled) setNewsPosts(error || !Array.isArray(data) ? null : data);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reportKind]);
-  // The place's cutting permits, for the GHG report's losses (21 October).
-  const [permits, setPermits] = useState([]);
-  useEffect(() => {
-    if (reportKind !== 'ghg') return undefined;
-    let cancelled = false;
-    (async () => {
-      const { data } = await everyRow(() =>
-        supabase.from('permits').select('id, tree_id, status, created_at, number_of_trees, lgu_psgc')
-      );
+      const [profiles, records] = await Promise.all([
+        supabase.from('species_profiles').select('species, scientific_name, flowering_months, fruiting_months'),
+        everyRow(() => supabase.from('phenology_records').select('tree_id, flowering_status, fruiting_status, observed_at')),
+      ]);
       if (cancelled) return;
-      const rows = Array.isArray(data) ? data : [];
-      setPermits(lguPsgc ? rows.filter((permit) => Number(permit.lgu_psgc) === lguPsgc) : rows);
+      setPhenologyData({
+        profiles: Array.isArray(profiles?.data) ? profiles.data : [],
+        records: Array.isArray(records?.data) ? records.data : [],
+      });
     })();
     return () => {
       cancelled = true;
     };
-  }, [reportKind, lguPsgc]);
+  }, [tab]);
   const placeLabel = lgu ? 'Barangay' : 'City / municipality';
   const populationOf = useMemo(() => {
     if (lgu) {
@@ -576,40 +533,46 @@ export default function MapSheet() {
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lgu, tables, places]);
-  const themeReport = useMemo(
-    () =>
-      reportKind === 'general'
-        ? null
-        : buildThemeReport(reportKind, {
-            place: lgu,
-            places,
-            measured: measured.facts,
-            placeLabel,
-            tables: tablesByKey,
-            trees: tableTrees,
-            climate,
-            populationOf,
-            protectedHa: scopeAreas.filter((f) => f.properties.designation).reduce((t, f) => t + siteAreaM2(f) / 10000, 0),
-            placeAreaHa: places.reduce((t, p) => t + (p.areaHa || 0), 0),
-            communityTags: tableTrees.filter((tree) => tree.source === 'crowdsource').length,
-            participation,
-            areas: scopeAreas,
-            permits,
-            newsPosts,
-            climatePlans,
-          }),
+  const urbanOf = useMemo(() => {
+    const byName = new Map((tablesByKey.barangays?.rows ?? []).map((row) => [row.name, row.urban]));
+    return (name) => byName.get(name) ?? null;
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reportKind, lgu, places, measured.facts, tables, tableTrees, climate, populationOf, scopeAreas, participation, permits, newsPosts, climatePlans]
+  }, [tables]);
+  const placeOf = useMemo(() => {
+    if (lgu) return (tree) => tree.barangay;
+    const labelOf = new Map(places.map((placeRow) => [placeRow.key ?? placeRow.name, placeRow.name]));
+    return (tree) => labelOf.get(tree.municipality);
+  }, [lgu, places]);
+  const ecoReport = useMemo(
+    () =>
+      buildEcologicalReport({
+        place: lgu,
+        places,
+        measured: measured.facts,
+        grids: measured.grids ?? null,
+        placeLabel,
+        tables: tablesByKey,
+        trees: tableTrees,
+        placeOf,
+        climate,
+        populationOf,
+        urbanOf,
+        profiles: phenologyData.profiles,
+        phenology: phenologyData.records,
+      }),
+    // tablesByKey is rebuilt from tables each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lgu, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf, phenologyData]
   );
 
-  // The office's edits, by report and section; a section not edited follows the figures.
+  // The office's edits, by section; a section not edited follows the figures.
   const [edits, setEdits] = useState({});
   const [reportNote, setReportNote] = useState(null);
   const [reportBusy, setReportBusy] = useState('');
-  const editKey = (key) => (reportKind === 'general' ? key : `${reportKind}/${key}`);
-  const sections = (themeReport ? themeReport.sections : written).map((section) => ({ ...section, text: edits[editKey(section.key)] ?? section.text }));
-  const reportTitle = themeReport ? themeReport.title : `${titleText} — REPORT`;
+  const editKey = (key) => `ecological/${key}`;
+  const sections = ecoReport.sections.map((section) => ({ ...section, text: edits[editKey(section.key)] ?? section.text }));
+  const reportTitle = ecoReport.title;
 
   async function improveReport() {
     setReportBusy('improve');
@@ -630,30 +593,10 @@ export default function MapSheet() {
     setReportNote({ ok: true, text: 'Improved by Gemini. Read it through before you use it: every figure should still match the tables.' });
   }
 
-  // The map as a picture, for the report's first page — made when the report
-  // is opened, from the sheet as it is then.
-  const [mapImage, setMapImage] = useState(null);
-  useEffect(() => {
-    if (tab !== 'report' || reportKind !== 'general' || !sheetRef.current) return undefined;
-    let cancelled = false;
-    let url = null;
-    sheetPng(sheetRef.current, paper)
-      .then((png) => {
-        if (cancelled) return;
-        url = URL.createObjectURL(png.blob);
-        setMapImage(url);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-      setMapImage(null);
-    };
-  }, [tab, paper, reportKind]);
-
-  // A thematic report's maps: the sheet drawn with each one's layer in turn —
-  // flood, then landslide; elevation, then slope — each taken as a picture,
-  // and the sheet put back as the office left it.
+  // The report's maps: the sheet drawn with each one's layer in turn —
+  // elevation, slope, the trees, flood, landslide — the trees and the areas
+  // on or off as each map asks, each taken as a picture, and the sheet put
+  // back as the office left it.
   const [mapImages, setMapImages] = useState({});
   const [capture, setCapture] = useState(null);
   useEffect(() => {
@@ -664,8 +607,8 @@ export default function MapSheet() {
     });
   }, [paper, lguName, areaId, basemap.id]);
   useEffect(() => {
-    if (tab !== 'report' || !themeReport || capture || !mapLayers.loaded) return;
-    const missing = themeReport.maps.filter((map) => !mapImages[map.key]);
+    if (tab !== 'report' || capture || !mapLayers.loaded) return;
+    const missing = ecoReport.maps.filter((map) => !mapImages[map.key]);
     if (missing.length === 0) return;
     // A layer not uploaded has no map to draw; the report says so.
     const unavailable = missing.filter((map) => map.survey && !layerFor(map.survey));
@@ -675,11 +618,11 @@ export default function MapSheet() {
     }
     setCapture({
       queue: missing,
-      restore: { survey: params.get('survey'), treeColour: params.get('treeColour'), trees: params.get('trees') },
+      restore: { survey: params.get('survey'), treeColour: params.get('treeColour'), trees: params.get('trees'), sites: params.get('sites') },
     });
     // layerFor and params are read as they are now.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, themeReport, mapImages, capture, mapLayers.loaded]);
+  }, [tab, ecoReport, mapImages, capture, mapLayers.loaded]);
   useEffect(() => {
     if (!capture) return undefined;
     const [map] = capture.queue;
@@ -690,6 +633,7 @@ export default function MapSheet() {
         putBack(next, 'survey', capture.restore.survey);
         putBack(next, 'treeColour', capture.restore.treeColour);
         putBack(next, 'trees', capture.restore.trees);
+        putBack(next, 'sites', capture.restore.sites);
         return next;
       }, { replace: true });
       setCapture(null);
@@ -697,12 +641,21 @@ export default function MapSheet() {
     }
     const wantSurvey = map.survey ?? null;
     const wantColour = map.treeColour ?? null;
-    if ((params.get('survey') ?? null) !== wantSurvey || (params.get('treeColour') ?? null) !== wantColour || (wantColour && !show.trees)) {
+    // Trees: shown when the map colours them, hidden when it says so, else as the office left them.
+    const wantTrees = map.trees === false ? '0' : wantColour ? null : params.get('trees');
+    const wantSites = map.sites === false ? '0' : map.sites === true ? null : params.get('sites');
+    if (
+      (params.get('survey') ?? null) !== wantSurvey ||
+      (params.get('treeColour') ?? null) !== wantColour ||
+      (params.get('trees') ?? null) !== (wantTrees ?? null) ||
+      (params.get('sites') ?? null) !== (wantSites ?? null)
+    ) {
       setParams((current) => {
         const next = new URLSearchParams(current);
         putBack(next, 'survey', wantSurvey);
         putBack(next, 'treeColour', wantColour);
-        if (wantColour) next.delete('trees');
+        putBack(next, 'trees', wantTrees);
+        putBack(next, 'sites', wantSites);
         return next;
       }, { replace: true });
       return undefined;
@@ -726,49 +679,29 @@ export default function MapSheet() {
       cancelled = true;
       clearTimeout(timer);
     };
-    // show.trees is read from params, which is here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [capture, params, loading, paper]);
 
   async function downloadDocx() {
     setReportBusy('docx');
     setReportNote(null);
-    if (themeReport) {
-      try {
-        const maps = [];
-        for (const spec of themeReport.maps) {
-          const image = mapImages[spec.key];
-          if (!image?.url) continue;
-          const data = await (await fetch(image.url)).arrayBuffer();
-          maps.push({ data, width: image.width, height: image.height, caption: spec.caption });
-        }
-        const blob = await reportDocx({
-          heading: headingOf(lgu),
-          title: reportTitle,
-          preparedBy: preparedText,
-          sections,
-          tables: themeReport.tables.filter(Boolean),
-          maps,
-          figuresFirst: true,
-        });
-        saveFile(blob, `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${reportTitle.replace(/[^A-Za-z]+/g, '-').replace(/^-|-$/g, '')}.docx`);
-      } catch (failure) {
-        setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
-      } finally {
-        setReportBusy('');
-      }
-      return;
-    }
     try {
-      let map = null;
-      try {
-        const png = await sheetPng(sheetRef.current, paper);
-        map = { data: await png.blob.arrayBuffer(), width: png.width, height: png.height };
-      } catch {
-        // The report goes without the map rather than not at all.
+      const figuresByKey = {};
+      for (const spec of ecoReport.maps) {
+        const image = mapImages[spec.key];
+        figuresByKey[spec.key] = image?.url
+          ? { data: await (await fetch(image.url)).arrayBuffer(), width: image.width, height: image.height, caption: spec.caption }
+          : { caption: spec.caption };
       }
-      const blob = await reportDocx({ heading: headingOf(lgu), title: reportTitle, preparedBy: preparedText, sections, tables, map });
-      saveFile(blob, `${fileStem}_Report.docx`);
+      const textOf = new Map(sections.map((section) => [section.key, section.text]));
+      const blob = await reportDocx({
+        heading: headingOf(lgu),
+        title: reportTitle,
+        preparedBy: preparedText,
+        chapters: ecoReport.chapters,
+        figuresByKey,
+        textOf: (section) => textOf.get(section.key) ?? section.text,
+      });
+      saveFile(blob, `${fileStem}_Ecological-Profile-and-Tree-Inventory-Report.docx`);
     } catch (failure) {
       setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
     } finally {
@@ -776,14 +709,13 @@ export default function MapSheet() {
     }
   }
 
-  // A thematic report's tables as an Excel file, the GHG report's tree list with them.
+  // The report's tables as an Excel file.
   async function downloadReportExcel() {
-    if (!themeReport) return;
     setReportBusy('xlsx');
     setReportNote(null);
     try {
-      const blob = await tablesWorkbook([...themeReport.tables, ...(themeReport.annex ?? [])], { lgu, preparedBy: preparedText });
-      saveFile(blob, `${fileStem}_${reportKind}.xlsx`);
+      const blob = await tablesWorkbook(ecoReport.tables, { lgu, preparedBy: preparedText });
+      saveFile(blob, `${fileStem}_Report-tables.xlsx`);
     } catch (failure) {
       setReportNote({ ok: false, text: `The Excel file could not be made: ${failure.message}` });
     } finally {
@@ -1096,72 +1028,29 @@ export default function MapSheet() {
       )}
       {tab === 'report' && (
         <div className="p-6">
-          <div role="radiogroup" aria-label="Which report" className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
-            <span className="text-sm font-semibold text-slate-700">Report on:</span>
-            {REPORT_KINDS.map((kind) => (
-              <button
-                key={kind.id}
-                type="button"
-                role="radio"
-                aria-checked={reportKind === kind.id}
-                disabled={Boolean(capture)}
-                onClick={() => {
-                  setReportKind(kind.id);
-                  setReportNote(null);
-                }}
-                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition disabled:opacity-50 ${
-                  reportKind === kind.id ? 'bg-green-700 text-white ring-green-700' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                {kind.label}
-              </button>
-            ))}
-          </div>
-          {themeReport ? (
-            <ThemeReportView
-              heading={headingOf(lgu)}
-              title={reportTitle}
-              preparedBy={preparedText}
-              report={themeReport}
-              sections={sections}
-              mapImages={Object.fromEntries(Object.entries(mapImages).map(([key, image]) => [key, image?.url ?? null]))}
-              unavailable={Object.keys(mapImages).filter((key) => mapImages[key]?.unavailable)}
-              failed={Object.keys(mapImages).filter((key) => mapImages[key]?.failed)}
-              capturing={capture?.queue?.[0]?.key ?? null}
-              measuring={measured.status}
-              lgu={Boolean(lgu)}
-              onChange={(key, text) => setEdits((current) => ({ ...current, [editKey(key)]: text }))}
-              onRewrite={() => {
-                setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${reportKind}/`))));
-                setReportNote(null);
-              }}
-              onImprove={improveReport}
-              onDocx={downloadDocx}
-              onXlsx={downloadReportExcel}
-              busy={reportBusy}
-              note={reportNote}
-            />
-          ) : (
-          <ReportView
+          <ChapterReportView
             heading={headingOf(lgu)}
             title={reportTitle}
             preparedBy={preparedText}
+            report={ecoReport}
             sections={sections}
-            tables={tables}
-            mapImage={mapImage}
+            mapImages={Object.fromEntries(Object.entries(mapImages).map(([key, image]) => [key, image?.url ?? null]))}
+            unavailable={Object.keys(mapImages).filter((key) => mapImages[key]?.unavailable)}
+            failed={Object.keys(mapImages).filter((key) => mapImages[key]?.failed)}
+            capturing={capture?.queue?.[0]?.key ?? null}
             measuring={measured.status}
             lgu={Boolean(lgu)}
-            onChange={(key, text) => setEdits((current) => ({ ...current, [key]: text }))}
+            onChange={(key, text) => setEdits((current) => ({ ...current, [editKey(key)]: text }))}
             onRewrite={() => {
-              setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key.includes('/'))));
+              setEdits({});
               setReportNote(null);
             }}
             onImprove={improveReport}
             onDocx={downloadDocx}
+            onXlsx={downloadReportExcel}
             busy={reportBusy}
             note={reportNote}
           />
-          )}
         </div>
       )}
     {/* The map stays mounted behind the other tabs: the report takes its picture. */}

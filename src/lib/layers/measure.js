@@ -37,6 +37,19 @@ export function cellsOfArea(grid, geometry) {
   return { cells: [[row * columnsOf(grid) + col, row]], sampled: 'centre' };
 }
 
+/**
+ * A hazard layer's level at one point — a tree — as 0 none, 1 low, 2 medium,
+ * 3 high, or null when the point is off the grid or there is no layer.
+ */
+export function levelAt(grid, values, lat, lng) {
+  if (!values || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return null;
+  const row = Math.floor((grid.north - Number(lat)) / grid.cell);
+  const col = Math.floor((Number(lng) - grid.west) / grid.cell);
+  if (row < 0 || col < 0 || row >= rowsOf(grid) || col >= columnsOf(grid)) return null;
+  const value = values[row * columnsOf(grid) + col];
+  return Number.isFinite(value) ? value : null;
+}
+
 function hazardFacts(cells, values, grid, areaM2) {
   const byLevel = [0, 0, 0, 0];
   let covered = 0;

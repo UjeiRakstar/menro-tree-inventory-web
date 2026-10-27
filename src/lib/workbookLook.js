@@ -33,6 +33,7 @@ export const LOOK = Object.freeze({
 const FORMATS = {
   number: '#,##0',
   decimal: '#,##0.0',
+  rate: '#,##0.00',
   tonnes: '#,##0.00',
   ha: '#,##0.00',
   kg: '#,##0.0',

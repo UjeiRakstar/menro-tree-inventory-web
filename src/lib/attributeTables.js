@@ -328,6 +328,8 @@ export function formatCell(value, kind) {
   if (kind === 'ha') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (kind === 'tonnes') return Number(value).toLocaleString('en-US', { maximumFractionDigits: Number(value) < 10 ? 2 : 1 });
   if (kind === 'decimal') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // A small rate, such as trees per hectare: two places, so 0.04 is not 0.0.
+  if (kind === 'rate') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (kind === 'percent') return `${Math.round(Number(value) * 100)}%`;
   if (kind === 'number') return Number(value).toLocaleString('en-US');
   return String(value);

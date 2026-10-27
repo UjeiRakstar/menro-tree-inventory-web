@@ -12,6 +12,11 @@ import { formatCell } from './attributeTables.js';
  *   maps      several, each { data, width, height, caption } — a thematic report's
  *   figuresFirst  the thematic reports' order (18 October): the maps, then the
  *             tables, then the narrative; otherwise the map, the narrative, the tables
+ *   chapters  the Ecological Profile and Tree Inventory Report's (27 October):
+ *             [{ heading, parts: [{ heading, maps: [key], tables, sections }] }],
+ *             each part its maps, tables and paragraphs in turn — with
+ *   figuresByKey  { [map key]: { data, width, height, caption } }, and
+ *   textOf    (section) => the section's text as the office left it
  */
 export async function reportDocx({
   heading = [],
@@ -23,6 +28,9 @@ export async function reportDocx({
   map = null,
   maps = [],
   figuresFirst = false,
+  chapters = null,
+  figuresByKey = {},
+  textOf = (section) => section.text,
 }) {
   const {
     AlignmentType,
@@ -99,13 +107,63 @@ export async function reportDocx({
     }
   };
 
-  addFigures();
-  if (figuresFirst) {
-    addTables();
-    addSections();
+  const addTable = (table) => {
+    if (!table?.rows?.length) return;
+    children.push(new Paragraph({ children: [new TextRun({ text: `Table — ${table.title}`, bold: true, size: 20 })] }));
+    if (table.note) children.push(new Paragraph({ children: [new TextRun({ text: table.note, italics: true, size: 16 })] }));
+    const rows = [
+      new TableRow({ tableHeader: true, children: table.columns.map((column) => cell(column.label, { bold: true, shade: true })) }),
+      ...table.rows.map((row) => new TableRow({ children: table.columns.map((column) => cell(formatCell(row[column.key], column.kind))) })),
+    ];
+    if (table.totals) {
+      rows.push(new TableRow({ children: table.columns.map((column) => cell(formatCell(table.totals[column.key], column.kind), { bold: true })) }));
+    }
+    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
+    children.push(new Paragraph({ text: '' }));
+  };
+
+  if (chapters) {
+    let figureNo = 0;
+    const numbered = new Map();
+    for (const chapter of chapters) {
+      children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: chapter.heading })] }));
+      for (const part of chapter.parts) {
+        if (part.heading && part.heading !== chapter.heading) {
+          children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: part.heading })] }));
+        }
+        for (const key of part.maps) {
+          const figure = figuresByKey[key];
+          if (!numbered.has(key)) numbered.set(key, ++figureNo);
+          if (!figure?.data) {
+            children.push(centred(`Figure ${numbered.get(key)}. ${figure?.caption ?? 'Map'} — not drawn: its layer is not uploaded.`, { italics: true, size: 18 }));
+            continue;
+          }
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new ImageRun({ type: 'png', data: figure.data, transformation: { width: 600, height: Math.round((600 * figure.height) / figure.width) } })],
+            })
+          );
+          children.push(centred(`Figure ${numbered.get(key)}. ${figure.caption}`, { italics: true, size: 18 }));
+          children.push(new Paragraph({ text: '' }));
+        }
+        part.tables.forEach(addTable);
+        for (const section of part.sections) {
+          for (const paragraph of String(textOf(section) ?? '').split(/\n{2,}/)) {
+            if (paragraph.trim()) children.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: paragraph.trim(), size: 22 })] }));
+          }
+        }
+      }
+    }
   } else {
-    addSections();
-    addTables();
+    addFigures();
+    if (figuresFirst) {
+      addTables();
+      addSections();
+    } else {
+      addSections();
+      addTables();
+    }
   }
 
   children.push(
