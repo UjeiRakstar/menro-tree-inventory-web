@@ -52,6 +52,29 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+describe('Settings, for a training account (27 October)', () => {
+  it('shows the real office’s records read-only, saying why, and leaves the practice imports usable', async () => {
+    auth.profile = { ...SANTA_CRUZ, is_training: true };
+    auth.lgu = { name: 'Santa Cruz', label: 'Santa Cruz', psgc: 403426000 };
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <Settings />
+      </MemoryRouter>
+    );
+    // The climate plan: no file to pick, no button to press — and why.
+    open('Climate change action plan');
+    const plan = section('Climate change action plan');
+    expect(within(plan).getByRole('note')).toHaveTextContent(/real office/);
+    expect(within(plan).getByRole('button', { name: /File the plan with PGENRO/ })).toBeDisabled();
+    // The profile likewise.
+    const profile = section('LGU profile');
+    await waitFor(() => expect(within(profile).getByLabelText('MENRO / CENRO head')).toBeDisabled());
+    // Areas imported by a trainee go behind the wall: still usable.
+    open('Import areas');
+    expect(within(section('Import areas')).queryByText(/Practice account/)).not.toBeInTheDocument();
+  });
+});
+
 describe('Settings, for an LGU office', () => {
   it('shows the office’s profile, and saves it with its links made whole', async () => {
     show();

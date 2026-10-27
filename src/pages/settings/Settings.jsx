@@ -15,6 +15,7 @@ import TreeInventorySection from './TreeInventorySection.jsx';
 import AiSection from './AiSection.jsx';
 import NicknameWordsSection from './NicknameWordsSection.jsx';
 import PasswordSection from './PasswordSection.jsx';
+import { TrainingLock } from './Section.jsx';
 import ActingLguPicker from '../../components/ActingLguPicker.jsx';
 import { useActingLgu } from '../../lib/actingLgu.js';
 
@@ -57,23 +58,33 @@ export default function Settings() {
       <ActingLguPicker profile={profile} what="its settings" />
       {training && (
         <p role="note" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
-          This is a training account. The settings shown are the real office&apos;s, and a training account cannot change them.
+          This is a training account. The office&apos;s profile, barangay figures, documents, climate plan and AI key are the
+          real office&apos;s: they can be seen here but not changed. Importing a tree inventory or areas works as practice.
         </p>
       )}
-      <ProfileSection key={office} office={office} pgenro={pgenro} officeLabel={officeLabel} builtInSeal={pgenro ? PROVINCE_LOGO : logoFor(lguInfo?.name)} />
-      {lguInfo && <BarangaySection key={lguInfo.psgc} lgu={lguInfo} />}
+      {/* The real office's records: read-only for a training account. The
+          tree inventory and imported areas are not here — a trainee's go
+          behind the training wall, so they work as practice. */}
+      <TrainingLock.Provider value={training}>
+        <ProfileSection key={office} office={office} pgenro={pgenro} officeLabel={officeLabel} builtInSeal={pgenro ? PROVINCE_LOGO : logoFor(lguInfo?.name)} />
+        {lguInfo && <BarangaySection key={lguInfo.psgc} lgu={lguInfo} />}
+      </TrainingLock.Provider>
       <TeamSection pgenro={pgenro} lgu={actingLgu} />
-      <DocumentsSection key={office} office={office} pgenro={pgenro} />
+      <TrainingLock.Provider value={training}>
+        <DocumentsSection key={office} office={office} pgenro={pgenro} />
+      </TrainingLock.Provider>
       {(lguInfo || pgenro) && <TreeInventorySection key={office} lgu={lguInfo} pgenro={pgenro} />}
       <ImportSection key={office} lgu={lguInfo} />
-      {lguInfo && <ClimatePlanSection key={`plan-${lguInfo.psgc}`} lgu={lguInfo} />}
-      {actingLgu ? (
-        <p role="note" className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
-          {actingLgu.label}&apos;s AI key is its office&apos;s own: only its MENRO / CENRO sets or removes it.
-        </p>
-      ) : (
-        <AiSection office={office} pgenro={pgenro} />
-      )}
+      <TrainingLock.Provider value={training}>
+        {lguInfo && <ClimatePlanSection key={`plan-${lguInfo.psgc}`} lgu={lguInfo} />}
+        {actingLgu ? (
+          <p role="note" className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
+            {actingLgu.label}&apos;s AI key is its office&apos;s own: only its MENRO / CENRO sets or removes it.
+          </p>
+        ) : (
+          <AiSection office={office} pgenro={pgenro} />
+        )}
+      </TrainingLock.Provider>
       {pgenro && <NicknameWordsSection />}
       <PasswordSection />
     </section>
