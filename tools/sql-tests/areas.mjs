@@ -455,8 +455,8 @@ check('…without a line in the real activity log', (await count(`select count(*
 const kinds = await one(`select count(*) filter (where kind = 'planting-site' and approval = 'requested') requested,
   count(*) filter (where designation = 'protected-area') protected, count(*) filter (where cover_class = 'bamboo-stand') bamboo,
   count(distinct lgu_psgc) towns from public.map_areas where is_training and notes = 'Practice data for training.'`);
-check('…planting sites to decide, protected forest, bamboo stands, in 22 towns',
-  Number(kinds.requested) === 22 && Number(kinds.protected) === 22 && Number(kinds.bamboo) === 16 && Number(kinds.towns) === 22, JSON.stringify(kinds));
+check('…planting sites to decide, protected forest, bamboo stands, in 23 towns (Nagcarlan since 28 October)',
+  Number(kinds.requested) === 23 && Number(kinds.protected) === 23 && Number(kinds.bamboo) === 17 && Number(kinds.towns) === 23, JSON.stringify(kinds));
 check('the public and the real PGENRO see none of them',
   (await as(null, 'anon', () => count(`select count(*) n from public.map_areas where notes = 'Practice data for training.'`))) === 0 &&
   (await as(PGENRO, 'authenticated', () => count(`select count(*) n from public.map_areas where notes = 'Practice data for training.'`))) === 0);

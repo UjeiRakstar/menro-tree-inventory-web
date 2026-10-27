@@ -10,7 +10,7 @@
 --
 -- Everything here is behind the training wall: only training accounts see it.
 --
---   1174 trees across 365 barangays of 22 towns:
+--   1238 trees across 399 barangays of 23 towns:
 --     Siniloan: 150 trees, 12 tags
 --     Biñan City: 60 trees, 4 tags
 --     Cabuyao City: 60 trees, 4 tags
@@ -33,20 +33,21 @@
 --     Pila: 40 trees, 3 tags
 --     Santa Cruz: 40 trees, 3 tags
 --     Santa Maria: 40 trees, 3 tags
---   131 hazards nobody has been sent to (red), 69 already dispatched (orange)
---   60 cutting permits issued (yellow)
---   223 Code 2 stems, 133 Code 3
---   81 tags from the public, 31 out for field checking
+--     Nagcarlan: 60 trees, 5 tags
+--   137 hazards nobody has been sent to (red), 71 already dispatched (orange)
+--   63 cutting permits issued (yellow)
+--   238 Code 2 stems, 143 Code 3
+--   86 tags from the public, 33 out for field checking
 --   3 trainee arborists to dispatch
---   258 areas on the map: 66 planting sites (22 asked for by an office, for PGENRO to decide),
---     192 of land cover, 54 with a (practice) designation document;
+--   270 areas on the map: 69 planting sites (23 asked for by an office, for PGENRO to decide),
+--     201 of land cover, 57 with a (practice) designation document;
 --     64 bamboo clumps tagged in the bamboo stands
 --
 -- Columns are matched by name: a key with no column of that name is left out
 -- rather than failing, and listed in the check at the end of the last part.
 
 -- Inserting a tree or an area normally writes to PGENRO's activity log.
--- Paused while seeding, so 1174 dummy trees and 258 areas do not
+-- Paused while seeding, so 1238 dummy trees and 270 areas do not
 -- land in the real log.
 do $$
 begin

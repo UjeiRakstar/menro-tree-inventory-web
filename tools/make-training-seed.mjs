@@ -17,6 +17,8 @@
  * public waiting for a field check. Since 23 October every town also has its
  * areas on the map: planting sites, and the land cover its City Biodiversity
  * Index (a city) or its Forest Land Use Plan (a municipality) works with.
+ * Nagcarlan joined on 28 October, for its office's training: its trees, tags
+ * and areas are made last, so every other town's come out as before.
  *
  * The random numbers are seeded, so running this twice writes the same file.
  */
@@ -42,6 +44,10 @@ const TOWNS = [
   ...CITIES.map((name) => ({ name, trees: 60, tags: 4 })),
   ...DISTRICT_4.map((name) => ({ name, trees: 40, tags: 3 })),
 ];
+// Towns added later (28 October: Nagcarlan, of the 3rd district, for its
+// office's training): made after all the others, trees, tags and areas, so
+// the random numbers give the towns above what they always had.
+const LATER_TOWNS = [{ name: 'Nagcarlan', trees: 60, tags: 5 }];
 
 // ---- Seeded randomness -------------------------------------------------------
 function mulberry32(seed) {
@@ -476,6 +482,17 @@ const areas = TOWNS.flatMap((town, i) => {
   return areasOfTown(town, lgu, seeded[i].trees, bambooClumps);
 });
 trees.push(...bambooClumps);
+
+for (const town of LATER_TOWNS) {
+  const one = seedTown(town);
+  const lgu = LGUS.find((entry) => entry.name === town.name);
+  const clumps = [];
+  areas.push(...areasOfTown(town, lgu, one.trees, clumps));
+  trees.push(...one.trees, ...clumps);
+  permits.push(...one.permits);
+  pendingTags.push(...one.tags);
+  seeded.push(one);
+}
 
 // ---- The SQL -------------------------------------------------------------------
 // Every key each table is given, for the final check to compare with the
