@@ -1,16 +1,16 @@
 import { FileSpreadsheet, FileText, Loader2, Printer, RotateCcw, Sparkles } from 'lucide-react';
-import { AttributeTable, Paper, PaperStack } from './Paper.jsx';
+import { AttributeTable } from './Paper.jsx';
 import { chartFor } from './Charts.jsx';
 import { measuringNote } from './TablesView.jsx';
 
 const NOTE = 'For planning purposes only. Not a land title, survey plan or proof of ownership.';
 
 /**
- * The Ecological Profile and Tree Inventory Report (27 October) on A4
- * portrait pages, part by part as its outline runs: each part's heading, its
- * maps, its tables with their charts, then its narrative — the office's to
- * edit in place, Improve with AI only proposing. A part longer than a page
- * grows onto the next sheet rather than being cut off.
+ * The Ecological Profile and Tree Inventory Report (27 October), part by
+ * part as its outline runs: each part's heading, its maps, its tables with
+ * their charts, then its narrative — the office's to edit in place, Improve
+ * with AI only proposing. Each chapter is one sheet on screen; printed, it
+ * flows over as many A4 pages as it needs (see the sheet's print rules).
  *
  *   report     buildEcologicalReport() — { title, maps, chapters }
  *   sections   the report's sections with the office's edits, by order
@@ -53,14 +53,13 @@ export default function ChapterReportView({
     for (const key of part.maps) if (!figureNo.has(key)) figureNo.set(key, figureNo.size + 1);
   }
   const total = report.chapters.reduce((t, chapter) => t + chapter.parts.length, 0);
-  let page = 0;
 
   const figure = (key, small) => {
     const map = mapSpec.get(key);
     if (!map) return null;
     const height = small ? 'max-h-[92mm]' : 'max-h-[110mm]';
     return (
-      <figure key={key} className="flex flex-col">
+      <figure key={key} className="flex break-inside-avoid flex-col">
         {mapImages[key] ? (
           <img src={mapImages[key]} alt={map.caption} className={`mx-auto ${height} w-auto max-w-full border border-slate-300 object-contain`} />
         ) : (
@@ -93,7 +92,7 @@ export default function ChapterReportView({
           style={{ fieldSizing: 'content' }}
           className="w-full resize-none rounded border border-transparent bg-transparent p-0.5 text-justify text-[11pt] leading-relaxed text-slate-800 hover:border-slate-200 focus:border-green-500 focus:outline-none print:hidden"
         />
-        <div className="hidden whitespace-pre-wrap text-justify text-[11pt] leading-relaxed print:block">{text}</div>
+        <div className="hidden whitespace-pre-wrap text-justify text-[11pt] leading-relaxed print:block" style={{ orphans: 3, widows: 3 }}>{text}</div>
       </section>
     );
   };
@@ -133,14 +132,25 @@ export default function ChapterReportView({
         </p>
       )}
 
+      {/* One sheet per chapter, as long as it needs to be. Printed, the chapters
+          each start on a new page and their content flows from page to page:
+          a map, a chart or a heading is never split; a long table continues
+          with its header row repeated; the page margins carry the running
+          head, the planning line and the page number (MapSheet's @page). */}
       <div className="print-target">
-        <PaperStack>
-          {report.chapters.map((chapter) =>
-            chapter.parts.map((part, i) => {
-              page += 1;
-              const first = page === 1;
+        <div className="overflow-x-auto rounded-2xl bg-slate-200 py-6 print:overflow-visible print:rounded-none print:bg-transparent print:py-0">
+          <div className="mx-auto w-max space-y-6 px-4 print:w-auto print:space-y-0 print:px-0">
+          {report.chapters.map((chapter, c) => (
+            <section
+              key={chapter.key}
+              aria-label={c === 0 ? title : chapter.heading}
+              className={`report-chapter flex w-[210mm] flex-col gap-4 bg-white p-[15mm] text-slate-900 shadow-lg print:w-auto print:p-0 print:shadow-none ${c > 0 ? 'break-before-page' : ''}`}
+            >
+              {c > 0 && <p className="border-b border-slate-200 pb-1 text-[9px] text-slate-500 print:hidden">{running}</p>}
+              {chapter.parts.map((part, i) => {
+              const first = c === 0 && i === 0;
               return (
-                <Paper key={part.key} label={first ? title : part.heading ?? chapter.heading} running={first ? '' : running} note={NOTE} page={page} pages={total}>
+                <section key={part.key} aria-label={part.heading ?? chapter.heading} className="flex flex-col gap-4">
                   {first && (
                     <header className="text-center">
                       {/* The letterhead: the LGU's seal, the heading, the office's own logo. */}
@@ -158,21 +168,27 @@ export default function ChapterReportView({
                       <p className="text-xs italic text-slate-500">Prepared by {preparedBy} · {date}</p>
                     </header>
                   )}
-                  {i === 0 && <h3 className="text-[14pt] font-extrabold text-slate-900">{chapter.heading}</h3>}
-                  {part.heading && part.heading !== chapter.heading && <h4 className="text-[12pt] font-bold text-slate-800">{part.heading}</h4>}
+                  {i === 0 && <h3 className="break-after-avoid text-[14pt] font-extrabold text-slate-900">{chapter.heading}</h3>}
+                  {part.heading && part.heading !== chapter.heading && <h4 className="break-after-avoid text-[12pt] font-bold text-slate-800">{part.heading}</h4>}
                   {part.maps.map((key) => figure(key, part.maps.length > 1))}
-                  {part.tables.map((table) => (
-                    <div key={table.key} className="space-y-2">
-                      <AttributeTable table={table} size="text-[8.5px]" />
-                      {chartFor(table, { minHeight: '55mm', maxHeight: '80mm' })}
-                    </div>
-                  ))}
+                  {part.tables.map((table) => {
+                    const chart = chartFor(table, { minHeight: '55mm', maxHeight: '80mm' });
+                    return (
+                      <div key={table.key} className="space-y-2">
+                        <AttributeTable table={table} size="text-[8.5px]" flow />
+                        {chart && <div className="break-inside-avoid">{chart}</div>}
+                      </div>
+                    );
+                  })}
                   {part.sections.map(narrative)}
-                </Paper>
+                </section>
               );
-            })
-          )}
-        </PaperStack>
+              })}
+              <p className="mt-auto border-t border-slate-200 pt-1 text-[8px] text-slate-400 print:hidden">{NOTE}</p>
+            </section>
+          ))}
+          </div>
+        </div>
       </div>
     </div>
   );

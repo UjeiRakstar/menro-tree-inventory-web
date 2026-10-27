@@ -18,6 +18,7 @@ import { slopeKey, slopePicture, terrainFacts } from '../lib/layers/terrain.js';
 import { buildEcologicalReport } from '../lib/reports/ecological.js';
 import { LAGUNA_GRID } from '../lib/layers/grid.js';
 import { areaFacts } from '../lib/layers/measure.js';
+import { groundOf } from '../lib/mapAreas.js';
 import { layerKey, soilColourOf, soilColours } from '../lib/layers/palette.js';
 import { PLANNING_ONLY } from '../lib/namriaCover.js';
 import { PROVINCE_LOGO, logoFor } from '../lib/lguLogos.js';
@@ -210,6 +211,9 @@ async function downloadPng(svgElement, paper, fileName) {
   const { blob } = await sheetPng(svgElement, paper);
   saveFile(blob, fileName);
 }
+
+/** Text safe inside a CSS string ("…"), for the printed report's running head. */
+const cssString = (text) => String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ');
 
 export default function MapSheet() {
   const { profile, lgu: ownLgu } = useAuth();
@@ -484,6 +488,19 @@ export default function MapSheet() {
     () => areas.features.filter((f) => f.properties.saved && (!lgu || f.properties.municipality === lgu.name)),
     [areas.features, lgu]
   );
+  // A saved area with no layer facts — saved before the layers were uploaded,
+  // or put in straight from the database, as the training data is — is
+  // measured here against the same grids, as saving it would have done, so
+  // its exposure is shown rather than a dash and a narrative reading 0 ha.
+  const measuredAreas = useMemo(() => {
+    if (!measured.grids) return scopeAreas;
+    return scopeAreas.map((feature) => {
+      const props = feature.properties;
+      if (props.hazards || props.elevationRange || props.soilType) return feature;
+      const facts = areaFacts(LAGUNA_GRID, feature.geometry, measured.grids, { areaM2: siteAreaM2(feature) });
+      return { ...feature, properties: { ...props, ...groundOf(facts, null) } };
+    });
+  }, [scopeAreas, measured.grids]);
   const tables = useMemo(() => {
     const placeLabel = lgu ? 'Barangay' : 'City / municipality';
     const labelOf = new Map(places.map((placeRow) => [placeRow.key ?? placeRow.name, placeRow.name]));
@@ -496,10 +513,10 @@ export default function MapSheet() {
         placeLabel,
         placeOf: lgu ? (tree) => tree.barangay : (tree) => labelOf.get(tree.municipality),
       }),
-      landCoverTable(scopeAreas),
-      plantingSiteTable(scopeAreas),
+      landCoverTable(measuredAreas),
+      plantingSiteTable(measuredAreas),
     ].filter(Boolean);
-  }, [lgu, barangays, brgyStats, tableTrees, scopeAreas, places, measured.facts]);
+  }, [lgu, barangays, brgyStats, tableTrees, scopeAreas, measuredAreas, places, measured.facts]);
   const TABLE_NAMES = { 'land-cover': 'landCover', 'planting-sites': 'plantingSites' };
   const tablesByKey = Object.fromEntries(tables.map((table) => [TABLE_NAMES[table.key] ?? table.key, table]));
   const climate = lgu ? mapLayers.climateByLgu.get(lgu.psgc) ?? null : null;
@@ -1017,6 +1034,23 @@ export default function MapSheet() {
             body * { visibility: hidden !important; }
             .map-sheet, .map-sheet * { visibility: visible !important; }
             .map-sheet { position: fixed; left: 0; top: 0; width: ${paper.width}mm; height: ${paper.height}mm; box-shadow: none !important; }
+          }`
+        : tab === 'report'
+        ? // The report flows over as many A4 pages as it needs; the margins
+          // carry the running head, the planning line and the page number.
+          `@media print {
+            @page {
+              size: 210mm 297mm;
+              margin: 16mm 15mm 18mm 15mm;
+              @top-left { content: "${cssString(`${headingOf(lgu)[0]} · ${reportTitle}`)}"; font: 7.5pt sans-serif; color: #64748b; }
+              @bottom-left { content: "For planning purposes only. Not a land title, survey plan or proof of ownership."; font: 7pt sans-serif; color: #94a3b8; }
+              @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 7pt sans-serif; color: #94a3b8; }
+            }
+            @page :first { @top-left { content: none; } }
+            body * { visibility: hidden !important; }
+            .print-target, .print-target * { visibility: visible !important; }
+            .print-target { position: absolute; left: 0; top: 0; width: 100%; }
+            .print-target * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }`
         : `@media print {
             @page { size: ${tab === 'tables' ? '297mm 210mm' : '210mm 297mm'}; margin: 0; }

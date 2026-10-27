@@ -90,6 +90,17 @@ describe('the tables', () => {
     expect(table.totals).toMatchObject({ trees: 3, flood: 1, floodHigh: 1 });
   });
 
+  it('says an area’s exposure is not measured rather than 0 ha', () => {
+    const unmeasured = buildEcologicalReport({
+      places: PLACES,
+      trees: TREES,
+      tables: { landCover: { rows: [{ name: 'Forest', areaHa: 10, floodHa: null, landslideHa: null }] } },
+    });
+    const text = unmeasured.sections.find((s) => s.key === 'area-exposure').text;
+    expect(text).toMatch(/the flood exposure is not measured, nor the landslide exposure/);
+    expect(text).not.toMatch(/0 ha lie/);
+  });
+
   it('says nothing of exposure without a hazard layer, rather than zero', () => {
     const table = treeExposureTable({ trees: TREES, places: PLACES, grids: null });
     expect(table.totals.flood).toBeNull();

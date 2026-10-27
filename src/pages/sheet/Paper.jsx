@@ -44,10 +44,22 @@ export function Paper({ orientation = 'portrait', label, running = '', note = ''
  * "What the system shows" and "From") kept on one line ran off the side of
  * the page and squeezed the row labels to a word a line.
  */
-export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.' }) {
+export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.', flow = false }) {
+  // flow: printed in a flowing document (the report), a long table carries on
+  // to the next page — its header row repeated, no row split, its title kept
+  // with its first rows — instead of jumping whole to the next page.
+  const totalsRow = table.totals ? (
+    <tr className="break-inside-avoid bg-slate-100 font-bold text-slate-800">
+      {table.columns.map((column) => (
+        <td key={column.key} className={`px-1.5 py-1 ${column.kind === 'text' ? 'text-left' : 'text-right tabular-nums'}`}>
+          {table.totals[column.key] === undefined ? '' : formatCell(table.totals[column.key], column.kind)}
+        </td>
+      ))}
+    </tr>
+  ) : null;
   return (
-    <section aria-label={table.title} className="break-inside-avoid">
-      <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-700">{table.title}</h3>
+    <section aria-label={table.title} className={flow ? '' : 'break-inside-avoid'}>
+      <h3 className="break-after-avoid text-[12px] font-bold uppercase tracking-wider text-slate-700">{table.title}</h3>
       {table.note && <p className="text-[9px] italic text-slate-500">{table.note}</p>}
       {table.rows.length === 0 ? (
         <p className="mt-1 text-sm text-slate-500">{empty}</p>
@@ -65,7 +77,7 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
           </thead>
           <tbody>
             {table.rows.map((row, i) => (
-              <tr key={`${row.name}-${i}`} className="odd:bg-white even:bg-slate-50">
+              <tr key={`${row.name}-${i}`} className="break-inside-avoid odd:bg-white even:bg-slate-50">
                 {table.columns.map((column, j) =>
                   j === 0 ? (
                     <th key={column.key} scope="row" className="min-w-[24mm] border-b border-slate-200 px-1.5 py-0.5 text-left align-top font-semibold text-slate-800">
@@ -79,18 +91,11 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
                 )}
               </tr>
             ))}
+            {/* Flowing, the totals are the last row, printed once: a <tfoot>
+                is repeated at the foot of every page the table runs over. */}
+            {flow && totalsRow}
           </tbody>
-          {table.totals && (
-            <tfoot className="bg-slate-100 font-bold text-slate-800">
-              <tr>
-                {table.columns.map((column) => (
-                  <td key={column.key} className={`px-1.5 py-1 ${column.kind === 'text' ? 'text-left' : 'text-right tabular-nums'}`}>
-                    {table.totals[column.key] === undefined ? '' : formatCell(table.totals[column.key], column.kind)}
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
-          )}
+          {!flow && table.totals && <tfoot>{totalsRow}</tfoot>}
         </table>
       )}
     </section>

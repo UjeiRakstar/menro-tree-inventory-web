@@ -637,9 +637,14 @@ function areaExposureText({ landCover, plantingSites }) {
   const coverHa = cover.reduce((t, row) => t + (row.areaHa ?? 0), 0);
   const wetSites = sites.filter((row) => (row.floodShare ?? 0) >= 0.3).map((row) => row.name);
   const slideSites = sites.filter((row) => (row.landslideShare ?? 0) >= 0.3).map((row) => row.name);
+  // Not measured is not 0 ha: say so when no area has its hazard figures.
+  const measuredFlood = cover.some((row) => row.floodHa !== null && row.floodHa !== undefined);
+  const measuredSlide = cover.some((row) => row.landslideHa !== null && row.landslideHa !== undefined);
   return (
     (cover.length
-      ? `Of the ${n(cover.length)} land cover areas mapped (${hectares(coverHa)} ha), ${hectares(coverFlood)} ha lie in the flood extent and ${hectares(coverSlide)} ha in the landslide extent. `
+      ? `Of the ${n(cover.length)} land cover areas mapped (${hectares(coverHa)} ha), ` +
+        (measuredFlood ? `${hectares(coverFlood)} ha lie in the flood extent` : 'the flood exposure is not measured') +
+        (measuredSlide ? ` and ${hectares(coverSlide)} ha in the landslide extent. ` : ', nor the landslide exposure. ')
       : 'No land cover has been mapped yet. ') +
     (sites.length ? `${n(sites.length)} tree planting ${sites.length === 1 ? 'site is' : 'sites are'} approved. ` : 'No tree planting site has been approved yet. ') +
     (wetSites.length ? `${listOf(wetSites)} ${wetSites.length === 1 ? 'has' : 'have'} 30% or more of the site in the flood extent: plant flood-tolerant species there. ` : '') +
