@@ -35,7 +35,7 @@ describe('an event made from a planting site (22 October)', () => {
 describe('a pinned event on the public map', () => {
   it('opens the map at its pin, named by its venue', () => {
     const url = new URL(venueMapLink({ venue: 'Labuin Riverbank', venue_lat: 14.28, venue_lng: 121.41 }), 'https://x.test');
-    expect(url.pathname).toBe('/map');
+    expect(url.pathname).toBe('/public-map');
     expect(url.searchParams.get('at')).toBe('14.280000,121.410000');
     expect(url.searchParams.get('place')).toBe('Labuin Riverbank');
     expect(venueMapLink({ venue: 'Capitol' })).toBeNull();

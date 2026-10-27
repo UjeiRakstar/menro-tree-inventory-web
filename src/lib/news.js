@@ -110,15 +110,16 @@ export function whenAndWhere(post) {
 }
 
 /**
- * Where a pinned event is, on the public map (/map?at=…&place=…), or null for
- * one with no pin.
+ * Where a pinned event is, on the public map (/public-map?at=…&place=…), or
+ * null for one with no pin. Not /map: that is the offices' map, behind the
+ * sign-in, and the link is shown to the public.
  */
 export function venueMapLink(post) {
   const lat = Number(post?.venue_lat);
   const lng = Number(post?.venue_lng);
   if (post?.venue_lat == null || post?.venue_lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const params = new URLSearchParams({ at: `${lat.toFixed(6)},${lng.toFixed(6)}`, place: post.venue || post.title || '' });
-  return `/map?${params}`;
+  return `/public-map?${params}`;
 }
 
 /** An event's day, or its first and last, day first as the newsletter has it (inbox.sql). */

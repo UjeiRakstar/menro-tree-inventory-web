@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Leaf, TreePine, BarChart3, BarChart2, ShieldAlert, Smartphone, Sprout, ChevronDown, Compass } from 'lucide-react';
 import NewsBanner from '../../components/public/NewsBanner.jsx';
+import ActivitiesCalendar from '../../components/public/ActivitiesCalendar.jsx';
 import Leaderboard from '../../components/public/Leaderboard.jsx';
 import { ContactForm, OfficeDirectory } from '../../components/public/ContactUs.jsx';
 
@@ -481,6 +482,7 @@ export default function AboutUs() {
 
       {/* PGENRO's News & Events, when there are any */}
       <NewsBanner />
+      <ActivitiesCalendar />
 
       {/* ═══════════════════════════════════════════
           IMPACT STATS BAR — Animated Counters
