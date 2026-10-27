@@ -1,10 +1,13 @@
+import { useEffect } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { isPgenro } from '../../lib/roles.js';
 import { officeOf } from '../../lib/officeSettings.js';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import { officialName } from '../../lib/psgc.js';
 import { PROVINCE_LOGO, logoFor } from '../../lib/lguLogos.js';
+import AccountSection from './AccountSection.jsx';
 import ProfileSection from './ProfileSection.jsx';
 import BarangaySection from './BarangaySection.jsx';
 import TeamSection from './TeamSection.jsx';
@@ -24,6 +27,8 @@ import { useActingLgu } from '../../lib/actingLgu.js';
  * profile and logos, its barangays' figures, its field team, the documents
  * behind its designated areas, areas brought in from files, its own AI key,
  * and its password. PGENRO gets the same, for PGENRO, without barangays.
+ * First, the person's own account — photo, name, designation — apart from the
+ * office's (Your account, from the seal's menu).
  *
  * The super admin can work in one LGU here (21 October): its profile,
  * barangays, team, documents, inventory and imports, as that LGU's office sees
@@ -32,6 +37,11 @@ import { useActingLgu } from '../../lib/actingLgu.js';
  */
 export default function Settings() {
   const { profile, lgu } = useAuth();
+  const { hash } = useLocation();
+  // From the seal's menu: Your account, opened and in view.
+  useEffect(() => {
+    if (hash === '#your-account') document.getElementById('your-account')?.scrollIntoView?.({ behavior: 'smooth' });
+  }, [hash]);
   const { lgu: actingLgu } = useActingLgu(profile);
   const pgenro = isPgenro(profile) && !actingLgu;
   const office = actingLgu ? String(actingLgu.psgc) : officeOf(profile);
@@ -54,6 +64,9 @@ export default function Settings() {
           <SettingsIcon size={24} className="text-green-700" aria-hidden="true" /> Settings
         </h1>
         <p className="mt-1 text-sm text-slate-500">{officeLabel}</p>
+      </div>
+      <div id="your-account" className="scroll-mt-24">
+        <AccountSection key={`${profile?.id}${hash}`} defaultOpen={hash === '#your-account'} />
       </div>
       <ActingLguPicker profile={profile} what="its settings" />
       {training && (

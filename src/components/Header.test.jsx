@@ -132,6 +132,15 @@ describe('Header, for whoever is signed in', () => {
     expect(await screen.findByRole('button', { name: 'PGENRO Laguna · Super admin — account menu' })).toBeInTheDocument();
   });
 
+  it('shows who holds the account, and opens Your account from the seal’s menu (27 October)', async () => {
+    supabaseMock.signInAs({ ...PGENRO_ADMIN, full_name: 'Ana Reyes' });
+    renderHeader();
+    await screen.findByAltText('PGENRO Laguna');
+    openMenu();
+    expect(screen.getByText('Ana Reyes')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/settings#your-account');
+  });
+
   it('keeps PGENRO’s office work on its Action Board, not in the seal’s menu (22 October)', async () => {
     supabaseMock.signInAs(PGENRO_ADMIN);
     renderHeader();

@@ -281,3 +281,66 @@ describe('Settings, before office_settings.sql is run', () => {
     expect(await within(section('LGU profile')).findByRole('alert')).toHaveTextContent('office_settings.sql');
   });
 });
+
+describe('Your account — the person, apart from the office (27 October)', () => {
+  const ANA = { ...PGENRO, id: 'p1', email: 'ana@laguna.gov.ph', full_name: 'Ana Reyes', designation: 'Forester', address: '', avatar_url: '' };
+  afterEach(() => {
+    delete auth.refreshProfile;
+  });
+
+  it('lets PGENRO change their own photo, name and designation, and shows them at once', async () => {
+    auth.refreshProfile = vi.fn();
+    show(ANA);
+    open('Your account');
+    const form = screen.getByRole('form', { name: 'Your account' });
+    expect(within(form).getByLabelText('Full name')).toHaveValue('Ana Reyes');
+    expect(within(form).getByText('ana@laguna.gov.ph')).toBeInTheDocument();
+
+    fireEvent.change(within(form).getByLabelText('Your photo'), { target: { files: [new File(['x'], 'me.jpg', { type: 'image/jpeg' })] } });
+    expect(await within(form).findByRole('img', { name: 'Your photo' })).toBeInTheDocument();
+    const [bucket, path] = supabaseMock.supabase.storage.upload.mock.calls[0];
+    expect(bucket).toBe('office-logos');
+    expect(path).toMatch(/^pgenro\/holder-p1-/);
+
+    fireEvent.change(within(form).getByLabelText('Designation'), { target: { value: 'PGENRO' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(supabaseMock.writesTo('profiles', 'update')).toHaveLength(1));
+    expect(supabaseMock.writesTo('profiles', 'update')[0].payload).toEqual({
+      full_name: 'Ana Reyes',
+      designation: 'PGENRO',
+      address: '',
+      avatar_url: expect.stringContaining('office-logos/pgenro/holder-p1-'),
+    });
+    await waitFor(() => expect(auth.refreshProfile).toHaveBeenCalled());
+    expect(await within(form).findByText(/^Saved\./)).toBeInTheDocument();
+  });
+
+  it('needs a name before saving', () => {
+    show({ ...ANA, full_name: '' });
+    open('Your account');
+    const form = screen.getByRole('form', { name: 'Your account' });
+    fireEvent.submit(form);
+    expect(within(form).getByRole('alert')).toHaveTextContent('Your name is needed.');
+    expect(supabaseMock.writesTo('profiles', 'update')).toHaveLength(0);
+  });
+
+  it('keeps a practice account’s photo, which lives in the real office’s folder', () => {
+    show({ ...ANA, is_training: true });
+    open('Your account');
+    expect(screen.getByRole('button', { name: 'Add a photo' })).toBeDisabled();
+    expect(screen.getByText('A practice account keeps the photo it has.')).toBeInTheDocument();
+  });
+
+  it('opens already, from the seal menu’s Your account', () => {
+    auth.profile = ANA;
+    auth.lgu = null;
+    render(
+      <MemoryRouter initialEntries={['/settings#your-account']}>
+        <Routes>
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('form', { name: 'Your account' })).toBeInTheDocument();
+  });
+});

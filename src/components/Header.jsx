@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, Users } from 'lucide-react';
+import { ChevronDown, Inbox as InboxIcon, Layers, LogOut, MapPinned, Megaphone, Settings as SettingsIcon, UserRound, Users } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useAttention } from '../hooks/useAttention.js';
@@ -255,7 +255,20 @@ export default function Header() {
             >
               <div className="px-3 pb-2 pt-1">
                 <p className="text-sm font-bold text-slate-900">{office.name}</p>
-                {profile?.email && <p className="truncate text-xs text-slate-500">{profile.email}</p>}
+                {/* Who holds the account: their own photo and name, from Your account. */}
+                <div className="mt-1.5 flex items-center gap-2">
+                  {profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-slate-200" />
+                  ) : (
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                      <UserRound size={15} aria-hidden="true" />
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    {profile?.full_name && <p className="truncate text-xs font-semibold text-slate-700">{profile.full_name}</p>}
+                    {profile?.email && <p className="truncate text-xs text-slate-500">{profile.email}</p>}
+                  </div>
+                </div>
               </div>
 
               {/* On a narrow screen the four tabs live here too. */}
@@ -277,7 +290,13 @@ export default function Header() {
                   </NavLink>
                 )}
                 {(pgenro || lguAdmin) && (
-                  <NavLink to="/settings" className={menuItem}>
+                  <Link to="/settings#your-account" onClick={() => setMenuOpen(false)} className={menuItem}>
+                    <UserRound size={16} aria-hidden="true" className="text-slate-500" />
+                    Your account
+                  </Link>
+                )}
+                {(pgenro || lguAdmin) && (
+                  <NavLink to="/settings" end className={menuItem}>
                     <SettingsIcon size={16} aria-hidden="true" className="text-slate-500" />
                     Settings
                   </NavLink>

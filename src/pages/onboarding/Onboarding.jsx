@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import { Check, ImageUp, Loader2, LogOut } from 'lucide-react';
 import { supabase } from '../../supabaseClient.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { officeOf } from '../../lib/officeSettings.js';
 import { MUNICIPALITY_LIST } from '../../lib/lagunaBoundaries.js';
 import { officialName } from '../../lib/psgc.js';
 import { roleLabel } from '../../lib/roles.js';
@@ -11,22 +10,10 @@ import TreeInventorySection from '../settings/TreeInventorySection.jsx';
 import ClimatePlanSection from '../settings/ClimatePlanSection.jsx';
 import { buttonClass, inputClass } from '../settings/Section.jsx';
 import greenTagLogo from '../../assets/GreenTag_Logo.png';
-import { LIMITS, shrinkImage } from '../../lib/shrinkImage.js';
-
-const PHOTO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+import { DESIGNATIONS, PHOTO_TYPES, uploadHolderPhoto } from '../../lib/holderPhoto.js';
 
 export const STEPS = ['Your details', 'Barangay population', 'Tree inventory', 'Climate plan'];
 const LAST_STEP = STEPS.length - 1;
-
-const DESIGNATIONS = [
-  'MENRO',
-  'CENRO',
-  'Municipal Environment and Natural Resources Officer',
-  'City Environment and Natural Resources Officer',
-  'Environmental Management Specialist',
-  'Forest Ranger',
-  'Administrative Aide',
-];
 
 /** What the details step still needs, by field. */
 export function detailProblems(form) {
@@ -78,20 +65,14 @@ export default function Onboarding() {
     if (!picked) return;
     setBusy('photo');
     setProblem('');
-    // Any size: resized here, so what is kept is the small one.
-    let file;
     try {
-      file = await shrinkImage(picked, LIMITS.photo);
+      const avatar_url = await uploadHolderPhoto(profile, picked);
+      setForm((current) => ({ ...current, avatar_url }));
     } catch (problem) {
+      setProblem(problem.message);
+    } finally {
       setBusy('');
-      return setProblem(problem.message);
     }
-    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
-    const path = `${officeOf(profile)}/holder-${profile.id}-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from('office-logos').upload(path, file, { contentType: file.type, upsert: false });
-    setBusy('');
-    if (error) return setProblem(`The photo could not be uploaded: ${error.message}`);
-    setForm((current) => ({ ...current, avatar_url: supabase.storage.from('office-logos').getPublicUrl(path).data.publicUrl }));
   }
 
   async function saveDetails(event) {
