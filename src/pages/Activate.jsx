@@ -1,10 +1,11 @@
 import { lazy, Suspense, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, KeyRound, Leaf, Lock, Mail, TreePine, User } from 'lucide-react';
+import { CheckCircle2, KeyRound, Leaf, Lock, Mail, User } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import { CODE_REASONS, codeProblem, formatCode, normalizeCode } from '../lib/accountCodes.js';
 import { roleLabel } from '../lib/roles.js';
 import LguReveal from '../components/LguReveal.jsx';
+import greenTagLogo from '../assets/GreenTag_Logo.png';
 
 // A map is a heavy thing to load for a page most people see once. It comes
 // only when the hall actually has to be pinned.
@@ -61,6 +62,10 @@ export default function Activate() {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  // Signed in at once: Supabase asks for no email confirmation (switched off
+  // for a training day, when the free plan's few emails an hour would leave
+  // most of a room waiting for a link).
+  const [ready, setReady] = useState(false);
 
   async function handleCheckCode(event) {
     event.preventDefault();
@@ -109,7 +114,7 @@ export default function Activate() {
 
     setFormError('');
     setSubmitting(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
@@ -135,6 +140,7 @@ export default function Activate() {
       );
       return;
     }
+    setReady(Boolean(data?.session));
     setDone(true);
   }
 
@@ -152,15 +158,29 @@ export default function Activate() {
 
       <div className="relative w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-700 text-white">
-            <TreePine size={32} aria-hidden="true" />
-          </div>
+          <Link to="/" className="inline-block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
+            <img src={greenTagLogo} alt="Green Tag — home" className="mx-auto mb-4 h-20 w-20 object-contain" />
+          </Link>
           <h1 className="text-2xl font-bold text-slate-800">Activate your LGU account</h1>
           <p className="mt-1 text-sm text-slate-500">With the account code PGENRO gave you</p>
         </div>
 
         <div className="rounded-2xl border border-slate-100 bg-white p-8 shadow-xl">
-          {done ? (
+          {done && ready ? (
+            <div role="status">
+              <CheckCircle2 className="text-green-600" size={32} aria-hidden="true" />
+              <h2 className="mt-3 text-lg font-semibold text-slate-800">Your account is ready</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                You are signed in as <strong>{email.trim()}</strong> — the {role} account for {unlocks?.label}.
+              </p>
+              <Link
+                to="/biodiversity-dashboard"
+                className="mt-6 block w-full rounded-lg bg-green-700 py-2.5 text-center text-sm font-medium text-white transition hover:bg-green-800"
+              >
+                Open the dashboard
+              </Link>
+            </div>
+          ) : done ? (
             <div role="status">
               <CheckCircle2 className="text-green-600" size={32} aria-hidden="true" />
               <h2 className="mt-3 text-lg font-semibold text-slate-800">Check your email</h2>

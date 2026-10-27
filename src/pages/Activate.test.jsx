@@ -154,6 +154,18 @@ describe('the account', () => {
     expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument();
   });
 
+  it('opens the account at once when Supabase asks for no email confirmation (a training day)', async () => {
+    await reachAccountForm();
+    supabaseMock.supabase.auth.signUp.mockResolvedValue({
+      data: { user: { id: 'uuid-new' }, session: { access_token: 't' } },
+      error: null,
+    });
+    fillAccount();
+    expect(await screen.findByRole('heading', { name: 'Your account is ready' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the dashboard' })).toHaveAttribute('href', '/biodiversity-dashboard');
+    expect(screen.queryByText(/confirmation link/)).not.toBeInTheDocument();
+  });
+
   it('explains a code that stopped working between the check and the sign-up', async () => {
     await reachAccountForm();
     supabaseMock.supabase.auth.signUp.mockResolvedValue({
