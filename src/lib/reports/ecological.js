@@ -3,7 +3,7 @@ import { listOf } from '../reportWriter.js';
 import { lguFacts, officialName, provinceFacts } from '../psgc.js';
 import { originOf } from '../treeOrigin.js';
 import { treeClassOf } from '../mapSheet.js';
-import { diameterDistribution, readDiameterShape } from '../treeVolume.js';
+import { diameterDistribution } from '../treeVolume.js';
 import { LAGUNA_GRID } from '../layers/grid.js';
 import { levelAt } from '../layers/measure.js';
 
@@ -14,10 +14,13 @@ import { levelAt } from '../layers/measure.js';
  *
  *   1. Executive Summary
  *   2. Ecological Profile — location, elevation, slope, climate
- *   3. Biodiversity of Trees — overview; endemic, native and invasive trees;
- *      vegetation structure and density; phenology and economic value
- *   4. Exposure of Natural Resources to Hazards — the trees; land cover and
+ *   3. Exposure of Natural Resources to Hazards — the trees; land cover and
  *      tree planting sites
+ *
+ * The biodiversity of the trees — overview, origin, structure, phenology —
+ * was chapter 3 until 29 October; it is now the biological features of the
+ * Urban Biodiversity Management Plan (biodiversityPlan.js). Its tables stay
+ * here, for the plan to use.
  *
  * Each part keeps its own maps, tables and narrative together, rather than
  * all the maps, then all the tables, then all the text. The narrative is
@@ -539,80 +542,6 @@ function climateText({ short, climate }) {
   );
 }
 
-function overviewText({ short, trees, summary, species }) {
-  if (trees.length === 0) return `No tree has been tagged in ${short} yet.`;
-  const top = (species.rows ?? []).slice(0, 5);
-  const over = (species.rows ?? []).filter((row) => row.share > 0.1).map((row) => row.name);
-  const { origin, use } = summary;
-  return (
-    `${n(trees.length)} trees of ${n(species.rows.length)} species have been tagged in ${short}. The most common are ` +
-    `${listOf(top.map((row) => `${row.name} (${n(row.count)})`))}. By origin, ${n(origin.endemic)} are endemic, ${n(origin.native)} native, ` +
-    `${n(origin.exotic)} exotic and ${n(origin.invasive)} invasive${origin.unrecorded ? `; ${n(origin.unrecorded)} have no origin recorded` : ''}. ` +
-    `By use, ${n(use.fruit)} are fruit trees, ${n(use.timber)} timber and ${n(use.ornamental)} ornamental.` +
-    (over.length ? ` ${listOf(over)} ${over.length === 1 ? 'is' : 'are each'} more than 10% of the inventory, above Santamour’s guideline for one species.` : '') +
-    '\n\nThese trees are part of the LGU’s natural capital. They store carbon and take more of it up each year; they shade streets and ' +
-    'homes and cool the air around them; they hold soil on slopes and riverbanks; fruit trees feed households and add to their ' +
-    'income, and timber trees are a future supply of wood, cut only under a permit. A varied inventory, led by native species, is ' +
-    'more resilient to pests, disease and a changing climate than one dominated by a few species.'
-  );
-}
-
-function originText({ short, summary, speciesRows }) {
-  const { origin } = summary;
-  const total = Object.values(origin).reduce((t, v) => t + v, 0);
-  if (total === 0) return `No tree has been tagged in ${short} yet.`;
-  const endemic = speciesRows.filter((row) => row.originId === 'endemic');
-  const invasive = speciesRows.filter((row) => row.originId === 'invasive');
-  return (
-    `${n(origin.endemic)} of the ${n(total)} tagged trees (${pct(origin.endemic, total)}) are endemic — found naturally only in the Philippines — ` +
-    `and ${n(origin.native)} (${pct(origin.native, total)}) are native.` +
-    (endemic.length ? ` The endemic species are ${listOf(endemic.map((row) => `${row.name} (${n(row.count)})`))}.` : ' No endemic species has been tagged yet.') +
-    ` ${n(origin.invasive)} trees (${pct(origin.invasive, total)}) are of invasive species` +
-    (invasive.length ? `: ${listOf(invasive.map((row) => `${row.name} (${n(row.count)})`))}.` : '.') +
-    '\n\nEndemic and native trees carry the local biodiversity — the birds, insects and other plants that depend on them — and are the ' +
-    'species to favour in planting. Invasive trees spread at the expense of native vegetation; the share of invasive species is one of ' +
-    'the City Biodiversity Index’s indicators (Indicator 9), and the planting site suggestions never recommend an invasive species.'
-  );
-}
-
-function structureText({ diameter, height, density, diversity, placeLabel }) {
-  const d = diversity.diversity;
-  const top = density.rows.filter((row) => row.trees > 0).slice(0, 3);
-  const shape = readDiameterShape(diameter.distribution);
-  return (
-    (shape ? `${shape.headline}: ${shape.detail.charAt(0).toLowerCase()}${shape.detail.slice(1)} ` : 'No tree has been measured for its diameter yet. ') +
-    (height.mean !== null ? `The measured trees average about ${height.mean.toFixed(1)} m in total height. ` : '') +
-    (top.length
-      ? `The inventory is densest in ${listOf(top.map((row) => `${row.name} (${row.perHa.toFixed(2)} trees per ha)`))}; over the whole area it averages ${(density.totals.perHa ?? 0).toFixed(2)} tagged trees per hectare. `
-      : '') +
-    (d.shannon === null
-      ? 'Too few species are identified to measure diversity.'
-      : `Shannon’s diversity index is H′ = ${d.shannon.toFixed(2)}, with an evenness of J = ${d.evenness === null ? '—' : d.evenness.toFixed(2)}; ` +
-        `Simpson’s dominance is c = ${d.simpson.toFixed(3)}, so two trees picked at random are of different species ${pct(1 - d.simpson, 1)} of the time.`) +
-    '\n\nThe size and height classes show whether the tree cover is young or mature, and whether a canopy is coming: many small trees ' +
-    'is a planting programme still growing; trees spread across the classes replace themselves. Density shows where the inventory is ' +
-    `thick and where it is thin — a ${placeLabel === 'Barangay' ? 'barangay' : 'place'} with few tagged trees may have few trees, or may simply not have been surveyed yet.`
-  );
-}
-
-function phenologyText({ table }) {
-  const rows = table.rows ?? [];
-  if (rows.length === 0) return 'No identified species has been tagged yet.';
-  const withMonths = rows.filter((row) => row.flowering || row.fruiting);
-  const fruit = rows.filter((row) => row.useId === 'fruit');
-  const fruitWithMonths = fruit.filter((row) => row.fruiting);
-  const observed = rows.reduce((t, row) => t + row.observed, 0);
-  return (
-    `Flowering and fruiting months are on record for ${n(withMonths.length)} of the ${n(rows.length)} species tagged.` +
-    (fruitWithMonths.length ? ` The fruit trees are harvested in these months: ${fruitWithMonths.slice(0, 6).map((row) => `${row.name}, ${row.fruiting}`).join('; ')}.` : '') +
-    (observed ? ` The field officers have recorded the phenology of ${n(observed)} trees; ${n(rows.reduce((t, row) => t + row.inFlower, 0))} were last seen in flower and ${n(rows.reduce((t, row) => t + row.inFruit, 0))} in fruit.` : ' No phenology has been recorded in the field yet.') +
-    '\n\nPhenology ties the trees to the local economy and calendar: the fruiting months of the fruit trees are their harvest season and ' +
-    'a source of household income; flowering trees feed bees and other pollinators; and seeds are collected for nurseries when the ' +
-    'fruit is ripe. ' +
-    (withMonths.length < rows.length ? 'The species without months are those whose RISE profile PGENRO has yet to record.' : '')
-  );
-}
-
 function treeExposureText({ table, grids }) {
   if (!grids?.flood && !grids?.landslide) return 'The hazard layers have not been uploaded, so the trees’ exposure is not measured.';
   const t = table.totals ?? {};
@@ -736,8 +665,7 @@ export const REFERENCES = [
  * areaHa }), measured (the places' layer facts), grids (the measuring grids,
  * for each tree's hazard level), placeLabel, tables (the map sheet's
  * attribute tables by key: landCover, plantingSites), trees, placeOf,
- * climate (CLIRAM), populationOf, urbanOf, profiles (species_profiles),
- * phenology (phenology_records).
+ * climate (CLIRAM), populationOf, urbanOf.
  */
 export function buildEcologicalReport(ctx) {
   const placeLabel = ctx.placeLabel ?? 'Barangay';
@@ -756,14 +684,6 @@ export function buildEcologicalReport(ctx) {
   const climate = climateTable(ctx.climate);
   const summary = treeSummaryTable(trees);
   const species = speciesTable(trees);
-  const byPlace = treesByPlaceTable({ trees, places, placeOf, placeLabel });
-  const originPlaces = originByPlaceTable({ trees, places, placeOf, placeLabel });
-  const originSpecies = originSpeciesTable({ trees, placeOf, placeLabel });
-  const diameter = diameterTable(trees);
-  const height = heightTable(trees);
-  const density = densityTable({ trees, places, placeOf, placeLabel });
-  const diversity = diversityTable(trees);
-  const phenology = phenologyTable({ trees, profiles: ctx.profiles ?? [], records: ctx.phenology ?? [] });
   const exposure = treeExposureTable({ trees, places, placeOf, grids: ctx.grids ?? null, placeLabel });
   const landCover = byKey.landCover ?? null;
   const plantingSites = byKey.plantingSites ?? null;
@@ -800,31 +720,13 @@ export function buildEcologicalReport(ctx) {
       ],
     },
     {
-      key: 'biodiversity',
-      heading: '3. Biodiversity of Trees',
-      parts: [
-        part('overview', '3.1 Overview of the Biodiversity', ['trees'], [summary, species, byPlace], [
-          { key: 'overview', heading: 'Overview of the biodiversity', text: overviewText({ short, trees, summary, species }) },
-        ]),
-        part('origin', '3.2 Endemic, Native and Invasive Trees', ['origin'], [originPlaces, originSpecies], [
-          { key: 'origin', heading: 'Endemic, native and invasive trees', text: originText({ short, summary, speciesRows: originSpecies.rows }) },
-        ]),
-        part('structure', '3.3 Vegetation Structure and Density', [], [diameter, height, density, diversity], [
-          { key: 'structure', heading: 'Vegetation structure and density', text: structureText({ diameter, height, density, diversity, placeLabel }) },
-        ]),
-        part('phenology', '3.4 Phenology and Economic Value', [], [phenology], [
-          { key: 'phenology', heading: 'Phenology and economic value', text: phenologyText({ table: phenology }) },
-        ]),
-      ],
-    },
-    {
       key: 'exposure',
-      heading: '4. Exposure of Natural Resources to Hazards',
+      heading: '3. Exposure of Natural Resources to Hazards',
       parts: [
-        part('tree-exposure', '4.1 Exposure of the Trees', ['trees-flood', 'trees-landslide'], [exposure], [
+        part('tree-exposure', '3.1 Exposure of the Trees', ['trees-flood', 'trees-landslide'], [exposure], [
           { key: 'tree-exposure', heading: 'Exposure of the trees', text: treeExposureText({ table: exposure, grids: ctx.grids }) },
         ]),
-        part('area-exposure', '4.2 Exposure of Land Cover and Tree Planting Sites', ['areas-flood', 'areas-landslide'], [landCover, plantingSites], [
+        part('area-exposure', '3.2 Exposure of Land Cover and Tree Planting Sites', ['areas-flood', 'areas-landslide'], [landCover, plantingSites], [
           { key: 'area-exposure', heading: 'Exposure of land cover and tree planting sites', text: areaExposureText({ landCover, plantingSites }) },
         ]),
         part('sources', 'Data and Limitations', [], [], [{ key: 'sources', heading: 'Data and limitations', text: SOURCES }]),
@@ -834,10 +736,12 @@ export function buildEcologicalReport(ctx) {
   ];
 
   const parts = chapters.flatMap((chapter) => chapter.parts);
+  // Only the maps the chapters show, so none is drawn for nothing.
+  const usedMaps = new Set(parts.flatMap((p) => p.maps));
   return {
     kind: ECOLOGICAL_REPORT.id,
     title: ECOLOGICAL_REPORT.title,
-    maps: ecologicalMaps(placeLabel),
+    maps: ecologicalMaps(placeLabel).filter((map) => usedMaps.has(map.key)),
     chapters,
     tables: parts.flatMap((p) => p.tables),
     sections: parts.flatMap((p) => p.sections),

@@ -780,6 +780,64 @@ Suggested order at the end.
 **Where it stands (22 October):** 1, 2, 3, 4, 5, 6, 8 and 9 done; 7 parked as an
 option, not a priority.
 
+## Asked for on 28 October, after the demo (not built)
+
+Parked as asked on the morning of the District 4 launch: none of this is
+coded. Same form as above: what the system has, what it would take, a verdict.
+
+1. **The Action Board's barangays in alphabetical order.** *Has:*
+   `HazardsByBarangay` (`src/pages/ActionBoard.jsx`) puts the barangays with
+   the most hazards nobody has been sent to first (decided 17–18 October),
+   red with a "!". *Would take:* the sort changed to the name alone. The red
+   "!" stays, so the barangays still waiting stand out without being on top.
+   Only the MENRO/CENRO's board: PGENRO's list of LGUs (`ActionSummary.jsx`)
+   keeps "most waiting first" unless asked. *Verdict:* **helpful, light.** An
+   office looks up a barangay by name; a list that reshuffles after every
+   dispatch is harder to find things in. Consider a small "A–Z / Most waiting"
+   switch if both are wanted.
+
+2. **One permit per client, all of their trees on it.** *Has:* the walk-in
+   form already takes one client and several trees and prints them on one
+   permit, but saves **one `permits` row per tree** (`number_of_trees: 1`
+   each, the client's details copied onto every row). Issuing from a tagged
+   tree (`IssuePermitModal`) is one tree, one permit. So the permit log, the
+   counts and PGENRO's view show three "permits" where the office issued one.
+   *Would take:* a schema change:
+   - `permits` as the permit itself (client, reason, documents, date, a
+     permit number), plus `permit_trees`, one line per tree (tagged
+     `tree_id`, or a point and species for an untagged one);
+   - the LGU fence (`permits_fence.sql`), RLS, PGENRO's read-only view,
+     the archive, the permit log and its export, the reports that count
+     permits and trees covered (`treesCovered` already exists), the GHG
+     report (reads a status per permit), the training seed;
+   - existing rows grouped into permits (same client, contact and day);
+   - "Add to an existing permit" when issuing from a tagged tree.
+   *Verdict:* **useful, medium-heavy, worth doing.** It matches how a cutting
+   permit is really issued, with one document and a list of trees, and it
+   makes the permit counts honest. Do it as its own step with its own SQL
+   file and tests, not mixed with other work.
+
+3. **Cut trees kept, and shown to the public with the reason.** *Has:* a cut
+   tree is not deleted: it stays in `trees` with `task_status = 'Cut'`, and the
+   public map leaves it out. Nothing in the web app marks a tree cut yet (that
+   status comes from elsewhere). *Would take:* "Mark as cut" on a permitted
+   tree (the date cut, by whom, and the replacement planting if the permit
+   requires it); a "Removed" layer on the public map, off by default, with a
+   grey marker; a tree's card saying species, size, barangay, date cut,
+   permit number and the reason. *Watch the Data Privacy Act (RA 10173):* the
+   public sees **none** of the client's name, contact, address or documents
+   (the barangay clearance and photos in `requirements_urls`). The reason is
+   free text and may name people. So show a reason **category** (e.g. road
+   widening, hazard to a house, power lines, construction), picked when the
+   permit is issued, plus an optional public note the office approves.
+   Untagged walk-in trees can be shown at their point. *Verdict:* **useful,
+   medium, good for trust.** It answers "why was this tree cut?" before
+   anyone has to ask, and the record already survives. It depends on item 2,
+   because the permit number and reason come from the permit. Get PGENRO's OK
+   on what is shown publicly.
+
+**Suggested order:** 1 any time (minutes); 2, then 3 on top of it.
+
 ## Before handing the system to IT (deployment notes, 22 October)
 
 - **Push and merge.** The web branch `feat/ui-overhaul-phase-2-4` is 156

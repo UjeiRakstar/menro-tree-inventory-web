@@ -112,9 +112,14 @@ describe('MapSheet', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
     const summary = await screen.findByRole('textbox', { name: 'Executive summary — text' });
     expect(summary.value).toMatch(/Municipality of Santa Cruz/);
-    // The Ecological Profile first; beside it, for a municipality, the UBI, and the GHG report (27 October).
+    // The Ecological Profile first; beside it, for a municipality, the UBI and the management plan, and the GHG report.
     const choices = within(screen.getByRole('radiogroup', { name: 'Which report' })).getAllByRole('radio');
-    expect(choices.map((choice) => choice.textContent)).toEqual(['Ecological profile and tree inventory', 'Urban Biodiversity Index', 'Greenhouse gas']);
+    expect(choices.map((choice) => choice.textContent)).toEqual([
+      'Ecological profile and tree inventory',
+      'Urban Biodiversity Index',
+      'Urban Biodiversity Management Plan',
+      'Greenhouse gas',
+    ]);
     expect(choices[0]).toHaveAttribute('aria-checked', 'true');
     for (const heading of [
       '1. Executive Summary',
@@ -123,17 +128,14 @@ describe('MapSheet', () => {
       '2.2 Elevation',
       '2.3 Slope',
       '2.4 Climate',
-      '3. Biodiversity of Trees',
-      '3.1 Overview of the Biodiversity',
-      '3.2 Endemic, Native and Invasive Trees',
-      '3.3 Vegetation Structure and Density',
-      '3.4 Phenology and Economic Value',
-      '4. Exposure of Natural Resources to Hazards',
-      '4.1 Exposure of the Trees',
-      '4.2 Exposure of Land Cover and Tree Planting Sites',
+      '3. Exposure of Natural Resources to Hazards',
+      '3.1 Exposure of the Trees',
+      '3.2 Exposure of Land Cover and Tree Planting Sites',
     ]) {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     }
+    // The biodiversity of the trees is the management plan's now (29 October).
+    expect(screen.queryByRole('heading', { name: /Biodiversity of Trees/ })).toBeNull();
 
     fireEvent.change(summary, { target: { value: 'Our own words.' } });
     expect(screen.getByRole('textbox', { name: 'Executive summary — text' })).toHaveValue('Our own words.');
@@ -143,7 +145,7 @@ describe('MapSheet', () => {
     expect(supabaseMock.supabase.functions.invoke).toHaveBeenCalledWith('improve-report', expect.objectContaining({
       body: expect.objectContaining({ place: 'Municipality of Santa Cruz' }),
     }));
-    expect(screen.getByRole('status')).toHaveTextContent(/Read it through before you use it/);
+    expect(screen.getByText(/Read it through before you use it/)).toHaveAttribute('role', 'status');
 
     fireEvent.click(screen.getByRole('button', { name: /Write again from the figures/ }));
     expect(screen.getByRole('textbox', { name: 'Executive summary — text' }).value).toMatch(/Municipality of Santa Cruz/);
@@ -278,9 +280,8 @@ describe('MapSheet', () => {
     show();
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
     expect(await screen.findByText('Figure 1. Location map — the place and its barangays')).toBeInTheDocument();
-    expect(screen.getByText('Figure 4. The tagged trees')).toBeInTheDocument();
-    expect(screen.getByText('Figure 6. The tagged trees and flood susceptibility (UP NOAH)')).toBeInTheDocument();
-    expect(screen.getByText('Figure 9. Land cover, tree planting sites and rain-induced landslide susceptibility (UP NOAH)')).toBeInTheDocument();
+    expect(screen.getByText('Figure 4. The tagged trees and flood susceptibility (UP NOAH)')).toBeInTheDocument();
+    expect(screen.getByText('Figure 7. Land cover, tree planting sites and rain-induced landslide susceptibility (UP NOAH)')).toBeInTheDocument();
     // No elevation or landslide layer here: no map of them, said so.
     expect((await screen.findAllByText('This layer has not been uploaded yet, so there is no map of it.')).length).toBeGreaterThanOrEqual(4);
     expect(screen.getByRole('textbox', { name: 'Elevation — text' }).value).toMatch(/elevation layer has not been uploaded/);
@@ -288,7 +289,8 @@ describe('MapSheet', () => {
     expect(screen.getByRole('button', { name: /Excel/ })).toBeInTheDocument();
   });
 
-  it('writes the biodiversity of the trees: origin, use, species and their harvest months', async () => {
+  it('writes the management plan in Annex B’s outline, told once what it is, and the biodiversity of the trees in it', async () => {
+    window.localStorage.removeItem('greentag.planNotice.hidden');
     supabaseMock.setResponse('trees:select', {
       data: [
         { id: 't1', latitude: 14.2805, longitude: 121.4105, species: 'Narra', species_type: 'Endemic', tree_category: 'Timber', source: 'crowdsource' },
@@ -296,16 +298,53 @@ describe('MapSheet', () => {
       ],
       error: null,
     });
-    supabaseMock.setResponse('species_profiles:select', { data: [{ species: 'Narra', flowering_months: [3, 4], fruiting_months: [5, 6] }], error: null });
+    supabaseMock.setResponse('species_profiles:select', {
+      data: [{ species: 'Narra', flowering_months: [3, 4], fruiting_months: [5, 6], conservation_status: 'Vulnerable (DAO 2017-11)' }],
+      error: null,
+    });
     show();
     fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
-    const origin = await screen.findByRole('region', { name: 'Endemic, native and invasive species' });
-    await waitFor(() => expect(within(origin).getByRole('rowheader', { name: 'Narra' }).closest('tr')).toHaveTextContent('Endemic'));
-    expect(within(origin).getByRole('rowheader', { name: 'Mahogany' }).closest('tr')).toHaveTextContent('Invasive');
+    fireEvent.click(await screen.findByRole('radio', { name: 'Urban Biodiversity Management Plan' }));
+
+    // What the plan is, the first time: "I understood", and the box keeps it closed.
+    const notice = await screen.findByRole('dialog', { name: /About the Urban Biodiversity Management Plan/ });
+    expect(notice).toHaveTextContent('Annex B');
+    expect(notice).toHaveTextContent('only of the trees tagged within Santa Cruz’s jurisdiction');
+    expect(notice).toHaveTextContent('This page is a read-only preview.');
+    fireEvent.click(within(notice).getByRole('checkbox', { name: 'Don’t show this again' }));
+    fireEvent.click(within(notice).getByRole('button', { name: 'I understood' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.localStorage.getItem('greentag.planNotice.hidden')).toBe('1');
+
+    expect(screen.getByRole('heading', { name: 'URBAN BIODIVERSITY MANAGEMENT PLAN' })).toBeInTheDocument();
+    for (const heading of ['Executive Summary', 'II. Area Profile', 'd. Biological features', 'IV. Vision, Mission, Goals', 'IX. Annexes']) {
+      expect(screen.getAllByRole('heading', { name: heading }).length).toBeGreaterThan(0);
+    }
+    // Read-only: the text is shown, not edited, and there is no AI to improve it.
+    expect(within(screen.getByRole('region', { name: 'Executive summary' })).getByText(/composed only of the trees tagged within the territorial jurisdiction of the Municipality of Santa Cruz/)).toBeInTheDocument();
+    expect(document.querySelectorAll('.print-target textarea')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Improve with AI/ })).toBeNull();
+
+    // TB 2018-02's templates: the list of green spaces, and the list of recorded plant species.
+    expect(screen.getByRole('region', { name: 'A. List of green spaces' })).toBeInTheDocument();
+    const plants = screen.getByRole('region', { name: 'Table x. List of recorded plant species' });
+    await waitFor(() => expect(within(plants).getByText('Narra').closest('tr')).toHaveTextContent('Vulnerable (DAO 2017-11)'));
+    expect(within(plants).getByText('Narra').closest('tr')).toHaveTextContent('Endemic');
+    expect(within(plants).getByText('Mahogany').closest('tr')).toHaveTextContent('Invasive');
     const summary = screen.getByRole('region', { name: 'The tagged trees by origin and by use' });
     expect(within(summary).getByRole('rowheader', { name: 'Timber trees' }).closest('tr')).toHaveTextContent('2');
     const phenology = screen.getByRole('region', { name: 'Phenology and harvest periods by species' });
     await waitFor(() => expect(within(phenology).getByRole('rowheader', { name: 'Narra' }).closest('tr')).toHaveTextContent('May to June'));
+  });
+
+  it('does not tell the plan again once told not to', async () => {
+    window.localStorage.setItem('greentag.planNotice.hidden', '1');
+    show();
+    fireEvent.click(screen.getByRole('tab', { name: 'Report' }));
+    fireEvent.click(await screen.findByRole('radio', { name: 'Urban Biodiversity Management Plan' }));
+    expect(await screen.findByRole('heading', { name: 'URBAN BIODIVERSITY MANAGEMENT PLAN' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    window.localStorage.removeItem('greentag.planNotice.hidden');
   });
 
   it('offers slope as a survey layer, once there is an elevation layer', () => {

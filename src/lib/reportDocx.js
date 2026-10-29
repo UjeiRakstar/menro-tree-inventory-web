@@ -19,10 +19,19 @@ import { formatCell } from './attributeTables.js';
  *   textOf    (section) => the section's text as the office left it
  *   logos     the letterhead's pictures (ArrayBuffers): the LGU's seal, the
  *             office's logo — PNG or JPEG; any other kind is left out
+ *   subtitle  lines under the title (the management plan's, 29 October)
+ *   chartsByKey  { [table key]: { data, width, height, title } }: each
+ *             table's chart as a PNG (chartImage.js), put under the table
+ *
+ * In chapters, the plan's (29 October) has a title page — a chapter with no
+ * heading — a table of contents (`contents`), written as Word's own, so it
+ * keeps up when the office inserts sections; and parts of `level` 3, Annex
+ * B's i., ii., … Every chapter after the first starts on a new page.
  */
 export async function reportDocx({
   heading = [],
   title,
+  subtitle = [],
   preparedBy,
   date = new Date(),
   sections = [],
@@ -32,6 +41,7 @@ export async function reportDocx({
   figuresFirst = false,
   chapters = null,
   figuresByKey = {},
+  chartsByKey = {},
   logos = [],
   textOf = (section) => section.text,
 }) {
@@ -43,6 +53,7 @@ export async function reportDocx({
     Packer,
     Paragraph,
     Table,
+    TableOfContents,
     TableCell,
     TableRow,
     TextRun,
@@ -76,6 +87,7 @@ export async function reportDocx({
     ...heading.map((line, i) => centred(line, { bold: i === 0, size: i === 0 ? 24 : 20 })),
     new Paragraph({ text: '' }),
     new Paragraph({ heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true })] }),
+    ...subtitle.map((line) => centred(line, { size: 22 })),
     centred(
       `Prepared by ${preparedBy} · ${date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
       { size: 18, italics: true }
@@ -136,17 +148,41 @@ export async function reportDocx({
       rows.push(new TableRow({ children: table.columns.map((column) => cell(formatCell(table.totals[column.key], column.kind), { bold: true })) }));
     }
     children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
+    // Its chart, as the page shows it under the table.
+    const chart = chartsByKey[table.key];
+    if (chart?.data) {
+      const width = Math.min(600, chart.width);
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120 },
+          children: [new ImageRun({ type: 'png', data: chart.data, transformation: { width, height: Math.round((width * chart.height) / chart.width) } })],
+        })
+      );
+      if (chart.title) children.push(centred(chart.title, { italics: true, size: 18 }));
+    }
     children.push(new Paragraph({ text: '' }));
   };
 
   if (chapters) {
     let figureNo = 0;
     const numbered = new Map();
-    for (const chapter of chapters) {
-      children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: chapter.heading })] }));
+    chapters.forEach((chapter, c) => {
+      if (chapter.contents) {
+        // Not a heading itself, so the contents do not list themselves.
+        children.push(new Paragraph({ pageBreakBefore: c > 0, children: [new TextRun({ text: chapter.heading, bold: true, size: 32 })] }));
+        children.push(new TableOfContents(chapter.heading, { hyperlink: true, headingStyleRange: '1-3' }));
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: 'If the contents are empty or out of date, right-click them in Word and choose Update Field.', italics: true, size: 16 })],
+          })
+        );
+      } else if (chapter.heading) {
+        children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, pageBreakBefore: c > 0, children: [new TextRun({ text: chapter.heading })] }));
+      }
       for (const part of chapter.parts) {
         if (part.heading && part.heading !== chapter.heading) {
-          children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: part.heading })] }));
+          children.push(new Paragraph({ heading: part.level === 3 ? HeadingLevel.HEADING_3 : HeadingLevel.HEADING_2, children: [new TextRun({ text: part.heading })] }));
         }
         for (const key of part.maps) {
           const figure = figuresByKey[key];
@@ -167,11 +203,19 @@ export async function reportDocx({
         part.tables.forEach(addTable);
         for (const section of part.sections) {
           for (const paragraph of String(textOf(section) ?? '').split(/\n{2,}/)) {
-            if (paragraph.trim()) children.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: paragraph.trim(), size: 22 })] }));
+            if (paragraph.trim()) {
+              children.push(
+                new Paragraph({
+                  alignment: section.center ? AlignmentType.CENTER : undefined,
+                  spacing: { after: 120 },
+                  children: [new TextRun({ text: paragraph.trim(), size: 22 })],
+                })
+              );
+            }
           }
         }
       }
-    }
+    });
   } else {
     addFigures();
     if (figuresFirst) {
@@ -189,6 +233,12 @@ export async function reportDocx({
     })
   );
 
-  const document = new Document({ creator: 'Green Tag Tree Inventory System', title, sections: [{ children }] });
+  const document = new Document({
+    creator: 'Green Tag Tree Inventory System',
+    title,
+    // Word fills a table of contents in when the document opens.
+    features: { updateFields: chapters?.some((chapter) => chapter.contents) ?? false },
+    sections: [{ children }],
+  });
   return Packer.toBlob(document);
 }

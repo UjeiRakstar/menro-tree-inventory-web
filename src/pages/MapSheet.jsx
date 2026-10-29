@@ -18,6 +18,7 @@ import { slopeKey, slopePicture, terrainFacts } from '../lib/layers/terrain.js';
 import { ECOLOGICAL_REPORT, buildEcologicalReport } from '../lib/reports/ecological.js';
 import { buildIndexReport, indexReportFor } from '../lib/reports/biodiversityIndex.js';
 import { GHG_REPORT, buildGreenhouseReport } from '../lib/reports/greenhouse.js';
+import { buildPlanReport, planReportFor } from '../lib/reports/biodiversityPlan.js';
 import { loadCbiEvents } from '../lib/news.js';
 import { loadVerifiedPlans } from '../lib/lccap.js';
 import { loadCommunityCounts } from '../lib/community.js';
@@ -36,8 +37,10 @@ import { barangayForTree, loadBarangayIndex } from '../lib/barangayLookup.js';
 import { barangayTable, carbonTable, hazardTable, landCoverTable, plantingSiteTable, tablesWorkbook } from '../lib/attributeTables.js';
 import { lguFacts, officialName } from '../lib/psgc.js';
 import { reportDocx } from '../lib/reportDocx.js';
+import { chartPng } from '../lib/chartImage.js';
 import TablesView from './sheet/TablesView.jsx';
 import ChapterReportView from './sheet/ChapterReportView.jsx';
+import PlanNotice, { planNoticeHidden } from './sheet/PlanNotice.jsx';
 import { everyRow } from '../lib/everyRow.js';
 import {
   PAPERS,
@@ -63,7 +66,7 @@ import {
  * LGU or the whole province, with the layers chosen on the map.
  *
  * The settings live in the address (/map-sheet?lgu=…&survey=…), so the map's
- * "Make a map" opens it as the map was, and a sheet can be sent to someone as
+ * "Make Report" opens it as the map was, and a sheet can be sent to someone as
  * a link. Printed at 100% (or saved as PDF from the print dialog), the sheet
  * is at the scale written on it.
  */
@@ -526,16 +529,17 @@ export default function MapSheet() {
   const TABLE_NAMES = { 'land-cover': 'landCover', 'planting-sites': 'plantingSites' };
   const tablesByKey = Object.fromEntries(tables.map((table) => [TABLE_NAMES[table.key] ?? table.key, table]));
   const climate = lgu ? mapLayers.climateByLgu.get(lgu.psgc) ?? null : null;
-  // The one report (27 October): the Ecological Profile and Tree Inventory
-  // Report, in place of the six the sheet offered. Its phenology needs each
-  // species' months (the RISE profiles) and what the field officers observed.
+  // The management plan's biological features (29 October) need each
+  // species' profile — its months (RISE) and its conservation status — and
+  // what the field officers observed.
   const [phenologyData, setPhenologyData] = useState({ profiles: [], records: [] });
   useEffect(() => {
     if (tab !== 'report') return undefined;
     let cancelled = false;
     (async () => {
       const [profiles, records] = await Promise.all([
-        supabase.from('species_profiles').select('species, scientific_name, flowering_months, fruiting_months'),
+        // Every column: the conservation status comes with species_rise.sql, and nothing fails before it.
+        supabase.from('species_profiles').select('*'),
         everyRow(() => supabase.from('phenology_records').select('tree_id, flowering_status, fruiting_status, observed_at')),
       ]);
       if (cancelled) return;
@@ -584,31 +588,40 @@ export default function MapSheet() {
         climate,
         populationOf,
         urbanOf,
-        profiles: phenologyData.profiles,
-        phenology: phenologyData.records,
       }),
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lgu, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf, phenologyData]
+    [lgu, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf]
   );
 
   // Which report (27 October): the Ecological Profile; the City Biodiversity
   // Index for a city, the Urban Biodiversity Index for a municipality, each
-  // with the Ecological Profile as its introduction (an LGU's sheet only);
-  // or the greenhouse gas report.
+  // with the Ecological Profile as its introduction, and the City or Urban
+  // Biodiversity Management Plan (29 October) — an LGU's sheet only; or the
+  // greenhouse gas report.
   const [reportKind, setReportKind] = useState('ecological');
   const reportChoices = [
     ECOLOGICAL_REPORT,
-    ...(lgu ? [indexReportFor(lgu)] : []),
+    ...(lgu ? [indexReportFor(lgu), planReportFor(lgu)] : []),
     GHG_REPORT,
   ];
   const chosenKind = reportChoices.some((choice) => choice.id === reportKind) ? reportKind : 'ecological';
   const indexKind = chosenKind === 'cbi' || chosenKind === 'ubi';
+  // The plan carries the index's result in its annex, so it reads what the index reads.
+  const needsIndex = indexKind || chosenKind === 'plan';
   const reportYear = new Date().getFullYear();
   const lguPsgc = lgu?.psgc ?? null;
   const [indexData, setIndexData] = useState({ newsPosts: null, climatePlans: null, communityScientists: null, self: {}, selfMissing: false });
+  // What the plan is, the first time it is opened, unless this browser asked not to.
+  const [planNotice, setPlanNotice] = useState(false);
+  const planNoticeShown = useRef(false);
   useEffect(() => {
-    if (tab !== 'report' || !indexKind || !lguPsgc) return undefined;
+    if (tab !== 'report' || chosenKind !== 'plan' || planNoticeShown.current) return;
+    planNoticeShown.current = true;
+    if (!planNoticeHidden()) setPlanNotice(true);
+  }, [tab, chosenKind]);
+  useEffect(() => {
+    if (tab !== 'report' || !needsIndex || !lguPsgc) return undefined;
     let cancelled = false;
     Promise.all([loadCbiEvents(), loadVerifiedPlans(), loadCommunityCounts(lguPsgc), loadSelfAssessment(lguPsgc, reportYear)]).then(
       ([newsPosts, climatePlans, counts, self]) => {
@@ -625,7 +638,7 @@ export default function MapSheet() {
     return () => {
       cancelled = true;
     };
-  }, [tab, indexKind, lguPsgc, reportYear]);
+  }, [tab, needsIndex, lguPsgc, reportYear]);
   // The place's cutting permits, for the GHG report's losses.
   const [permits, setPermits] = useState([]);
   useEffect(() => {
@@ -663,10 +676,11 @@ export default function MapSheet() {
       year: reportYear,
     };
     if (chosenKind === 'ghg') return buildGreenhouseReport({ ...ctx, permits });
+    if (chosenKind === 'plan') return buildPlanReport({ ...ctx, ...indexData, boundary: place?.geometry ?? null });
     return buildIndexReport({ ...ctx, ...indexData });
     // tablesByKey is rebuilt from tables each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosenKind, ecoReport, lgu, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf, phenologyData, measuredAreas, reportYear, permits, indexData]);
+  }, [chosenKind, ecoReport, lgu, place, places, measured.facts, measured.grids, placeLabel, tables, tableTrees, placeOf, climate, populationOf, urbanOf, phenologyData, measuredAreas, reportYear, permits, indexData]);
 
   // The office's edits, by report and section; a section not edited follows the figures.
   const [edits, setEdits] = useState({});
@@ -701,13 +715,18 @@ export default function MapSheet() {
   // back as the office left it.
   const [mapImages, setMapImages] = useState({});
   const [capture, setCapture] = useState(null);
+  // The base map the office chose: while a map is taken on its own base map
+  // (the plan's physical features, on satellite), the one put back after.
+  const officeBasemapId = capture
+    ? (sheetBasemaps.find((b) => b.id === capture.restore.basemap) ?? sheetBasemaps[0]).id
+    : basemap.id;
   useEffect(() => {
     // A different sheet — paper, place or base map — needs its maps drawn again.
     setMapImages((current) => {
       Object.values(current).forEach((image) => image?.url && URL.revokeObjectURL(image.url));
       return {};
     });
-  }, [paper, lguName, areaId, basemap.id]);
+  }, [paper, lguName, areaId, officeBasemapId]);
   useEffect(() => {
     if (tab !== 'report' || capture || !mapLayers.loaded) return;
     const missing = report.maps.filter((map) => !mapImages[map.key]);
@@ -720,7 +739,13 @@ export default function MapSheet() {
     }
     setCapture({
       queue: missing,
-      restore: { survey: params.get('survey'), treeColour: params.get('treeColour'), trees: params.get('trees'), sites: params.get('sites') },
+      restore: {
+        survey: params.get('survey'),
+        treeColour: params.get('treeColour'),
+        trees: params.get('trees'),
+        sites: params.get('sites'),
+        basemap: params.get('basemap'),
+      },
     });
     // layerFor and params are read as they are now.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -736,6 +761,7 @@ export default function MapSheet() {
         putBack(next, 'treeColour', capture.restore.treeColour);
         putBack(next, 'trees', capture.restore.trees);
         putBack(next, 'sites', capture.restore.sites);
+        putBack(next, 'basemap', capture.restore.basemap);
         return next;
       }, { replace: true });
       setCapture(null);
@@ -746,11 +772,14 @@ export default function MapSheet() {
     // Trees: shown when the map colours them, hidden when it says so, else as the office left them.
     const wantTrees = map.trees === false ? '0' : wantColour ? null : params.get('trees');
     const wantSites = map.sites === false ? '0' : map.sites === true ? null : params.get('sites');
+    // The base map: the map's own (satellite, for the plan's physical features), else the office's.
+    const wantBasemap = map.basemap ?? capture.restore.basemap ?? null;
     if (
       (params.get('survey') ?? null) !== wantSurvey ||
       (params.get('treeColour') ?? null) !== wantColour ||
       (params.get('trees') ?? null) !== (wantTrees ?? null) ||
-      (params.get('sites') ?? null) !== (wantSites ?? null)
+      (params.get('sites') ?? null) !== (wantSites ?? null) ||
+      (params.get('basemap') ?? null) !== wantBasemap
     ) {
       setParams((current) => {
         const next = new URLSearchParams(current);
@@ -758,13 +787,15 @@ export default function MapSheet() {
         putBack(next, 'treeColour', wantColour);
         putBack(next, 'trees', wantTrees);
         putBack(next, 'sites', wantSites);
+        putBack(next, 'basemap', wantBasemap);
         return next;
       }, { replace: true });
       return undefined;
     }
     if (loading || !sheetRef.current) return undefined;
     let cancelled = false;
-    // A moment for the sheet to draw with its new layer before it is taken.
+    // A moment for the sheet to draw with its new layer before it is taken;
+    // longer on satellite, whose imagery takes longer to come.
     const timer = setTimeout(async () => {
       let image;
       try {
@@ -776,7 +807,7 @@ export default function MapSheet() {
       if (cancelled) return;
       setMapImages((current) => ({ ...current, [map.key]: image }));
       setCapture((current) => current && { ...current, queue: current.queue.slice(1) });
-    }, 700);
+    }, map.basemap ? 1800 : 700);
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -794,6 +825,18 @@ export default function MapSheet() {
           ? { data: await (await fetch(image.url)).arrayBuffer(), width: image.width, height: image.height, caption: spec.caption }
           : { caption: spec.caption };
       }
+      // Each chart under its table, as the page draws it; one that cannot be pictured is left out.
+      const chartsByKey = {};
+      for (const holder of document.querySelectorAll('.print-target [data-chart]')) {
+        const key = holder.getAttribute('data-chart');
+        if (chartsByKey[key]) continue;
+        try {
+          const png = await chartPng(holder);
+          if (png) chartsByKey[key] = { ...png, title: holder.querySelector('figcaption')?.textContent ?? null };
+        } catch {
+          // Left out.
+        }
+      }
       const textOf = new Map(sections.map((section) => [section.key, section.text]));
       // The letterhead's pictures; one that cannot be fetched is left out, not the report.
       const logos = [];
@@ -809,13 +852,16 @@ export default function MapSheet() {
         logos,
         heading: headingOf(lgu),
         title: reportTitle,
+        subtitle: report.subtitle ?? [],
         preparedBy: preparedText,
         chapters: report.chapters,
         figuresByKey,
+        chartsByKey,
         textOf: (section) => textOf.get(section.key) ?? section.text,
       });
+      // Named for the place and the report, not the map that happens to be on the sheet.
       const reportName = report.title.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()).replace(/\s+/g, '-');
-      saveFile(blob, `${fileStem}_${reportName}.docx`);
+      saveFile(blob, `${(lgu?.label ?? 'Laguna').replace(/\s+/g, '-')}_${reportName}_${new Date().toISOString().slice(0, 10)}.docx`);
     } catch (failure) {
       setReportNote({ ok: false, text: `The document could not be made: ${failure.message}` });
     } finally {
@@ -1081,7 +1127,7 @@ export default function MapSheet() {
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-green-800 px-4 py-2.5 text-white shadow-md">
         <img src={greenTagLogo} alt="" aria-hidden="true" className="h-7 w-7" />
         <span className="text-sm font-extrabold tracking-wide">GREEN TAG</span>
-        <h1 className="text-sm font-normal text-green-100">Make a map</h1>
+        <h1 className="text-sm font-normal text-green-100">Maps and reports</h1>
         <span className="flex-1" />
         <button
           type="button"
@@ -1159,38 +1205,50 @@ export default function MapSheet() {
       )}
       {tab === 'report' && (
         <div className="p-6">
-          <div role="radiogroup" aria-label="Which report" className="mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center gap-2 print:hidden">
-            <span className="text-sm font-semibold text-slate-600">Report:</span>
-            {reportChoices.map((choice) => (
-              <button
-                key={choice.id}
-                type="button"
-                role="radio"
-                aria-checked={chosenKind === choice.id}
-                onClick={() => {
-                  setReportKind(choice.id);
-                  setReportNote(null);
-                }}
-                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition ${
-                  chosenKind === choice.id ? 'bg-green-700 text-white ring-green-700' : 'bg-white text-slate-700 ring-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                {choice.id === 'ecological' ? 'Ecological profile and tree inventory' : choice.label}
-              </button>
-            ))}
-            {indexKind && indexData.selfMissing && (
-              <span className="text-xs text-amber-800">The self-assessment needs supabase/cbi_ubi.sql to be run (step 38).</span>
-            )}
-            {indexKind && !indexData.selfMissing && (
-              <span className="text-xs text-slate-500">The office&apos;s self-assessment is in Settings.</span>
-            )}
-          </div>
+          <PlanNotice
+            open={planNotice && chosenKind === 'plan'}
+            label={planReportFor(lgu).label}
+            place={lgu?.label ?? ''}
+            onClose={() => setPlanNotice(false)}
+          />
           <ChapterReportView
             heading={headingOf(lgu)}
             title={reportTitle}
             preparedBy={preparedText}
             report={report}
             sections={sections}
+            chooser={
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Report</span>
+                <div role="radiogroup" aria-label="Which report" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+                  {reportChoices.map((choice) => (
+                    <button
+                      key={choice.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={chosenKind === choice.id}
+                      onClick={() => {
+                        setReportKind(choice.id);
+                        setReportNote(null);
+                      }}
+                      className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                        chosenKind === choice.id ? 'bg-green-700 text-white shadow-sm' : 'text-slate-700 hover:bg-white'
+                      }`}
+                    >
+                      {choice.id === 'ecological' ? 'Ecological profile and tree inventory' : choice.label}
+                    </button>
+                  ))}
+                </div>
+                {indexKind && (
+                  <span className={`text-xs ${indexData.selfMissing ? 'text-amber-800' : 'text-slate-500'}`}>
+                    {indexData.selfMissing ? 'The self-assessment needs supabase/cbi_ubi.sql to be run (step 38).' : 'The office’s self-assessment is in Settings.'}
+                  </span>
+                )}
+                {chosenKind === 'plan' && (
+                  <span className="text-xs text-slate-500">TB 2021-04, Annex B · highlighted [brackets] are your office’s to fill in Word.</span>
+                )}
+              </div>
+            }
             mapImages={Object.fromEntries(Object.entries(mapImages).map(([key, image]) => [key, image?.url ?? null]))}
             unavailable={Object.keys(mapImages).filter((key) => mapImages[key]?.unavailable)}
             failed={Object.keys(mapImages).filter((key) => mapImages[key]?.failed)}

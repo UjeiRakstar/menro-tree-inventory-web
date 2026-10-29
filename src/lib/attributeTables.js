@@ -324,6 +324,8 @@ export function plantingSiteTable(areas = []) {
 
 /** A value as the tables write it. */
 export function formatCell(value, kind) {
+  // A form's entry (the plan's Annex B tables): left blank for the office, not a dash.
+  if (kind === 'entry') return value === null || value === undefined ? '' : String(value);
   if (value === null || value === undefined || value === '') return '—';
   if (kind === 'ha') return Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (kind === 'tonnes') return Number(value).toLocaleString('en-US', { maximumFractionDigits: Number(value) < 10 ? 2 : 1 });
@@ -355,7 +357,7 @@ export async function tablesWorkbook(tables, { lgu = null, preparedBy, date = ne
       columns: table.columns.map((column) => ({
         label: column.label,
         kind: column.kind,
-        width: column.kind === 'text' || !column.kind ? Math.min(36, Math.max(14, column.label.length + 2)) : Math.max(11, Math.min(18, column.label.length + 2)),
+        width: column.kind === 'text' || column.kind === 'entry' || !column.kind ? Math.min(36, Math.max(14, column.label.length + 2)) : Math.max(11, Math.min(18, column.label.length + 2)),
       })),
       rows: table.rows.map((row) => table.columns.map((column) => row[column.key] ?? null)),
       totals: table.totals ? table.columns.map((column) => table.totals[column.key] ?? null) : null,

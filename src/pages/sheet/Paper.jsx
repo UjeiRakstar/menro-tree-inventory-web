@@ -44,6 +44,9 @@ export function Paper({ orientation = 'portrait', label, running = '', note = ''
  * "What the system shows" and "From") kept on one line ran off the side of
  * the page and squeezed the row labels to a word a line.
  */
+// An entry column (a form's blank, for the office to fill) reads as text does.
+const texty = (kind) => kind === 'text' || kind === 'entry';
+
 export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.', flow = false }) {
   // flow: printed in a flowing document (the report), a long table carries on
   // to the next page — its header row repeated, no row split, its title kept
@@ -51,7 +54,7 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
   const totalsRow = table.totals ? (
     <tr className="break-inside-avoid bg-slate-100 font-bold text-slate-800">
       {table.columns.map((column) => (
-        <td key={column.key} className={`px-1.5 py-1 ${column.kind === 'text' ? 'text-left' : 'text-right tabular-nums'}`}>
+        <td key={column.key} className={`px-1.5 py-1 ${texty(column.kind) ? 'text-left' : 'text-right tabular-nums'}`}>
           {table.totals[column.key] === undefined ? '' : formatCell(table.totals[column.key], column.kind)}
         </td>
       ))}
@@ -69,7 +72,7 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
             <tr>
               {table.columns.map((column) => (
                 <th key={column.key} scope="col"
-                  className={`border-b border-slate-300 px-1.5 py-1 align-bottom font-semibold leading-tight text-slate-700 ${column.kind === 'text' ? 'text-left' : 'text-right'}`}>
+                  className={`border-b border-slate-300 px-1.5 py-1 align-bottom font-semibold leading-tight text-slate-700 ${texty(column.kind) ? 'text-left' : 'text-right'}`}>
                   {column.label}
                 </th>
               ))}
@@ -84,7 +87,9 @@ export function AttributeTable({ table, size = 'text-[10px]', empty = 'None yet.
                       {formatCell(row[column.key], column.kind)}
                     </th>
                   ) : (
-                    <td key={column.key} className={`border-b border-slate-200 px-1.5 py-0.5 align-top text-slate-700 ${column.kind === 'text' ? 'text-left' :'whitespace-nowrap text-right tabular-nums'}`}>
+                    <td key={column.key} className={`border-b border-slate-200 px-1.5 py-0.5 align-top text-slate-700 ${
+                      column.kind === 'entry' ? 'h-5 border-l text-left' : column.kind === 'text' ? 'text-left' : 'whitespace-nowrap text-right tabular-nums'
+                    }`}>
                       {formatCell(row[column.key], column.kind)}
                     </td>
                   )

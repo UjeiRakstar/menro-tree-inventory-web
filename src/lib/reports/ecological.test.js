@@ -119,27 +119,30 @@ describe('the report', () => {
     urbanOf: (name) => (name === 'Alipit' ? 'Urban' : 'Rural'),
   });
 
-  it('follows the outline: summary, profile, biodiversity, exposure', () => {
+  it('follows the outline: summary, profile, exposure — the biodiversity is the management plan’s now', () => {
     expect(report.title).toBe('ECOLOGICAL PROFILE AND TREE INVENTORY REPORT');
     expect(report.chapters.map((c) => c.heading)).toEqual([
       '1. Executive Summary',
       '2. Ecological Profile',
-      '3. Biodiversity of Trees',
-      '4. Exposure of Natural Resources to Hazards',
+      '3. Exposure of Natural Resources to Hazards',
     ]);
     expect(report.chapters[1].parts.map((p) => p.heading)).toEqual(['2.1 Location', '2.2 Elevation', '2.3 Slope', '2.4 Climate']);
     expect(report.chapters[2].parts.map((p) => p.heading)).toEqual([
-      '3.1 Overview of the Biodiversity',
-      '3.2 Endemic, Native and Invasive Trees',
-      '3.3 Vegetation Structure and Density',
-      '3.4 Phenology and Economic Value',
+      '3.1 Exposure of the Trees',
+      '3.2 Exposure of Land Cover and Tree Planting Sites',
+      'Data and Limitations',
+      'References',
     ]);
   });
 
-  it('keeps each part’s maps with it, every map drawable', () => {
+  it('keeps each part’s maps with it, every map drawable, and draws none it does not show', () => {
     const keys = new Set(report.maps.map((m) => m.key));
-    for (const p of report.chapters.flatMap((c) => c.parts)) for (const key of p.maps) expect(keys.has(key)).toBe(true);
-    expect(report.chapters[2].parts[0].maps).toEqual(['trees']);
+    const shown = new Set(report.chapters.flatMap((c) => c.parts.flatMap((p) => p.maps)));
+    for (const key of shown) expect(keys.has(key)).toBe(true);
+    expect([...keys].every((key) => shown.has(key))).toBe(true);
+    expect(keys.has('trees')).toBe(false);
+    expect(keys.has('origin')).toBe(false);
+    expect(report.chapters[2].parts[0].maps).toEqual(['trees-flood', 'trees-landslide']);
     expect(report.maps.find((m) => m.key === 'location')).toMatchObject({ trees: false, sites: false, survey: null });
   });
 
@@ -149,7 +152,6 @@ describe('the report', () => {
     const text = (key) => report.sections.find((s) => s.key === key).text;
     // Nothing half-written: no object, no undefined, no NaN in the prose.
     for (const section of report.sections) expect(section.text).not.toMatch(/\[object|undefined|NaN/);
-    expect(text('structure')).toMatch(/^(A mix of ages|Mostly young trees|Mostly mature trees):/);
     expect(text('summary')).toMatch(/the ecology of the Municipality of Santa Cruz/);
     expect(text('location')).toMatch(/^The Municipality of Santa Cruz is a municipality/);
     // Green Tag is named in Data and limitations only; the references carry their links.
@@ -163,16 +165,14 @@ describe('the report', () => {
     expect(text('summary')).toMatch(/3 trees of 3 species/);
     expect(text('location')).toMatch(/1 of them urban and 1 rural/);
     expect(text('location')).toMatch(/about 1,500 residents/);
-    expect(text('origin')).toMatch(/Narra \(1\)/);
-    expect(text('origin')).toMatch(/Mahogany \(1\)/);
     expect(text('tree-exposure')).toMatch(/1 of the 3 tagged trees \(33%\) stand in UP NOAH’s flood/);
     expect(text('elevation')).toMatch(/elevation layer has not been uploaded/);
     expect(text('climate')).toMatch(/No CLIRAM figures/);
   });
 
-  it('gathers every table, for the Excel file', () => {
-    expect(report.tables.map((t) => t.key)).toEqual(
-      expect.arrayContaining(['location', 'elevation', 'slope', 'tree-summary', 'species', 'trees-by-place', 'origin-by-place', 'diameter-classes', 'height-classes', 'density', 'diversity', 'phenology', 'tree-exposure'])
-    );
+  it('gathers every table, for the Excel file — none of the biodiversity chapter’s', () => {
+    const keys = report.tables.map((t) => t.key);
+    expect(keys).toEqual(expect.arrayContaining(['location', 'elevation', 'slope', 'tree-exposure']));
+    for (const gone of ['tree-summary', 'origin-species', 'diameter-classes', 'diversity', 'phenology']) expect(keys).not.toContain(gone);
   });
 });

@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import { reportDocx } from './reportDocx.js';
 import { buildEcologicalReport } from './reports/ecological.js';
+import { buildPlanReport } from './reports/biodiversityPlan.js';
 
 describe('reportDocx', () => {
   it('writes the heading, the sections and the tables into a Word document', async () => {
@@ -76,14 +77,53 @@ describe('reportDocx', () => {
       '2.1 Location',
       'Figure 1. Location map',
       'not drawn: its layer is not uploaded',
-      '3.2 Endemic, Native and Invasive Trees',
-      'Table — Endemic, native and invasive species',
-      'Narra',
-      '4.2 Exposure of Land Cover and Tree Planting Sites',
+      '3.1 Exposure of the Trees',
+      '3.2 Exposure of Land Cover and Tree Planting Sites',
     ]) {
       expect(text).toContain(words);
     }
     // The office's own words, not the written ones.
     expect(text).not.toContain('This report profiles the ecology');
+  });
+
+  it('writes the management plan with its title page, Word’s own table of contents, and Annex B’s tables', async () => {
+    const plan = buildPlanReport({
+      place: { name: 'Santa Cruz', label: 'Santa Cruz', psgc: 403426000, isCity: false },
+      places: [{ name: 'Alipit', areaHa: 100 }],
+      trees: [{ id: 't1', barangay: 'Alipit', species: 'Narra', species_type: 'Endemic', tree_category: 'Timber', dbh: 30, total_height: 11 }],
+    });
+    const blob = await reportDocx({
+      heading: ['MUNICIPALITY OF SANTA CRUZ', 'PROVINCE OF LAGUNA'],
+      title: plan.title,
+      subtitle: plan.subtitle,
+      preparedBy: 'Santa Cruz MENRO / CENRO',
+      chapters: plan.chapters,
+      figuresByKey: Object.fromEntries(plan.maps.map((map) => [map.key, { caption: map.caption }])),
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const xml = await zip.file('word/document.xml').async('string');
+    const text = xml.replace(/<[^>]+>/g, ' ');
+    for (const words of [
+      'URBAN BIODIVERSITY MANAGEMENT PLAN',
+      'of the Municipality of Santa Cruz',
+      'In accordance with DENR-BMB Technical Bulletin No. 2021-04',
+      'Plan period: [20__] to [20__]',
+      '[Foreword',
+      'Table of Contents',
+      'List of Acronyms and Abbreviations',
+      'ii. Topography (slope, elevation)',
+      'Table — Area coverage',
+      'g. Urban Green Space Uses and Activities',
+      'Table — Implementation plan (Annex C)',
+      'IX. Annexes',
+    ]) {
+      expect(text).toContain(words);
+    }
+    // Word's own contents, filled in when the document opens; each chapter on its own page.
+    expect(xml).toMatch(/TOC \\h \\o &quot;1-3&quot;/);
+    expect(await zip.file('word/settings.xml').async('string')).toMatch(/updateFields/);
+    expect(xml).toMatch(/<w:pageBreakBefore\/>/);
+    // Annex B's i., ii., … one heading level down.
+    expect(xml).toMatch(/<w:pStyle w:val="Heading3"\/>[\s\S]*?ii\. Topography/);
   });
 });

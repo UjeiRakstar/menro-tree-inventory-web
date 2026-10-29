@@ -190,7 +190,7 @@ export async function addTableSheet(
       cell.value = value === undefined ? null : value;
       cell.font = { name: 'Arial', size: 9, bold: total };
       if (FORMATS[column.kind]) cell.numFmt = FORMATS[column.kind];
-      cell.alignment = { vertical: 'top', wrapText: column.kind === undefined || column.kind === 'text' };
+      cell.alignment = { vertical: 'top', wrapText: column.kind === undefined || column.kind === 'text' || column.kind === 'entry' };
       cell.border = total
         ? { top: { style: 'medium', color: { argb: LOOK.green } }, bottom: thin, left: thin, right: thin }
         : { top: thin, bottom: thin, left: thin, right: thin };
