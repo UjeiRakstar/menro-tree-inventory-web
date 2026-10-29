@@ -222,7 +222,7 @@ describe('the inventory table (22 October)', () => {
     auth.profile = SANTA_CRUZ_ADMIN;
     supabaseMock.setResponse('trees:select', {
       data: [
-        { id: 't1', species: 'Narra', barangay: 'Labuin', barangay_psgc: 403426001, dbh: '30 cm', total_height: '12', captured_by: 'u-ana', dateCaptured: '2026-10-01T00:00:00Z' },
+        { id: 't1', species: 'Narra', tree_category: 'Timber', barangay: 'Labuin', barangay_psgc: 403426001, dbh: '30 cm', total_height: '12', captured_by: 'u-ana', dateCaptured: '2026-10-01T00:00:00Z' },
         { id: 't2', species: 'Acacia', barangay: 'Gatid', barangay_psgc: 403426002, is_leaning: true, has_powerline_conflict: true, assigned_to: 'ANA@field.ph', task_status: 'Pending', source: 'crowdsource' },
       ],
       error: null,
@@ -234,8 +234,11 @@ describe('the inventory table (22 October)', () => {
     renderPage();
     const table = await screen.findByRole('table', { name: 'Tree inventory' });
     const headers = within(table).getAllByRole('columnheader').map((h) => h.textContent);
-    expect(headers).toEqual(['Photo', 'Species', 'Barangay', 'DBH', 'Total height', 'Health', 'Date recorded', 'Tagged by', 'Assigned to', 'Actions']);
+    expect(headers).toEqual(['Class', 'Species', 'Barangay', 'DBH', 'Total height', 'Health', 'Date recorded', 'Tagged by', 'Assigned to', 'Actions']);
     const [narra, acacia] = within(table).getAllByRole('row').slice(1);
+    // Each tree's class as an outline icon, in place of a photo.
+    expect(within(narra).getByTitle('Timber tree')).toBeInTheDocument();
+    expect(within(acacia).getByTitle('Class not recorded')).toBeInTheDocument();
     expect(narra).toHaveTextContent('Labuin');
     expect(narra).toHaveTextContent('12 m');
     expect(narra).toHaveTextContent('Healthy');
@@ -284,7 +287,7 @@ describe('the inventory table (22 October)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Santa Cruz/ }));
     const table = await screen.findByRole('table', { name: 'Tree inventory' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(
-      ['Photo', 'Species', 'City / municipality', 'DBH', 'Total height', 'Health', 'Date recorded', 'Tagged by']
+      ['Class', 'Species', 'City / municipality', 'DBH', 'Total height', 'Health', 'Date recorded', 'Tagged by']
     );
     expect(within(table).queryByRole('button', { name: /Archive/ })).not.toBeInTheDocument();
   });

@@ -28,8 +28,11 @@ function ClickToPin({ onPick }) {
  * click there is refused with a sentence rather than silently ignored.
  * Satellite by default: a hall is easier to find from above than on a street
  * map, where it is a label among labels.
+ *
+ *   height   the map's height classes: small by default; the activation page
+ *            gives it more room on a computer
  */
-export default function PinPicker({ municipality, value, onChange, placeLabel, focus = null, verb = 'stands' }) {
+export default function PinPicker({ municipality, value, onChange, placeLabel, focus = null, verb = 'stands', height = 'h-64' }) {
   const [basemapId, setBasemapId] = useState('satellite');
   const [notice, setNotice] = useState('');
   const feature = municipality ? municipalityNamed(municipality) : LAGUNA_PROVINCE.features[0];
@@ -50,7 +53,7 @@ export default function PinPicker({ municipality, value, onChange, placeLabel, f
 
   return (
     <div>
-      <div className="relative h-64 overflow-hidden rounded-xl border border-slate-200">
+      <div className={`relative ${height} overflow-hidden rounded-xl border border-slate-200`}>
         <MapContainer bounds={bounds} boundsOptions={{ padding: [12, 12] }} style={{ height: '100%', width: '100%' }} maxZoom={19}>
           <TileLayer key={basemapId} url={basemapById(basemapId).url} attribution={basemapById(basemapId).attribution} />
           {mask && <Polygon positions={mask} pathOptions={MASK_STYLE} interactive={false} />}

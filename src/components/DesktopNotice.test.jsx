@@ -1,5 +1,10 @@
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-import DesktopNotice from './DesktopNotice.jsx';
+import { MemoryRouter } from 'react-router-dom';
+
+const { account } = vi.hoisted(() => ({ account: { profile: null } }));
+vi.mock('../context/AuthContext.jsx', () => ({ useAuthIfAny: () => account }));
+
+import DesktopNotice, { ComputerOnly } from './DesktopNotice.jsx';
 
 /** Pretend to be a screen this many pixels wide. */
 function screenWidth(px) {
@@ -48,5 +53,35 @@ describe('DesktopNotice', () => {
     unmount();
     render(<DesktopNotice />);
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+});
+
+describe('ComputerOnly', () => {
+  const show = (role) => {
+    account.profile = { role };
+    return render(
+      <MemoryRouter>
+        <ComputerOnly what="The office map"><p>The map itself</p></ComputerOnly>
+      </MemoryRouter>
+    );
+  };
+
+  it('sends a city or municipal office on a phone to a computer, and the field to the app', () => {
+    screenWidth(390);
+    show('lgu_admin');
+    expect(screen.queryByText('The map itself')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'The office map needs a computer' })).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('Green Tag mobile app');
+    expect(screen.getByRole('link', { name: 'Back to the dashboard' })).toHaveAttribute('href', '/biodiversity-dashboard');
+  });
+
+  it('opens on a tablet or a computer, and for PGENRO on a phone', () => {
+    screenWidth(800);
+    const { unmount } = show('lgu_admin');
+    expect(screen.getByText('The map itself')).toBeInTheDocument();
+    unmount();
+    screenWidth(390);
+    show('pgenro');
+    expect(screen.getByText('The map itself')).toBeInTheDocument();
   });
 });

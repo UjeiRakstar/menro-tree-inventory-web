@@ -11,7 +11,7 @@ export default function ToolTile({
   icon: Icon,
   label,
   // The fuller name a screen reader and a hover give, where the two-word
-  // label under the icon is not enough on its own: "Draw" → "Draw and
+  // label under the icon is not enough on its own: "Draw Map" → "Draw and
   // measure an area".
   description = undefined,
   onClick,

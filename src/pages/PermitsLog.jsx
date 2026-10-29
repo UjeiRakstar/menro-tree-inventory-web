@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient.js';
-import { X, Image, Printer, Search, ChevronLeft, ChevronRight, Download, FileBarChart, Archive, RotateCcw, MapPin } from 'lucide-react';
+import { X, Eye, Printer, Search, ChevronLeft, ChevronRight, Download, FileBarChart, Archive, RotateCcw, MapPin } from 'lucide-react';
 import CertificatePrint from '../components/CertificatePrint.jsx';
 import PermitReport from '../components/PermitReport.jsx';
 import { groupPermits } from '../lib/permitReport.js';
@@ -37,7 +37,8 @@ export default function PermitsLog({ lgu = undefined, embedded = false }) {
   const officeLgu = lgu ? MUNICIPALITY_LIST.find((item) => item.psgc === Number(lgu)) ?? null : null;
   const [permits, setPermits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lightboxUrl, setLightboxUrl] = useState(null);
+  // The documents being viewed: { urls, at }.
+  const [lightbox, setLightbox] = useState(null);
   const [printPermit, setPrintPermit] = useState(null);
 
   // Search & filters
@@ -215,19 +216,18 @@ export default function PermitsLog({ lgu = undefined, embedded = false }) {
                         }`}>{status}</span>
                       </td>
                       <td className="px-4 py-2 text-sm">
+                        {/* The documents on request, not as thumbnails (29 October). */}
                         {urls.length > 0 ? (
-                          <div className="flex gap-1">
-                            {urls.slice(0, 3).map((url, i) => (
-                              <img key={i} src={url} alt={`Req ${i + 1}`} onClick={() => setLightboxUrl(url)}
-                                className="w-7 h-7 object-cover rounded cursor-pointer hover:ring-2 hover:ring-green-500 transition"
-                                onError={(e) => { e.target.style.display = 'none'; }} />
-                            ))}
-                            {urls.length > 3 && <span className="text-[10px] text-slate-400 self-center">+{urls.length - 3}</span>}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLightbox({ urls, at: 0 })}
+                            aria-label={`View the ${urls.length} ${urls.length === 1 ? 'document' : 'documents'} for ${permit.client_name || 'this permit'}`}
+                            className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 transition hover:bg-slate-50"
+                          >
+                            <Eye size={11} aria-hidden="true" /> View{urls.length > 1 ? ` (${urls.length})` : ''}
+                          </button>
                         ) : (
-                          <div className="w-7 h-7 rounded bg-slate-100 flex items-center justify-center">
-                            <Image size={10} className="text-slate-400" />
-                          </div>
+                          <span className="text-xs text-slate-400">None</span>
                         )}
                       </td>
                       <td className="px-4 py-2 text-sm">
@@ -434,18 +434,37 @@ export default function PermitsLog({ lgu = undefined, embedded = false }) {
         </section>
       )}
 
-      {/* Photo Lightbox */}
-      {lightboxUrl && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setLightboxUrl(null)}>
-          <div className="relative max-w-3xl max-h-[85vh] mx-4" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setLightboxUrl(null)}
-              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center text-slate-600 hover:text-slate-900 transition z-10">
-              <X size={16} />
-            </button>
-            <img src={lightboxUrl} alt="Requirement document" className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain" />
+      {/* The permit's documents, one at a time. */}
+      {lightbox && (() => {
+        const url = lightbox.urls[lightbox.at];
+        const pdf = /\.pdf($|\?)/i.test(url);
+        const step = (by) => setLightbox((current) => ({ ...current, at: (current.at + by + current.urls.length) % current.urls.length }));
+        return (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setLightbox(null)}>
+            <div role="dialog" aria-label="Requirement documents" className="relative mx-4 flex max-h-[90vh] max-w-3xl flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setLightbox(null)} aria-label="Close"
+                className="absolute -right-3 -top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-600 shadow-lg transition hover:text-slate-900">
+                <X size={16} />
+              </button>
+              {pdf ? (
+                <iframe src={url} title={`Document ${lightbox.at + 1}`} className="h-[78vh] w-[min(48rem,90vw)] rounded-lg bg-white shadow-2xl" />
+              ) : (
+                <img src={url} alt={`Requirement document ${lightbox.at + 1}`} className="max-h-[78vh] max-w-full rounded-lg object-contain shadow-2xl" />
+              )}
+              <div className="flex items-center gap-3 rounded-full bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow">
+                {lightbox.urls.length > 1 && (
+                  <button type="button" onClick={() => step(-1)} aria-label="Previous document" className="rounded-full p-1 hover:bg-slate-100"><ChevronLeft size={14} /></button>
+                )}
+                <span>Document {lightbox.at + 1} of {lightbox.urls.length}</span>
+                {lightbox.urls.length > 1 && (
+                  <button type="button" onClick={() => step(1)} aria-label="Next document" className="rounded-full p-1 hover:bg-slate-100"><ChevronRight size={14} /></button>
+                )}
+                <a href={url} target="_blank" rel="noreferrer" className="text-green-700 hover:text-green-800">Open in a new tab</a>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Certificate Print */}
       {printPermit && (

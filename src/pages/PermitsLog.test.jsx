@@ -67,4 +67,21 @@ describe('the permit logs, for an LGU office', () => {
     const options = within(screen.getByRole('dialog')).getByLabelText('Sum the permits by');
     expect(within(options).queryByRole('option', { name: 'City or municipality' })).not.toBeInTheDocument();
   });
+
+  it('opens the documents with View, one at a time, rather than showing thumbnails', async () => {
+    supabaseMock.setResponse('permits:select', {
+      data: [{ ...PERMITS[0], requirements_urls: ['https://x/clearance.jpg', 'https://x/photo.png'] }, PERMITS[1]],
+      error: null,
+    });
+    render(<PermitsLog lgu={SCZ} />);
+    await screen.findByText('Brian');
+    expect(screen.queryByAltText(/Req/)).toBeNull();
+    expect(screen.getByText('None')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'View the 2 documents for Brian' }));
+    const viewer = screen.getByRole('dialog', { name: 'Requirement documents' });
+    expect(within(viewer).getByRole('img')).toHaveAttribute('src', 'https://x/clearance.jpg');
+    expect(viewer).toHaveTextContent('Document 1 of 2');
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Next document' }));
+    expect(within(viewer).getByRole('img')).toHaveAttribute('src', 'https://x/photo.png');
+  });
 });

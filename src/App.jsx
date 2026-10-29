@@ -4,7 +4,7 @@ import Header from './components/Header.jsx';
 import PublicNavbar from './components/PublicNavbar.jsx';
 import AccountBlocked from './components/AccountBlocked.jsx';
 import AdminFooter from './components/AdminFooter.jsx';
-import DesktopNotice from './components/DesktopNotice.jsx';
+import DesktopNotice, { ComputerOnly } from './components/DesktopNotice.jsx';
 import TrainingBanner from './components/TrainingBanner.jsx';
 import AboutUs from './pages/public/AboutUs.jsx';
 import PublicFooter from './components/PublicFooter.jsx';
@@ -247,7 +247,7 @@ function AppRoutes() {
       {/* Protected routes */}
       {/* Opened in its own tab from the map, and closed back to it. */}
       <Route element={<ProtectedRoute bare />}>
-        <Route path="map-sheet" element={<MapSheet />} />
+        <Route path="map-sheet" element={<ComputerOnly what="Maps and reports"><MapSheet /></ComputerOnly>} />
       </Route>
 
       <Route element={<ProtectedRoute />}>
@@ -256,7 +256,7 @@ function AppRoutes() {
         <Route path="news" element={<EventsPage><NewsPage /></EventsPage>} />
         <Route path="climate-plans" element={<OnPgenroBoard tab="climate-plans" />} />
         <Route path="inbox" element={<Inbox />} />
-        <Route path="map" element={<MenroMap />} />
+        <Route path="map" element={<ComputerOnly what="The office map"><MenroMap /></ComputerOnly>} />
         <Route path="settings" element={<Settings />} />
         <Route path="inventory" element={<BiodiversityHub />} />
         <Route path="action-board" element={<ActionBoard />} />

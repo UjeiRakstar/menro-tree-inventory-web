@@ -2581,7 +2581,7 @@ export function TreeMap({
           </div>
           <ToolTile
             icon={PencilRuler}
-            label={drawing ? 'Stop' : 'Draw'}
+            label={drawing ? 'Stop' : 'Draw Map'}
             description={drawing ? 'Stop drawing' : 'Draw and measure an area'}
             tone="yellow"
             onClick={drawing ? stopDrawing : startDrawing}
@@ -2590,8 +2590,8 @@ export function TreeMap({
           {canSaveAreas && !drawing && (
             <ToolTile
               icon={Printer}
-              label="Make map"
-              description="Make a printable map of the layers shown"
+              label="Make Report"
+              description="Make a map or report of the layers shown"
               onClick={openMapSheet}
             />
           )}

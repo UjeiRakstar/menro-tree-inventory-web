@@ -986,7 +986,7 @@ describe('what an office can do to a tree', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show the legend' }));
     fireEvent.click(screen.getByRole('button', { name: 'Choose map layers' }));
     fireEvent.click(within(screen.getByRole('dialog', { name: 'Map layers' })).getByRole('checkbox', { name: /Tagged trees/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Make a printable map of the layers shown' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make a map or report of the layers shown' }));
     expect(open).toHaveBeenCalledWith('/map-sheet?lgu=Santa+Cruz&trees=0', '_blank', 'noopener');
     open.mockRestore();
   });

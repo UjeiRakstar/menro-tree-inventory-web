@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Monitor, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Monitor, Smartphone, X } from 'lucide-react';
+import { useAuthIfAny } from '../context/AuthContext.jsx';
+import { ROLES, roleOf } from '../lib/roles.js';
 
 const PHONE = '(max-width: 639px)';
 const BELOW_DESKTOP = '(max-width: 1023px)';
 const DISMISSED_KEY = 'greentag.desktopNotice.dismissed';
 
 /** Which kind of screen this is, following the window if it is resized. */
-function useScreen() {
+export function useScreen() {
   const read = () => {
     if (globalThis.matchMedia?.(PHONE).matches) return 'phone';
     if (globalThis.matchMedia?.(BELOW_DESKTOP).matches) return 'tablet';
@@ -20,6 +23,37 @@ function useScreen() {
     return () => queries.forEach((q) => q.removeEventListener?.('change', update));
   }, []);
   return screen;
+}
+
+/**
+ * A tool a city or municipal office does not use on a phone (29 October):
+ * the office map and Maps and reports. On a phone the office gets a page that
+ * sends it to a computer, and to the mobile app in the field; on a tablet or
+ * a computer, and for PGENRO, the tool itself.
+ *
+ *   what   the tool's name, e.g. "The office map"
+ */
+export function ComputerOnly({ what, children }) {
+  const screen = useScreen();
+  const profile = useAuthIfAny()?.profile ?? null;
+  if (screen !== 'phone' || roleOf(profile) !== ROLES.LGU_ADMIN) return children;
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center p-6">
+      <div role="note" className="max-w-sm rounded-2xl bg-white p-6 text-center shadow-lg ring-1 ring-slate-200">
+        <Monitor size={32} className="mx-auto text-green-700" aria-hidden="true" />
+        <h1 className="mt-3 text-lg font-bold text-slate-900">{what} needs a computer</h1>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          Open Green Tag in a web browser on a desktop or laptop to use it. In the field, tag and check trees with the Green Tag mobile app.
+        </p>
+        <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-500">
+          <Smartphone size={13} aria-hidden="true" /> Not available on a phone
+        </p>
+        <Link to="/biodiversity-dashboard" className="mt-5 block rounded-lg bg-green-700 py-2.5 text-sm font-semibold text-white hover:bg-green-800">
+          Back to the dashboard
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 /**

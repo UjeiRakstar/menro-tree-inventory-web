@@ -66,6 +66,23 @@ function fillAccount({ password = 'longenough1', confirm = password } = {}) {
 beforeEach(() => supabaseMock.reset());
 afterEach(cleanup);
 
+describe('the way back', () => {
+  it('is a button under Check code, as wide as it', () => {
+    renderPage();
+    const back = screen.getByRole('link', { name: 'Back to sign in' });
+    expect(back).toHaveAttribute('href', '/login');
+    expect(back).toHaveClass('w-full', 'bg-orange-500');
+  });
+
+  it('shows the password on request', async () => {
+    await reachAccountForm();
+    const [show] = screen.getAllByRole('button', { name: 'Show password' });
+    fireEvent.click(show);
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText('Password again')).toHaveAttribute('type', 'password');
+  });
+});
+
 describe('the code', () => {
   it('lays the code out as it is typed, the way it was issued', () => {
     renderPage();

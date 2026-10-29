@@ -273,7 +273,6 @@ describe('who the signed-in side is for', () => {
 describe('the login page', () => {
   it('has a way back to the public site', async () => {
     renderAt('/login');
-    expect(await screen.findByRole('link', { name: /Back to the public map/ })).toHaveAttribute('href', '/public-map');
-    expect(screen.getByRole('link', { name: 'About Green Tag' })).toHaveAttribute('href', '/about');
+    expect(await screen.findByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/');
   });
 });

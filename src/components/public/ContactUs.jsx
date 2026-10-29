@@ -89,9 +89,10 @@ export function OfficeDirectory() {
   );
 }
 
+// White fields, deep moss-green text (29 October): easier to read than white on green.
 const field =
-  'w-full bg-[#1A8242] text-white px-6 py-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-400 ' +
-  'focus:bg-[#167038] transition-colors text-sm font-semibold shadow-md placeholder:text-green-100/70';
+  'w-full bg-white text-[#1F3D2B] px-6 py-4 rounded-xl border border-green-200 focus:outline-none focus:border-green-600 ' +
+  'focus:ring-2 focus:ring-green-500/30 transition-colors text-sm font-semibold shadow-sm placeholder:text-green-900/40';
 const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-green-900';
 
 /**

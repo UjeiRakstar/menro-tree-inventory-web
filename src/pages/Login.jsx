@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Leaf } from 'lucide-react';
+import { House, Leaf, Lock, Mail, Monitor } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
+import PasswordInput from '../components/PasswordInput.jsx';
+import NoticeDialog, { noticeHidden } from '../components/NoticeDialog.jsx';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
+
+const DEVICE_NOTICE_KEY = 'greentag.deviceNotice.hidden';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,24 +15,36 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  // Which devices an office account is made for, on every sign-in until the box is ticked.
+  const [deviceNotice, setDeviceNotice] = useState(false);
 
   async function handleLogin(event) {
     event.preventDefault();
     setError('');
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    setLoading(false);
-
     if (authError) {
+      setLoading(false);
       setError(authError.message);
       return;
     }
 
+    // A city or municipal office is told first which devices its account is for.
+    let office = false;
+    if (data?.user?.id && !noticeHidden(DEVICE_NOTICE_KEY)) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
+      office = profile?.role === 'lgu_admin';
+    }
+    setLoading(false);
+    if (office) {
+      setDeviceNotice(true);
+      return;
+    }
     navigate('/biodiversity-dashboard');
   }
 
@@ -102,14 +118,14 @@ export default function Login() {
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input
+                <PasswordInput
                   id="login-password"
-                  type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                  className="w-full pl-10 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20"
                 />
               </div>
             </div>
@@ -152,24 +168,35 @@ export default function Login() {
         </div>
 
         {/* The way back for a visitor who came to the wrong door. */}
-        <p className="mt-6 text-center text-sm">
-          <Link to="/public-map" className="font-medium text-green-700 hover:text-green-800">
-            ← Back to the public map
-          </Link>
-          <span className="mx-2 text-slate-300" aria-hidden="true">·</span>
-          <Link to="/about" className="font-medium text-green-700 hover:text-green-800">
-            About Green Tag
-          </Link>
-        </p>
-        <p className="mt-2 text-center text-xs text-slate-500">
-          Office accounts are made for a desktop computer. Tablets: most tools work. Phones: use the
-          Green Tag mobile app.
-        </p>
+        <Link
+          to="/"
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-green-300 bg-white py-2.5 text-sm font-semibold text-green-800 shadow-sm transition hover:bg-green-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+        >
+          <House size={16} aria-hidden="true" /> Back to home
+        </Link>
 
         <p className="text-center text-xs text-slate-400 mt-6">
           © 2026 PGENRO Laguna • Laguna State Polytechnic University
         </p>
       </div>
+
+      <NoticeDialog
+        open={deviceNotice}
+        storageKey={DEVICE_NOTICE_KEY}
+        title="Before you start"
+        icon={Monitor}
+        onClose={() => {
+          setDeviceNotice(false);
+          navigate('/biodiversity-dashboard');
+        }}
+      >
+        <p>Office accounts are made for a desktop or laptop computer.</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li><strong>Computer:</strong> every tool works.</li>
+          <li><strong>Tablet:</strong> most tools work.</li>
+          <li><strong>Phone:</strong> the office map is not available; use the Green Tag mobile app in the field.</li>
+        </ul>
+      </NoticeDialog>
     </div>
   );
 }

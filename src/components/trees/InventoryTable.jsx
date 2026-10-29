@@ -1,8 +1,37 @@
 import { useState } from 'react';
-import { AlertTriangle, Archive, CheckCircle2, Image, Loader2, Send, X } from 'lucide-react';
+import { AlertTriangle, Apple, Archive, CheckCircle2, Flower2, Loader2, Send, TreeDeciduous, TreePine, X } from 'lucide-react';
 import { ARCHIVE_REASONS, archiveReason, healthWarnings, placeOfTree, taggedBy, totalHeightText } from '../../lib/treeRows.js';
+import { treeClassOf } from '../../lib/mapSheet.js';
 
 const th = 'px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600';
+
+/** Each tree's class by its use, as an outline icon (29 October), in place of its photo. */
+const CLASS_ICONS = {
+  fruit: { icon: Apple, label: 'Fruit tree', tone: 'text-orange-600 ring-orange-200 bg-orange-50' },
+  ornamental: { icon: Flower2, label: 'Ornamental tree', tone: 'text-pink-600 ring-pink-200 bg-pink-50' },
+  timber: { icon: TreePine, label: 'Timber tree', tone: 'text-green-700 ring-green-200 bg-green-50' },
+  unrecorded: { icon: TreeDeciduous, label: 'Class not recorded', tone: 'text-slate-400 ring-slate-200 bg-slate-50' },
+};
+
+/** The class icon; with a photo on record, it opens the photo. */
+function ClassIcon({ tree, onPhoto }) {
+  const { icon: Icon, label, tone } = CLASS_ICONS[treeClassOf(tree, 'use')] ?? CLASS_ICONS.unrecorded;
+  const photoUrl = tree.photo_url || tree.imageUrl;
+  const box = `flex h-9 w-9 items-center justify-center rounded-lg ring-1 ${tone}`;
+  if (photoUrl && onPhoto) {
+    return (
+      <button type="button" onClick={() => onPhoto(photoUrl)} title={`${label} — view the photo`} aria-label={`${label} — view the photo`} className={`${box} hover:ring-2`}>
+        <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    );
+  }
+  return (
+    <span title={label} className={box}>
+      <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
 
 /** Green when healthy; red when not, opening its warnings in a small pop-up. */
 function Health({ tree }) {
@@ -46,7 +75,7 @@ function Health({ tree }) {
 }
 
 /**
- * The inventory as a table (22 October): Photo | Species | Barangay or LGU |
+ * The inventory as a table (22 October): Class | Species | Barangay or LGU |
  * DBH | Total height | Health | Date | Tagged by — and, for an office,
  * Assigned to and its actions: dispatch for a tree that is not healthy, and
  * archive.
@@ -62,7 +91,7 @@ export default function InventoryTable({ rows, province = false, people, officer
       <table className="min-w-full divide-y divide-slate-200" aria-label="Tree inventory">
         <thead className="bg-slate-50">
           <tr>
-            <th className={th}>Photo</th>
+            <th className={th}>Class</th>
             <th className={`${th} cursor-pointer`} onClick={() => onSort?.('species')}>Species</th>
             <th className={th}>{province ? 'City / municipality' : 'Barangay'}</th>
             <th className={`${th} cursor-pointer`} onClick={() => onSort?.('dbh')}>DBH</th>
@@ -76,20 +105,13 @@ export default function InventoryTable({ rows, province = false, people, officer
         </thead>
         <tbody className="divide-y divide-slate-200 bg-white">
           {rows.map((tree) => {
-            const photoUrl = tree.photo_url || tree.imageUrl;
             const by = taggedBy(tree, { province, people });
             const unhealthy = healthWarnings(tree).length > 0;
             const assignee = tree.assigned_to ? officers?.get(String(tree.assigned_to).toLowerCase()) ?? tree.assigned_to : null;
             return (
               <tr key={tree.id} className="cursor-pointer hover:bg-slate-50" onClick={() => onOpen?.(tree)}>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  {photoUrl ? (
-                    <img src={photoUrl} alt={tree.species} onClick={() => onPhoto?.(photoUrl)}
-                      className="h-9 w-9 cursor-pointer rounded object-cover hover:ring-2 hover:ring-green-500"
-                      onError={(e) => { e.target.style.display = 'none'; }} />
-                  ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded bg-slate-100"><Image size={12} className="text-slate-400" /></div>
-                  )}
+                  <ClassIcon tree={tree} onPhoto={onPhoto} />
                 </td>
                 <td className="px-3 py-2 text-sm">
                   <span className="font-medium text-slate-900">{tree.species || '—'}</span>

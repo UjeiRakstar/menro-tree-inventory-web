@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient.js';
 import { CODE_REASONS, codeProblem, formatCode, normalizeCode } from '../lib/accountCodes.js';
 import { roleLabel } from '../lib/roles.js';
 import LguReveal from '../components/LguReveal.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 import greenTagLogo from '../assets/GreenTag_Logo.png';
 
 // A map is a heavy thing to load for a page most people see once. It comes
@@ -17,7 +18,7 @@ const INPUT =
   'w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-900 ' +
   'placeholder:text-slate-400 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20';
 
-/** One labelled field with its icon, in the login page's style. */
+/** One labelled field with its icon, in the login page's style; a password one can be shown. */
 function Field({ id, label, icon: Icon, hint, ...input }) {
   return (
     <div>
@@ -26,7 +27,11 @@ function Field({ id, label, icon: Icon, hint, ...input }) {
       </label>
       <div className="relative">
         <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} aria-hidden="true" />
-        <input id={id} className={INPUT} {...input} />
+        {input.type === 'password' ? (
+          <PasswordInput id={id} {...input} className={INPUT.replace('pr-4 ', '')} />
+        ) : (
+          <input id={id} className={INPUT} {...input} />
+        )}
       </div>
       {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
     </div>
@@ -156,7 +161,9 @@ export default function Activate() {
         <Leaf className="absolute bottom-20 right-16 text-emerald-200 opacity-20" size={120} />
       </div>
 
-      <div className="relative w-full max-w-md">
+      {/* Once the code is good, the map of Laguna and the hall's pin get room
+          on a computer; on a phone the page stays one narrow column. */}
+      <div className={`relative w-full ${unlocks && !done ? 'max-w-md lg:max-w-5xl' : 'max-w-md'}`}>
         <div className="mb-8 text-center">
           <Link to="/" className="inline-block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
             <img src={greenTagLogo} alt="Green Tag — home" className="mx-auto mb-4 h-20 w-20 object-contain" />
@@ -233,37 +240,47 @@ export default function Activate() {
               >
                 {checking ? 'Checking…' : 'Check code'}
               </button>
+              <Link
+                to="/login"
+                className="block w-full rounded-lg bg-orange-500 py-2.5 text-center text-sm font-medium text-white transition hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2"
+              >
+                Back to sign in
+              </Link>
             </form>
           ) : needsHall ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3" role="status">
-                <p className="text-xs font-semibold uppercase tracking-wide text-green-700">This code sets up</p>
-                <p className="text-base font-bold text-green-900">
-                  {unlocks.label} · {role}
-                </p>
-                {unlocks.name && <div className="mt-2"><LguReveal name={unlocks.name} label={unlocks.label} /></div>}
+            <div className="space-y-4 lg:grid lg:grid-cols-[2fr_3fr] lg:gap-8 lg:space-y-0">
+              <div className="space-y-4">
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3" role="status">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-green-700">This code sets up</p>
+                  <p className="text-base font-bold text-green-900">
+                    {unlocks.label} · {role}
+                  </p>
+                  {unlocks.name && <div className="mt-2"><LguReveal name={unlocks.name} label={unlocks.label} /></div>}
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800">Where is the {unlocks.label} {hallLabel}?</h2>
+                  <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                    The office map&apos;s centre button flies here. Nobody from {unlocks.label} has pinned it
+                    yet, so it is yours to place — and you can move it later from the map.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-800">Where is the {unlocks.label} {hallLabel}?</h2>
-                <p className="mt-0.5 text-xs leading-snug text-slate-500">
-                  The office map&apos;s centre button flies here. Nobody from {unlocks.label} has pinned it
-                  yet, so it is yours to place — and you can move it later from the map.
-                </p>
+              <div className="space-y-4">
+                <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-slate-100 lg:h-[30rem]" />}>
+                  <PinPicker municipality={unlocks.name} value={hall} onChange={setHall} placeLabel={hallLabel} height="h-64 lg:h-[30rem]" />
+                </Suspense>
+                <button
+                  type="button"
+                  onClick={() => setHallConfirmed(true)}
+                  disabled={!hall}
+                  className="w-full rounded-lg bg-green-700 py-2.5 text-sm font-medium text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Continue
+                </button>
               </div>
-              <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-slate-100" />}>
-                <PinPicker municipality={unlocks.name} value={hall} onChange={setHall} placeLabel={hallLabel} />
-              </Suspense>
-              <button
-                type="button"
-                onClick={() => setHallConfirmed(true)}
-                disabled={!hall}
-                className="w-full rounded-lg bg-green-700 py-2.5 text-sm font-medium text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Continue
-              </button>
             </div>
           ) : (
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleCreate} className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8 lg:space-y-0">
               {/* Whose account this is, before anything else is typed. */}
               <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3" role="status">
                 <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
@@ -282,6 +299,7 @@ export default function Activate() {
                 </button>
               </div>
 
+              <div className="space-y-4">
               <Field
                 id="activate-name"
                 label="Full name"
@@ -336,6 +354,7 @@ export default function Activate() {
               >
                 {submitting ? 'Setting up…' : 'Set up account'}
               </button>
+              </div>
             </form>
           )}
 
@@ -344,10 +363,15 @@ export default function Activate() {
             <a href="mailto:pgenro@laguna.gov.ph" className="font-medium text-green-700 hover:text-green-800">
               pgenro@laguna.gov.ph
             </a>
-            . Field officers register in the Green Tag mobile app.{' '}
-            <Link to="/login" className="font-medium text-green-700 hover:text-green-800">
-              Back to sign in
-            </Link>
+            . Field officers register in the Green Tag mobile app.
+            {unlocks && !done && (
+              <>
+                {' '}
+                <Link to="/login" className="font-medium text-green-700 hover:text-green-800">
+                  Back to sign in
+                </Link>
+              </>
+            )}
           </p>
         </div>
       </div>
